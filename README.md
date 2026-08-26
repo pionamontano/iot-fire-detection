@@ -1,3 +1,4 @@
+<<<<<<< HEAD
  AgapSense System
 
 Welcome to the AgapSense System! This document serves as a comprehensive guide to the project's architecture, codebase, and features. It is specifically designed to help explain the system during panel presentations and code reviews.
