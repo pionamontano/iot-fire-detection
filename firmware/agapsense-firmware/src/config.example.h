@@ -22,8 +22,27 @@
 // ============================================================
 
 // ── Debug ──────────────────────────────────────────────────
-#define DEBUG_MODE       1
-#define DEBUG_BAUD       115200
+// DEBUG_MODE is defined via platformio.ini build_flags (-DDEBUG_MODE=1 / -DDEBUG_MODE=0).
+// Default to 0 (production) if not explicitly set by the build system.
+#ifndef DEBUG_MODE
+  #define DEBUG_MODE       0
+#endif
+#define DEBUG_BAUD         115200
+
+const char SUPABASE_ROOT_CA[] PROGMEM = R"raw(
+-----BEGIN CERTIFICATE-----
+MIIF3jCCA8agAwIBAgIQAf1tIrRCl29LYVCXTQF63DANBgkqhkiG9w0BAQsFADCB
+iDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCk5ldyBKZXJzZXkxFDASBgNVBAcTC0pl
+cnNleSBDaXR5MR4wHAYDVQQKExVUaGUgVVNFUlRSVVNUIE5ldHdvcmsxLjAsBgNV
+BAMTNVVTRVJUcnVzdCBSU0EgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkwHhcNMTAw
+MjAxMDAwMDAwWhcNMzgwMTE4MjM1OTU5WjCBiDELMAkGA1UEBhMCVVMxEzARBgNV
+BAgTCk5ldyBKZXJzZXkxFDASBgNVBAcTC0plcnNleSBDaXR5MR4wHAYDVQQKExVU
+aGUgVVNFUlRSVVNUIE5ldHdvcmsxLjAsBgNVBAMTNVVTRVJUcnVzdCBSU0EgQ2Vy
+dGlmaWNhdGlvbiBBdXRob3JpdHkwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIK
+AoICAQCAAnP3iG4xk519MBycw0prWv8/292y39O2vX7ZAt8bP/u6k06Y6/8e
+...
+-----END CERTIFICATE-----
+)raw";
 
 // ── Wi-Fi / Captive Portal ─────────────────────────────────
 // WiFiManager will try saved NVS credentials first.

@@ -32,6 +32,8 @@
 //  [14] Alert auto-resolution: TIER1/TIER2 → CLEAR after safe readings
 // ============================================================
 
+#include <ArduinoJson.h>
+
 #include "connectivity.h"
 #include "gsm.h"
 
@@ -131,9 +133,10 @@ int readBatteryMv() {
 
 // ── HTTPS POST helper ──────────────────────────────────────
 // Opens a WiFiClientSecure connection, POSTs JSON, returns HTTP code.
+// ── HTTPS POST helper ──────────────────────────────────────
 static int httpsPost(const char* endpoint, const char* payload) {
     WiFiClientSecure client;
-    client.setInsecure();   // ⚠️  dev only — replace with setCACert() in production
+    client.setCACert(SUPABASE_ROOT_CA); // Set Root CA for Supabase HTTPS validation
     client.setTimeout(HTTP_TIMEOUT_MS / 1000);
 
     HTTPClient http;
@@ -144,7 +147,7 @@ static int httpsPost(const char* endpoint, const char* payload) {
     }
     http.addHeader("Content-Type",  "application/json");
     http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
-    http.addHeader("X-Device-Key",  DEVICE_API_KEY);   // [12] per-device auth
+    http.addHeader("X-Device-Key",  DEVICE_API_KEY);
     http.setTimeout(HTTP_TIMEOUT_MS);
 
     CLOG("POST %s → %s", endpoint, payload);
@@ -171,9 +174,9 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
         "{"
           "\"device_id\":\"%s\","
           "\"co_ppm\":%.2f,"
-          "\"temperature_c\":%.2f,"
-          "\"lat\":%.6f,"
-          "\"lng\":%.6f,"
+          "\"temp_celsius\":%.2f,"
+          "\"latitude\":%.6f,"
+          "\"longitude\":%.6f,"
           "\"gps_valid\":%s,"
           "\"battery_mv\":%d,"
           "\"rssi\":%d,"
@@ -194,21 +197,21 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
 }
 
 // ── Alert POST ─────────────────────────────────────────────
-// [15] alertTier (1 or 2) is included so the backend's stat cards and
-// history reflect Tier 1 warnings, not just Tier 2 alerts. The backend
-// resolves the address and sends Telegram itself after this call.
-int postAlert(const SensorData& sd, const GpsFix& fix, int alertTier) {
+// [15] tier (1 or 2) is included so the backend's stat cards and
+// history reflect Tier 1 warnings, not just Tier 2 alerts.
+// The backend resolves the address/contacts and returns owner_contact & bfp_contact.
+int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int alertTier) {
     char payload[384];
     snprintf(payload, sizeof(payload),
         "{"
           "\"device_id\":\"%s\","
           "\"co_ppm\":%.2f,"
-          "\"temperature_c\":%.2f,"
-          "\"lat\":%.6f,"
-          "\"lng\":%.6f,"
+          "\"temp_celsius\":%.2f,"
+          "\"latitude\":%.6f,"
+          "\"longitude\":%.6f,"
           "\"gps_valid\":%s,"
           "\"alert_type\":\"fire\","
-          "\"alert_tier\":%d,"
+          "\"tier\":%d,"
           "\"sensor_ready\":%s"
         "}",
         DEVICE_ID,
@@ -218,15 +221,62 @@ int postAlert(const SensorData& sd, const GpsFix& fix, int alertTier) {
         alertTier,
         sd.sensor_ready ? "true" : "false"
     );
-    return httpsPost(ENDPOINT_ALERT, payload);
+
+    WiFiClientSecure client;
+    client.setCACert(SUPABASE_ROOT_CA);
+    client.setTimeout(HTTP_TIMEOUT_MS / 1000);
+
+    HTTPClient http;
+    String url = String(SUPABASE_URL) + ENDPOINT_ALERT;
+    if (!http.begin(client, url)) {
+        CLOG("ERROR: http.begin failed for %s", ENDPOINT_ALERT);
+        return -1;
+    }
+
+    http.addHeader("Content-Type",  "application/json");
+    http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+    http.addHeader("X-Device-Key",  DEVICE_API_KEY);
+    http.setTimeout(HTTP_TIMEOUT_MS);
+
+    CLOG("POST %s → %s", ENDPOINT_ALERT, payload);
+    int code = http.POST(payload);
+
+    if (code == 200 || code == 201) {
+        String body = http.getString();
+        CLOG("Alert POST Success (%d): %s", code, body.c_str());
+
+        // Parse contacts returned from backend
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, body);
+        if (!error) {
+            const char* ownerStr = doc["owner_contact"] | doc["owner_number"] | (const char*)nullptr;
+            const char* bfpStr   = doc["bfp_contact"]   | doc["bfp_number"]   | (const char*)nullptr;
+
+            if (ownerStr && strlen(ownerStr) > 0) {
+                strncpy(ctx->ownerNumber, ownerStr, sizeof(ctx->ownerNumber) - 1);
+                ctx->ownerNumber[sizeof(ctx->ownerNumber) - 1] = '\0';
+            }
+            if (bfpStr && strlen(bfpStr) > 0) {
+                strncpy(ctx->bfpNumber, bfpStr, sizeof(ctx->bfpNumber) - 1);
+                ctx->bfpNumber[sizeof(ctx->bfpNumber) - 1] = '\0';
+            }
+            CLOG("Updated SMS contacts from trigger-alert: Owner=%s BFP=%s",
+                 ctx->ownerNumber, ctx->bfpNumber);
+        }
+    } else {
+        CLOG("Alert POST Failed (%d): %s", code, http.getString().c_str());
+    }
+
+    http.end();
+    return code;
 }
 
 // ── Remote Config Fetch ────────────────────────────────────
 // [13] Pull alert thresholds and SMS recipient numbers from DB.
-// Falls back to #define defaults on failure.
+// Falls back to defaults on JSON parse error or non-200 HTTP code.
 bool fetchRemoteConfig(ConnectivityCtx* ctx) {
     WiFiClientSecure client;
-    client.setInsecure();
+    client.setCACert(SUPABASE_ROOT_CA);
     client.setTimeout(10);
 
     HTTPClient http;
@@ -246,35 +296,34 @@ bool fetchRemoteConfig(ConnectivityCtx* ctx) {
 
     String body = http.getString();
     http.end();
-    CLOG("Remote config: %s", body.c_str());
+    CLOG("Remote config raw payload: %s", body.c_str());
 
-    // Manual JSON field extraction (no ArduinoJson dependency)
-    // Expected fields: co_alert_ppm, temp_alert_c, owner_number, bfp_number
-    auto extractFloat = [&](const char* key, float fallback) -> float {
-        String search = String("\"") + key + "\":";
-        int idx = body.indexOf(search);
-        if (idx < 0) return fallback;
-        int start = idx + search.length();
-        return body.substring(start).toFloat();
-    };
-    auto extractStr = [&](const char* key, char* dest, size_t destLen, const char* fallback) {
-        String search = String("\"") + key + "\":\"";
-        int idx = body.indexOf(search);
-        if (idx < 0) { strncpy(dest, fallback, destLen - 1); return; }
-        int start = idx + search.length();
-        int end   = body.indexOf("\"", start);
-        if (end < 0)  { strncpy(dest, fallback, destLen - 1); return; }
-        strncpy(dest, body.substring(start, end).c_str(), destLen - 1);
-    };
+    // Allocate JSON document (512 bytes is sufficient for threshold/contact payload)
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, body);
 
-    ctx->co_alert_ppm  = extractFloat("co_alert_ppm",  CO_ALERT_PPM_DEFAULT);
-    ctx->temp_alert_c  = extractFloat("temp_alert_c",  TEMP_ALERT_PPM_DEFAULT);
-    extractStr("owner_number", ctx->ownerNumber, sizeof(ctx->ownerNumber), OWNER_SMS_NUMBER_DEFAULT);
-    extractStr("bfp_number",   ctx->bfpNumber,   sizeof(ctx->bfpNumber),   BFP_SMS_NUMBER_DEFAULT);
+    if (error) {
+        CLOG("deserializeJson() failed: %s — using defaults", error.c_str());
+        return false;
+    }
 
-    CLOG("Config loaded: CO>=%.0f Temp>=%.0f Owner=%s BFP=%s",
+    // Extract fields with automatic fallback if key is missing or null
+    ctx->co_alert_ppm = doc["co_alert_ppm"] | CO_ALERT_PPM_DEFAULT;
+    ctx->temp_alert_c = doc["temp_alert_c"] | TEMP_ALERT_PPM_DEFAULT;
+
+    const char* ownerStr = doc["owner_number"] | OWNER_SMS_NUMBER_DEFAULT;
+    const char* bfpStr   = doc["bfp_number"]   | BFP_SMS_NUMBER_DEFAULT;
+
+    strncpy(ctx->ownerNumber, ownerStr, sizeof(ctx->ownerNumber) - 1);
+    ctx->ownerNumber[sizeof(ctx->ownerNumber) - 1] = '\0';
+
+    strncpy(ctx->bfpNumber, bfpStr, sizeof(ctx->bfpNumber) - 1);
+    ctx->bfpNumber[sizeof(ctx->bfpNumber) - 1] = '\0';
+
+    CLOG("Config parsed successfully: CO>=%.0f Temp>=%.0f Owner=%s BFP=%s",
          ctx->co_alert_ppm, ctx->temp_alert_c,
          ctx->ownerNumber, ctx->bfpNumber);
+
     return true;
 }
 
@@ -361,7 +410,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
         if (ctx->deviceState != DeviceState::ONLINE) {
             // Probe Supabase reachability
             WiFiClientSecure probe;
-            probe.setInsecure();
+            probe.setCACert(SUPABASE_ROOT_CA); // Set Root CA for probe validation
             probe.setTimeout(5);
             String host = String(SUPABASE_URL);
             host.replace("https://", "");
@@ -454,9 +503,10 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                     ctx->alertRiseCount++;
                     if (ctx->alertRiseCount >= ALERT_DEBOUNCE_COUNT) {
                         ctx->alertTier      = AlertTier::TIER2;
+                        ctx->alertRiseCount = 0;  // Reset rise counter after escalation
                         ctx->alertFallCount = 0;
                         setTier2Indicators();
-                        CLOG("🔥 Escalating TIER1 → TIER2");
+                        CLOG("Escalating TIER1 → TIER2");
                         fireTier2Alert(ctx, sd, fix);
                     }
                 } else if (safeNow) {
@@ -539,40 +589,26 @@ void connectivityUpdate(ConnectivityCtx* ctx,
 // Defined here (not in header) as internal helper
 static void fireTier1Warning(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
     if (ctx->deviceState == DeviceState::ONLINE) {
-        int code = postAlert(sd, fix, 1);
+        int code = postAlert(ctx, sd, fix, 1);
         CLOG("Tier 1 Supabase alert POST: code=%d", code);
     }
-    // No SMS at Tier 1 per spec
 }
 
 // ── Tier 2: trigger-alert POST + owner SMS + BFP SMS ───────
 // [16] Backend sends the Telegram alert itself once this lands.
 static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
-    // 1. POST to Supabase trigger-alert
+    // 1. POST to Supabase trigger-alert (updates ctx->ownerNumber / ctx->bfpNumber if changed)
     if (ctx->deviceState == DeviceState::ONLINE) {
-        int code = postAlert(sd, fix, 2);
+        int code = postAlert(ctx, sd, fix, 2);
         CLOG("Tier 2 Supabase alert POST: code=%d", code);
     }
 
-    // 2. Role-specific SMS with 5-minute debounce
-    // [6] SMS debounce: don't re-send within 5 minutes
-    // [17] Both messages are queued (non-blocking) — actual sends happen
-    // asynchronously in the GSM task via gsmProcessQueue().
+    // 2. Dispatch SMS using the freshest contacts in ctx
     uint32_t now = millis();
     if (now - ctx->lastSmsSent_ms >= SMS_DEBOUNCE_MS || ctx->lastSmsSent_ms == 0) {
         ctx->lastSmsSent_ms = now;
-        // Owner SMS — plain-language evacuation
-        gsmSendOwnerSms(sd.co_ppm, sd.temperature_c,
-                        fix.lat, fix.lng,
-                        ctx->ownerNumber);
-        // BFP SMS — technical responder message
-        gsmSendBfpSms(sd.co_ppm, sd.temperature_c,
-                      fix.lat, fix.lng,
-                      ctx->bfpNumber);
-        CLOG("Tier 2 SMS queued for owner=%s and BFP=%s",
-             ctx->ownerNumber, ctx->bfpNumber);
-    } else {
-        CLOG("SMS debounced — %lu ms since last send (limit=%lu ms)",
-             now - ctx->lastSmsSent_ms, SMS_DEBOUNCE_MS);
+        gsmSendOwnerSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng, ctx->ownerNumber);
+        gsmSendBfpSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng, ctx->bfpNumber);
+        CLOG("Tier 2 SMS queued for owner=%s and BFP=%s", ctx->ownerNumber, ctx->bfpNumber);
     }
 }
