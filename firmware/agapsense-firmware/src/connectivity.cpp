@@ -1,14 +1,28 @@
 // ============================================================
-// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM  (v2.0)
+// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM  (v2.1)
 //
-// All changes from review applied:
+// Changes from v2.0:
+//  [15] Tier 1 now POSTs to trigger-alert too (alert_tier=1) — was
+//       Telegram-only before, so Tier 1 never reached the backend
+//  [16] Telegram sending removed from firmware — sendTelegram() and
+//       the TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID config deleted.
+//       trigger-alert already calls the Bot API server-side per spec;
+//       doing it there instead keeps the bot token off the hardware,
+//       lets the message include the backend-resolved address, and
+//       makes telegram_sent reflect the backend's own Bot API result.
+//  [17] Owner/BFP SMS now go through gsmQueueSms()/gsmProcessQueue()
+//       instead of blocking the Connectivity task directly — avoids
+//       stalling connectivityUpdate() (and its WDT reset) on a slow
+//       SIM800L response. SmsJob queue bumped to hold 2 jobs, since
+//       Tier 2 always queues both owner and BFP at once.
+//
+// All changes from review applied (v2.0):
 //   [1] WiFiManager captive portal on first boot / no credentials
 //   [2] Two-tier alert (TIER1 = one sensor, TIER2 = both sensors)
-//   [3] Tier 1 → yellow LED + Telegram warning only (no SMS)
-//   [4] Tier 2 → red LED + buzzer + Telegram alert + owner SMS + BFP SMS
+//   [3] Tier 1 → yellow LED + trigger-alert POST only (no SMS)
+//   [4] Tier 2 → red LED + buzzer + trigger-alert POST + owner SMS + BFP SMS
 //   [5] Blue LED: solid ONLINE, 500 ms blink connecting, off OFFLINE
 //   [6] SMS 5-minute debounce (spec requirement)
-//   [7] Telegram HTTPS POST helper
 //   [8] on_battery flag in telemetry payload
 //   [9] sensor_ready flag in both payloads
 //  [10] mq7_phase field in telemetry payload
@@ -145,36 +159,6 @@ static int httpsPost(const char* endpoint, const char* payload) {
     return code;
 }
 
-// ── Telegram notification ──────────────────────────────────
-// [7] POST to Bot API sendMessage endpoint
-int sendTelegram(const char* message) {
-    WiFiClientSecure client;
-    client.setInsecure();
-    client.setTimeout(10);
-
-    HTTPClient http;
-    String url = String("https://api.telegram.org/bot") + TELEGRAM_BOT_TOKEN + "/sendMessage";
-    if (!http.begin(client, url)) { CLOG("Telegram: http.begin failed"); return -1; }
-
-    http.addHeader("Content-Type", "application/json");
-
-    // Escape the message for JSON (basic — replace " and newlines)
-    String escaped = String(message);
-    escaped.replace("\"", "\\\"");
-    escaped.replace("\n", "\\n");
-
-    char payload[512];
-    snprintf(payload, sizeof(payload),
-        "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"HTML\"}",
-        TELEGRAM_CHAT_ID, escaped.c_str()
-    );
-
-    int code = http.POST(payload);
-    CLOG("Telegram response: %d", code);
-    http.end();
-    return code;
-}
-
 // ── Telemetry POST ─────────────────────────────────────────
 // [8][9][10][11] on_battery + sensor_ready + mq7_phase + always post
 int postTelemetry(const SensorData& sd, const GpsFix& fix,
@@ -210,7 +194,10 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
 }
 
 // ── Alert POST ─────────────────────────────────────────────
-int postAlert(const SensorData& sd, const GpsFix& fix) {
+// [15] alertTier (1 or 2) is included so the backend's stat cards and
+// history reflect Tier 1 warnings, not just Tier 2 alerts. The backend
+// resolves the address and sends Telegram itself after this call.
+int postAlert(const SensorData& sd, const GpsFix& fix, int alertTier) {
     char payload[384];
     snprintf(payload, sizeof(payload),
         "{"
@@ -221,12 +208,14 @@ int postAlert(const SensorData& sd, const GpsFix& fix) {
           "\"lng\":%.6f,"
           "\"gps_valid\":%s,"
           "\"alert_type\":\"fire\","
+          "\"alert_tier\":%d,"
           "\"sensor_ready\":%s"
         "}",
         DEVICE_ID,
         sd.co_ppm, sd.temperature_c,
         fix.lat, fix.lng,
         fix.valid ? "true" : "false",
+        alertTier,
         sd.sensor_ready ? "true" : "false"
     );
     return httpsPost(ENDPOINT_ALERT, payload);
@@ -545,58 +534,30 @@ void connectivityUpdate(ConnectivityCtx* ctx,
     }
 }
 
-// ── Tier 1: yellow LED + Telegram warning (no SMS) ─────────
+// ── Tier 1: yellow LED + trigger-alert POST (no SMS) ───────
+// [15] Backend sends the Telegram warning itself once this lands.
 // Defined here (not in header) as internal helper
 static void fireTier1Warning(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
-    // Telegram warning
-    if (ctx->deviceState == DeviceState::ONLINE || ctx->deviceState == DeviceState::DEGRADED) {
-        char msg[256];
-        snprintf(msg, sizeof(msg),
-            "⚠️ <b>BANTAY APOY — Tier 1 Warning</b>\n"
-            "Device: %s\n"
-            "CO: %.0f ppm | Temp: %.1f°C\n"
-            "Location: https://maps.google.com/?q=%.5f,%.5f\n"
-            "GPS valid: %s",
-            DEVICE_ID,
-            sd.co_ppm, sd.temperature_c,
-            fix.lat, fix.lng,
-            fix.valid ? "Yes" : "No (cached)"
-        );
-        int code = sendTelegram(msg);
-        CLOG("Tier 1 Telegram: code=%d", code);
+    if (ctx->deviceState == DeviceState::ONLINE) {
+        int code = postAlert(sd, fix, 1);
+        CLOG("Tier 1 Supabase alert POST: code=%d", code);
     }
     // No SMS at Tier 1 per spec
 }
 
-// ── Tier 2: Telegram + owner SMS + BFP SMS sequentially ────
+// ── Tier 2: trigger-alert POST + owner SMS + BFP SMS ───────
+// [16] Backend sends the Telegram alert itself once this lands.
 static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
     // 1. POST to Supabase trigger-alert
     if (ctx->deviceState == DeviceState::ONLINE) {
-        int code = postAlert(sd, fix);
+        int code = postAlert(sd, fix, 2);
         CLOG("Tier 2 Supabase alert POST: code=%d", code);
     }
 
-    // 2. Telegram alert
-    if (ctx->deviceState == DeviceState::ONLINE || ctx->deviceState == DeviceState::DEGRADED) {
-        char msg[320];
-        snprintf(msg, sizeof(msg),
-            "🔥 <b>BANTAY APOY — FIRE ALERT (Tier 2)</b>\n"
-            "Device: %s\n"
-            "CO: %.0f ppm | Temp: %.1f°C\n"
-            "Location: https://maps.google.com/?q=%.5f,%.5f\n"
-            "GPS valid: %s\n"
-            "<b>EVACUATE IMMEDIATELY</b>",
-            DEVICE_ID,
-            sd.co_ppm, sd.temperature_c,
-            fix.lat, fix.lng,
-            fix.valid ? "Yes" : "No (cached)"
-        );
-        int code = sendTelegram(msg);
-        CLOG("Tier 2 Telegram: code=%d", code);
-    }
-
-    // 3. Role-specific SMS with 5-minute debounce
+    // 2. Role-specific SMS with 5-minute debounce
     // [6] SMS debounce: don't re-send within 5 minutes
+    // [17] Both messages are queued (non-blocking) — actual sends happen
+    // asynchronously in the GSM task via gsmProcessQueue().
     uint32_t now = millis();
     if (now - ctx->lastSmsSent_ms >= SMS_DEBOUNCE_MS || ctx->lastSmsSent_ms == 0) {
         ctx->lastSmsSent_ms = now;
@@ -608,7 +569,7 @@ static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const Gps
         gsmSendBfpSms(sd.co_ppm, sd.temperature_c,
                       fix.lat, fix.lng,
                       ctx->bfpNumber);
-        CLOG("Tier 2 SMS sent to owner=%s and BFP=%s",
+        CLOG("Tier 2 SMS queued for owner=%s and BFP=%s",
              ctx->ownerNumber, ctx->bfpNumber);
     } else {
         CLOG("SMS debounced — %lu ms since last send (limit=%lu ms)",

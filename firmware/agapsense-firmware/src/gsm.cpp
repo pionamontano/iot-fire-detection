@@ -1,5 +1,13 @@
 // ============================================================
-// gsm.cpp — SIM800L AT Command Handler  (v2.0)
+// gsm.cpp — SIM800L AT Command Handler  (v2.1)
+//
+// Changes from v2.0:
+//   ~ gsmSendOwnerSms()/gsmSendBfpSms() now call gsmQueueSms() instead
+//     of gsmSendSms() directly, so composing + sending an SMS never
+//     blocks the caller (the Connectivity task).
+//   ~ Queue is now a SMS_QUEUE_SIZE-slot ring buffer (was a single
+//     job) so Tier 2's owner + BFP messages can both be queued
+//     without the second one being dropped.
 //
 // Changes from v1.0:
 //   + gsmSendOwnerSms() — evacuation message for property owner
@@ -15,7 +23,10 @@
   #define GSMLOG(fmt, ...)
 #endif
 
-static SmsJob           smsQueue = {"", "", false};
+static SmsJob            smsQueue[SMS_QUEUE_SIZE];
+static uint8_t           smsHead  = 0;   // next slot to dequeue
+static uint8_t           smsTail  = 0;   // next free slot to enqueue
+static uint8_t           smsCount = 0;   // jobs currently queued
 static SemaphoreHandle_t smsMutex = nullptr;
 
 // ── Internal: drain UART until OK / ERROR / > or timeout ──
@@ -110,6 +121,9 @@ bool gsmSendSms(const char* to, const char* message) {
 }
 
 // ── Owner SMS: plain-language evacuation ───────────────────
+// Composes the message and hands it to the async queue — does not
+// block the caller (previously called gsmSendSms() directly, which
+// could stall the Connectivity task and its WDT reset).
 void gsmSendOwnerSms(float co_ppm, float temp_c,
                      double lat, double lng,
                      const char* ownerNumber)
@@ -121,18 +135,22 @@ void gsmSendOwnerSms(float co_ppm, float temp_c,
         "Lokasyon: maps.google.com/?q=%.5f,%.5f",
         co_ppm, temp_c, lat, lng
     );
-    GSMLOG("Sending owner SMS to %s", ownerNumber);
-    gsmSendSms(ownerNumber, msg);
+    GSMLOG("Queuing owner SMS to %s", ownerNumber);
+    gsmQueueSms(ownerNumber, msg);
 }
 
 // ── BFP SMS: technical responder message ───────────────────
+// Composes the message and hands it to the async queue — does not
+// block the caller.
 void gsmSendBfpSms(float co_ppm, float temp_c,
                    double lat, double lng,
                    const char* bfpNumber)
 {
     char msg[160];
-    // Include device ID, sensor readings, and coordinates
-    // Timestamp omitted (160-char limit); backend logs full record
+    // Include device ID, sensor readings, and coordinates.
+    // No timestamp: the ESP32 has no RTC/NTP, and the backend row's
+    // own triggered_at (DEFAULT now()) is the trustworthy record —
+    // this SMS body doesn't need to carry the time itself.
     snprintf(msg, sizeof(msg),
         "BFP ALERT [%s]\n"
         "CO:%.0fppm Temp:%.1fC\n"
@@ -143,38 +161,59 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
         lat, lng,
         lat, lng
     );
-    GSMLOG("Sending BFP SMS to %s", bfpNumber);
-    gsmSendSms(bfpNumber, msg);
+    GSMLOG("Queuing BFP SMS to %s", bfpNumber);
+    gsmQueueSms(bfpNumber, msg);
 }
 
-// ── Async queue ────────────────────────────────────────────
+// ── Async queue (ring buffer, SMS_QUEUE_SIZE slots) ─────────
+// Tier 2 always queues two jobs back to back (owner + BFP), so the
+// queue must hold at least 2 without dropping either one.
 void gsmQueueSms(const char* number, const char* message) {
     if (!smsMutex) return;
     if (xSemaphoreTake(smsMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        if (!smsQueue.pending) {
-            strncpy(smsQueue.number,  number,  sizeof(smsQueue.number)  - 1);
-            strncpy(smsQueue.message, message, sizeof(smsQueue.message) - 1);
-            smsQueue.pending = true;
+        if (smsCount < SMS_QUEUE_SIZE) {
+            SmsJob* job = &smsQueue[smsTail];
+            strncpy(job->number,  number,  sizeof(job->number)  - 1);
+            job->number[sizeof(job->number) - 1] = '\0';
+            strncpy(job->message, message, sizeof(job->message) - 1);
+            job->message[sizeof(job->message) - 1] = '\0';
+            job->pending = true;
+            smsTail = (smsTail + 1) % SMS_QUEUE_SIZE;
+            smsCount++;
+            GSMLOG("SMS queued for %s (depth %d/%d)", number, smsCount, SMS_QUEUE_SIZE);
         } else {
-            GSMLOG("WARN: SMS queue full — message dropped");
+            GSMLOG("WARN: SMS queue full (%d/%d) — message to %s dropped",
+                   SMS_QUEUE_SIZE, SMS_QUEUE_SIZE, number);
         }
         xSemaphoreGive(smsMutex);
     }
 }
 
+// Dequeues and sends (blocking) at most one job per call — called
+// once per GSM task loop tick, so a slow SIM800L response only ever
+// stalls the GSM task, never the Connectivity task's WDT reset.
 void gsmProcessQueue() {
     if (!smsMutex) return;
+
+    char num[20]  = {0};
+    char msg[160] = {0};
+    bool haveJob  = false;
+
     if (xSemaphoreTake(smsMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        if (smsQueue.pending) {
-            char num[20], msg[160];
-            strncpy(num, smsQueue.number,  sizeof(num) - 1);
-            strncpy(msg, smsQueue.message, sizeof(msg) - 1);
-            smsQueue.pending = false;
-            xSemaphoreGive(smsMutex);
-            gsmSendSms(num, msg);   // send outside mutex (blocking)
-        } else {
-            xSemaphoreGive(smsMutex);
+        if (smsCount > 0) {
+            SmsJob* job = &smsQueue[smsHead];
+            strncpy(num, job->number,  sizeof(num) - 1);
+            strncpy(msg, job->message, sizeof(msg) - 1);
+            job->pending = false;
+            smsHead = (smsHead + 1) % SMS_QUEUE_SIZE;
+            smsCount--;
+            haveJob = true;
         }
+        xSemaphoreGive(smsMutex);
+    }
+
+    if (haveJob) {
+        gsmSendSms(num, msg);   // send outside mutex (blocking)
     }
 }
 

@@ -1,6 +1,15 @@
 #pragma once
 // ============================================================
-// connectivity.h — Wi-Fi, HTTPS, Alert FSM, Indicators  (v2.0)
+// connectivity.h — Wi-Fi, HTTPS, Alert FSM, Indicators  (v2.1)
+//
+// Changes from v2.0:
+//   + Tier 1 now also POSTs to trigger-alert (alert_tier=1), matching
+//     Tier 2 — fixes "Warnings Today" stat + Tier 1 history
+//   ~ postAlert() takes an alertTier param and includes it in the payload
+//   ~ Telegram sending removed from firmware entirely — trigger-alert
+//     Edge Function calls the Bot API server-side (no bot token on
+//     hardware, real resolved address via backend Nominatim access,
+//     telegram_sent set only after backend's own Bot API call)
 //
 // Changes from v1.0:
 //   + DeviceState uses WiFiManager captive portal on first boot
@@ -8,7 +17,6 @@
 //   + LED and buzzer driven from FSM transitions
 //   + Blue LED blinks while connecting, solid while ONLINE
 //   + SMS 5-minute debounce (lastSmsSent_ms)
-//   + Telegram HTTPS POST for Tier 1 and Tier 2
 //   + on_battery flag in telemetry payload
 //   + sensor_ready flag in both payloads
 //   + Telemetry posted every 30 s regardless of MQ-7 phase
@@ -29,9 +37,11 @@ enum class DeviceState { ONLINE, DEGRADED, OFFLINE };
 
 // ── Alert Tier (two-tier per spec) ─────────────────────────
 // TIER1: either sensor alone exceeds alert threshold
-//        → yellow LED + Telegram warning (no SMS)
+//        → yellow LED + trigger-alert POST (tier=1, no SMS)
+//          backend sends the Telegram warning
 // TIER2: both sensors simultaneously exceed alert threshold
-//        → red LED + buzzer + Telegram alert + owner SMS + BFP SMS
+//        → red LED + buzzer + trigger-alert POST (tier=2) + owner SMS + BFP SMS
+//          backend sends the Telegram alert
 enum class AlertTier { CLEAR, TIER1, TIER2 };
 
 // ── Connectivity Context ───────────────────────────────────
@@ -71,11 +81,10 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
                   int batteryMv, int rssi,
                   const char* mq7Phase);
 
-/** POST Tier 2 alert to trigger-alert. Returns HTTP code. */
-int postAlert(const SensorData& sd, const GpsFix& fix);
-
-/** Send Telegram message via Bot API. Returns HTTP code. */
-int sendTelegram(const char* message);
+/** POST an alert (Tier 1 or Tier 2) to trigger-alert. Backend sends
+ *  Telegram and resolves the address; alertTier is 1 or 2.
+ *  Returns HTTP code. */
+int postAlert(const SensorData& sd, const GpsFix& fix, int alertTier);
 
 /** GET remote config from get-device-config Edge Function. */
 bool fetchRemoteConfig(ConnectivityCtx* ctx);

@@ -1,10 +1,10 @@
 // ============================================================
-// main.cpp — Bantay Apoy IoT Fire Detection Node  (v2.0)
+// main.cpp — AgapSense IoT Fire Detection Node  (v2.0)
 //
 // Changes from v1.0:
 //   + LED_YELLOW, LED_RED, LED_BLUE, BUZZER pin setup in setup()
 //   + sensor_ready field initialised false in SensorData
-//   + STACK_CONNECTIVITY bumped to 10240 (Telegram + config fetch)
+//   + STACK_CONNECTIVITY bumped to 10240 (HTTPS POSTs + config fetch)
 //   + taskConnectivity no longer gated on MQ-7 phase —
 //     telemetry is now always posted (phase included in payload)
 //   + Boot blink sequence on all LEDs for hardware verification

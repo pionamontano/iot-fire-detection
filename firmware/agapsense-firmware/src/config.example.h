@@ -1,10 +1,15 @@
 #pragma once
 // ============================================================
-// config.h — AgapSense Firmware Configuration  (v2.0)
+// config.h — AgapSense Firmware Configuration  (v2.1)
+//
+// Changes from v2.0:
+//   ~ TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID removed — the firmware no
+//     longer talks to the Bot API directly; trigger-alert does it
+//     server-side (keeps the bot token off the hardware)
+//   + SMS_QUEUE_SIZE (holds 2 jobs — Tier 2 queues owner + BFP at once)
 //
 // Changes from v1.0:
 //   + DEVICE_API_KEY (X-Device-Key header for Edge Functions)
-//   + TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
 //   + OWNER_SMS_NUMBER + BFP_SMS_NUMBER (role-specific SMS)
 //   + LED_YELLOW_PIN, LED_RED_PIN, LED_BLUE_PIN, BUZZER_PIN
 //   + ON_BATTERY_THRESHOLD_MV
@@ -24,7 +29,7 @@
 // WiFiManager will try saved NVS credentials first.
 // If none exist or connection fails, it launches an AP with
 // this SSID so the user can provision via captive portal.
-#define WIFI_AP_NAME           "BantayApoy-Setup"
+#define WIFI_AP_NAME           "AgapSense-Setup"
 #define WIFI_AP_PASSWORD       ""            // open AP (no password)
 #define WIFI_CONNECT_TIMEOUT_S  15           // seconds to wait for STA connect
 #define WIFI_RECONNECT_INTERVAL_S 60
@@ -42,11 +47,6 @@
 
 // ── Device Identity ────────────────────────────────────────
 #define DEVICE_ID                "bantay-apoy-node-001"
-
-// ── Telegram Notifications ─────────────────────────────────
-// Obtain BOT_TOKEN from @BotFather; CHAT_ID from your alert group.
-#define TELEGRAM_BOT_TOKEN       "your-bot-token-here"
-#define TELEGRAM_CHAT_ID         "your-chat-id-here"
 
 // ── SMS Recipients (fetched from DB at runtime; these are fallbacks) ──
 // Role-specific numbers per spec:
@@ -117,6 +117,7 @@
 #define ALERT_DEBOUNCE_COUNT        3        // consecutive readings to trigger
 #define ALERT_RESOLUTION_COUNT      2        // consecutive safe readings to clear
 #define SMS_DEBOUNCE_MS             300000UL // 5 minutes between SMS sends
+#define SMS_QUEUE_SIZE              2        // Tier 2 queues owner + BFP at once
 
 // ── WDT ────────────────────────────────────────────────────
 #define WDT_TIMEOUT_S       30
@@ -125,7 +126,7 @@
 #define STACK_MQ7           4096
 #define STACK_DS18B20       2048
 #define STACK_GPS           3072
-#define STACK_CONNECTIVITY  10240   // larger: Telegram + config fetch
+#define STACK_CONNECTIVITY  10240   // larger: HTTPS POSTs + config fetch
 #define STACK_GSM           4096
 
 // ── FreeRTOS Task Priorities ───────────────────────────────
