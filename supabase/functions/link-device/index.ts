@@ -15,16 +15,22 @@ serve(async (req: Request) => {
   }
 
   try {
+    // 1. Verify calling user is an authenticated Resident
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+      { global: { headers: { Authorization: authHeader } } }
     )
 
-    // 1. Verify calling user is authenticated Resident
-    const {
-      data: { user },
-    } = await supabaseClient.auth.getUser()
+    const { data: { user } } = await supabaseClient.auth.getUser()
 
     if (!user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -37,7 +43,7 @@ serve(async (req: Request) => {
       .from('profiles')
       .select('role, device_id')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     if (!profile || profile.role !== 'resident') {
       return new Response(JSON.stringify({ error: 'Forbidden. Resident access required.' }), {
@@ -46,57 +52,83 @@ serve(async (req: Request) => {
       })
     }
 
-    // 2. Parse request body
-    const { device_code } = await req.json()
+    // 2. Parse and validate request body
+    let body
+    try {
+      body = await req.json()
+    } catch {
+      return new Response(JSON.stringify({ error: 'Invalid JSON payload' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      })
+    }
 
-    if (!device_code) {
+    const { device_code } = body
+
+    if (!device_code || typeof device_code !== 'string' || device_code.trim().length === 0) {
       return new Response(JSON.stringify({ error: 'Device code is required' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       })
     }
 
-    // 3. Look up device and update the user using service role key (bypassing RLS)
+    // 3. Look up device using service role key (bypasses RLS)
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
-    
-    // Find device
+
     const { data: device, error: deviceError } = await supabaseAdmin
       .from('devices')
-      .select('id')
-      .eq('device_code', device_code)
-      .single()
-      
+      .select('id, is_active')
+      .eq('device_code', device_code.trim())
+      .maybeSingle()
+
     if (deviceError || !device) {
       return new Response(JSON.stringify({ error: 'Device not found. Please check the code and try again.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 404,
       })
     }
-    
-    // Check if device is already assigned to someone else
-    const { data: existingProfiles, error: pError } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('device_id', device.id)
-      
-    if (pError) throw pError;
-    
-    if (existingProfiles && existingProfiles.length > 0 && existingProfiles[0].id !== user.id) {
-       return new Response(JSON.stringify({ error: 'This device is already registered to another account.' }), {
+
+    if (!device.is_active) {
+      return new Response(JSON.stringify({ error: 'This device is inactive or has been retired.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 403,
+      })
+    }
+
+    // 4. Prevent silent replacement of an existing device assignment
+    if (profile.device_id && profile.device_id !== device.id) {
+      return new Response(JSON.stringify({ error: 'You already have a device linked. Unlink it before registering a new one.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 409,
       })
     }
 
-    // Update profile
+    // 5. Check if device is already assigned to a different resident
+    const { data: existingProfiles, error: pError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('device_id', device.id)
+      .eq('role', 'resident')
+      .limit(1)
+
+    if (pError) throw pError
+
+    if (existingProfiles && existingProfiles.length > 0 && existingProfiles[0].id !== user.id) {
+      return new Response(JSON.stringify({ error: 'This device is already registered to another account.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 409,
+      })
+    }
+
+    // 6. Link device to resident profile
     const { data: updatedProfile, error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({ device_id: device.id })
       .eq('id', user.id)
-      .select()
+      .select('id, device_id, setup_complete')
       .single()
 
     if (updateError) throw updateError
@@ -106,7 +138,7 @@ serve(async (req: Request) => {
       status: 200,
     })
   } catch (err) {
-    const error = err as Error;
+    const error = err as Error
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
