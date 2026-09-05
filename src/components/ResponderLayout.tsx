@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FileText, Users, Cpu, Settings, LogOut, Menu, X, Bell, Search } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, Cpu, Settings, LogOut, Menu, X } from 'lucide-react';
+import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 
 export const ResponderLayout: React.FC = () => {
@@ -42,30 +43,13 @@ export const ResponderLayout: React.FC = () => {
         {/* Right Section */}
         <div className="flex items-center gap-3 md:gap-6">
           {/* Search */}
-          <div className="hidden md:block relative">
-            <input
-              type="text"
-              placeholder="Search devices..."
-              className="bg-surface-alt rounded-md pl-9 pr-4 py-[7px] text-sm text-text placeholder-text-faint w-64 focus:outline-none focus:ring-2 focus:ring-white/30"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-[10.5px] h-[10.5px] text-text-faint" />
-          </div>
+          <HeaderSearchBar devicesPath="/responder/devices" />
 
           {/* Notification Bell */}
-          <button className="relative p-2 shrink-0">
-            <Bell className="w-5 h-5 text-white" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-primary"></span>
-          </button>
+          <NotificationDropdown alertsPath="/responder/alerts" />
 
-          {/* User Badge */}
-          <div className="hidden md:flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">
-              {profile?.full_name?.charAt(0).toUpperCase() || 'R'}
-            </div>
-            <span className="text-white/90 font-medium text-sm">
-              {profile?.full_name || 'BFP Responder'}
-            </span>
-          </div>
+          {/* User Menu */}
+          <UserMenuDropdown settingsPath="/responder/settings" />
 
           {/* Mobile Menu Toggle */}
           <button

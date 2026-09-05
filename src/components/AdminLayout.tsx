@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, AlertTriangle, Settings, Cpu, LogOut, Menu, X, Bell, Search, BarChart3, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, AlertTriangle, Settings, Cpu, LogOut, Menu, X, BarChart3, FileText } from 'lucide-react';
+import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 
 export const AdminLayout: React.FC = () => {
@@ -45,25 +46,13 @@ export const AdminLayout: React.FC = () => {
         {/* Right Section */}
         <div className="flex items-center gap-3 md:gap-6">
           {/* Search */}
-          <div className="hidden md:block relative">
-            <input
-              type="text"
-              placeholder="Search devices..."
-              className="bg-surface-alt rounded-md pl-9 pr-4 py-[7px] text-sm text-text placeholder-text-faint w-64 focus:outline-none focus:ring-2 focus:ring-white/30"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-[10.5px] h-[10.5px] text-text-faint" />
-          </div>
+          <HeaderSearchBar devicesPath="/admin/devices" />
 
           {/* Notification Bell */}
-          <button className="relative p-2 shrink-0">
-            <Bell className="w-5 h-5 text-white" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-primary"></span>
-          </button>
+          <NotificationDropdown alertsPath="/admin/alerts" />
 
           {/* User Avatar */}
-          <button className="w-5 h-5 text-white hidden md:block shrink-0">
-            <Users className="w-5 h-5" />
-          </button>
+          <UserMenuDropdown settingsPath="/admin/settings/security" />
 
           {/* Mobile Menu Toggle */}
           <button
