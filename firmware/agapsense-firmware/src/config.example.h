@@ -29,6 +29,7 @@
 #endif
 #define DEBUG_BAUD         115200
 
+
 const char SUPABASE_ROOT_CA[] PROGMEM = R"raw(
 -----BEGIN CERTIFICATE-----
 MIIF3jCCA8agAwIBAgIQAf1tIrRCl29LYVCXTQF63DANBgkqhkiG9w0BAQsFADCB
@@ -73,6 +74,7 @@ AoICAQCAAnP3iG4xk519MBycw0prWv8/292y39O2vX7ZAt8bP/u6k06Y6/8e
 //   BFP    — technical message with device ID, coords, address
 #define OWNER_SMS_NUMBER_DEFAULT "+639XXXXXXXXX"
 #define BFP_SMS_NUMBER_DEFAULT   "+639YYYYYYYYY"
+#define ENDPOINT_CONFIRM_SMS     "/functions/v1/confirm-sms-status"
 
 // ── Pin Assignments ────────────────────────────────────────
 

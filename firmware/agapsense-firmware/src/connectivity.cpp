@@ -1,32 +1,42 @@
 // ============================================================
-// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM  (v2.1)
+// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM  (v2.3)
+//
+// Changes from v2.2 (this file):
+//  [18] alert_event_id parsed from trigger-alert response and stored
+//       in ctx->lastAlertEventId — threads through to postSmsStatus()
+//       so confirm-sms-status can update the exact alert_events row
+//  [19] postSmsStatus() implemented — reports SMS delivery outcome
+//       (role + success + alert_event_id) to confirm-sms-status
+//  [20] Step 6 SMS drain restored in connectivityUpdate() —
+//       gsmPopSmsResult() → postSmsStatus() loop runs every tick
+//  [21] alertRiseCount reset on CLEAR → TIER1 entry — without this,
+//       TIER1 → TIER2 escalation debounce was effectively 1 reading
+//  [22] lastAlertEventId zeroed in connectivityInit()
+//
+// Changes from v2.1:
+//   + setCACert(SUPABASE_ROOT_CA) replaces setInsecure() everywhere
+//   + ArduinoJson replaces manual indexOf() JSON parsing
+//   + postAlert() takes ConnectivityCtx* — parses and updates
+//     ownerNumber / bfpNumber from trigger-alert response
+//   + alertRiseCount reset on TIER1 → TIER2 escalation
+//   + Field names fixed: temp_celsius, latitude, longitude, tier
 //
 // Changes from v2.0:
-//  [15] Tier 1 now POSTs to trigger-alert too (alert_tier=1) — was
-//       Telegram-only before, so Tier 1 never reached the backend
-//  [16] Telegram sending removed from firmware — sendTelegram() and
-//       the TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID config deleted.
-//       trigger-alert already calls the Bot API server-side per spec;
-//       doing it there instead keeps the bot token off the hardware,
-//       lets the message include the backend-resolved address, and
-//       makes telegram_sent reflect the backend's own Bot API result.
-//  [17] Owner/BFP SMS now go through gsmQueueSms()/gsmProcessQueue()
-//       instead of blocking the Connectivity task directly — avoids
-//       stalling connectivityUpdate() (and its WDT reset) on a slow
-//       SIM800L response. SmsJob queue bumped to hold 2 jobs, since
-//       Tier 2 always queues both owner and BFP at once.
+//  [15] Tier 1 now POSTs to trigger-alert (alert_tier=1)
+//  [16] Telegram sending removed from firmware
+//  [17] SMS queued via gsmQueueSms()/gsmProcessQueue()
 //
-// All changes from review applied (v2.0):
-//   [1] WiFiManager captive portal on first boot / no credentials
-//   [2] Two-tier alert (TIER1 = one sensor, TIER2 = both sensors)
-//   [3] Tier 1 → yellow LED + trigger-alert POST only (no SMS)
-//   [4] Tier 2 → red LED + buzzer + trigger-alert POST + owner SMS + BFP SMS
-//   [5] Blue LED: solid ONLINE, 500 ms blink connecting, off OFFLINE
-//   [6] SMS 5-minute debounce (spec requirement)
+// Changes from v1.0:
+//   [1] WiFiManager captive portal on first boot
+//   [2] Two-tier alert (TIER1/TIER2)
+//   [3] Tier 1 → yellow LED + trigger-alert POST only
+//   [4] Tier 2 → red LED + buzzer + trigger-alert POST + SMS
+//   [5] Blue LED status indicator
+//   [6] SMS 5-minute debounce
 //   [8] on_battery flag in telemetry payload
 //   [9] sensor_ready flag in both payloads
 //  [10] mq7_phase field in telemetry payload
-//  [11] Telemetry posted every 30 s regardless of MQ-7 heating phase
+//  [11] Telemetry posted every 30 s regardless of MQ-7 phase
 //  [12] X-Device-Key header on all Edge Function requests
 //  [13] fetchRemoteConfig(): pulls thresholds + SMS numbers from DB
 //  [14] Alert auto-resolution: TIER1/TIER2 → CLEAR after safe readings
@@ -38,7 +48,7 @@
 #include "gsm.h"
 
 #include <WiFi.h>
-#include <WiFiManager.h>        // captive portal provisioning
+#include <WiFiManager.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 
@@ -66,10 +76,10 @@ const char* alertTierStr(AlertTier t) {
         default:               return "UNKNOWN";
     }
 }
-// ── Internal forward declarations ─────────────────────────
+
+// ── Internal forward declarations ──────────────────────────
 static void fireTier1Warning(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix);
 static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix);
-
 
 // ── Indicator helpers ──────────────────────────────────────
 static void indicatorsOff() {
@@ -93,15 +103,13 @@ static void setTier2Indicators() {
 // Blue LED blink handler — call every task tick when not ONLINE
 static void updateBlueLed(ConnectivityCtx* ctx, bool online) {
     if (online) {
-        // Solid blue = ONLINE
         digitalWrite(LED_BLUE_PIN, HIGH);
-        ctx->blueLedState    = true;
+        ctx->blueLedState     = true;
         ctx->lastBlueBlink_ms = millis();
     } else if (ctx->deviceState == DeviceState::OFFLINE) {
-        // Blue off = no Wi-Fi at all
         digitalWrite(LED_BLUE_PIN, LOW);
     } else {
-        // DEGRADED = Wi-Fi up but Supabase unreachable → blink 500 ms
+        // DEGRADED → blink 500 ms
         uint32_t now = millis();
         if (now - ctx->lastBlueBlink_ms >= 500) {
             ctx->blueLedState = !ctx->blueLedState;
@@ -119,7 +127,7 @@ bool isTier2(float co_ppm, float temp_c, const ConnectivityCtx* ctx) {
 bool isTier1(float co_ppm, float temp_c, const ConnectivityCtx* ctx) {
     bool coHigh   = (co_ppm >= ctx->co_alert_ppm);
     bool tempHigh = (temp_c >= ctx->temp_alert_c);
-    return (coHigh || tempHigh) && !(coHigh && tempHigh);  // XOR: one but not both
+    return (coHigh || tempHigh) && !(coHigh && tempHigh);
 }
 
 // ── Battery ADC ────────────────────────────────────────────
@@ -132,11 +140,9 @@ int readBatteryMv() {
 }
 
 // ── HTTPS POST helper ──────────────────────────────────────
-// Opens a WiFiClientSecure connection, POSTs JSON, returns HTTP code.
-// ── HTTPS POST helper ──────────────────────────────────────
 static int httpsPost(const char* endpoint, const char* payload) {
     WiFiClientSecure client;
-    client.setCACert(SUPABASE_ROOT_CA); // Set Root CA for Supabase HTTPS validation
+    client.setCACert(SUPABASE_ROOT_CA);
     client.setTimeout(HTTP_TIMEOUT_MS / 1000);
 
     HTTPClient http;
@@ -163,7 +169,6 @@ static int httpsPost(const char* endpoint, const char* payload) {
 }
 
 // ── Telemetry POST ─────────────────────────────────────────
-// [8][9][10][11] on_battery + sensor_ready + mq7_phase + always post
 int postTelemetry(const SensorData& sd, const GpsFix& fix,
                   int batteryMv, int rssi, const char* mq7Phase)
 {
@@ -189,7 +194,7 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
         fix.lat, fix.lng,
         fix.valid ? "true" : "false",
         batteryMv, rssi,
-        on_battery   ? "true" : "false",
+        on_battery      ? "true" : "false",
         sd.sensor_ready ? "true" : "false",
         mq7Phase
     );
@@ -197,9 +202,9 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
 }
 
 // ── Alert POST ─────────────────────────────────────────────
-// [15] tier (1 or 2) is included so the backend's stat cards and
-// history reflect Tier 1 warnings, not just Tier 2 alerts.
-// The backend resolves the address/contacts and returns owner_contact & bfp_contact.
+// Parses owner_contact, bfp_contact, and alert_event_id from the
+// trigger-alert response and stores them in ctx for use by the SMS
+// queue and confirm-sms-status confirmation flow.
 int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int alertTier) {
     char payload[384];
     snprintf(payload, sizeof(payload),
@@ -232,7 +237,6 @@ int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int
         CLOG("ERROR: http.begin failed for %s", ENDPOINT_ALERT);
         return -1;
     }
-
     http.addHeader("Content-Type",  "application/json");
     http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
     http.addHeader("X-Device-Key",  DEVICE_API_KEY);
@@ -243,15 +247,22 @@ int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int
 
     if (code == 200 || code == 201) {
         String body = http.getString();
-        CLOG("Alert POST Success (%d): %s", code, body.c_str());
+        CLOG("Alert POST success (%d): %s", code, body.c_str());
 
-        // Parse contacts returned from backend
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, body);
-        if (!error) {
-            const char* ownerStr = doc["owner_contact"] | doc["owner_number"] | (const char*)nullptr;
-            const char* bfpStr   = doc["bfp_contact"]   | doc["bfp_number"]   | (const char*)nullptr;
+        DeserializationError err = deserializeJson(doc, body);
+        if (!err) {
+            // [18] Store alert_event_id for confirm-sms-status linkage
+            const char* eventId = doc["alert_event_id"] | (const char*)nullptr;
+            if (eventId && strlen(eventId) > 0) {
+                strncpy(ctx->lastAlertEventId, eventId, sizeof(ctx->lastAlertEventId) - 1);
+                ctx->lastAlertEventId[sizeof(ctx->lastAlertEventId) - 1] = '\0';
+                CLOG("alert_event_id stored: %s", ctx->lastAlertEventId);
+            }
 
+            // Update SMS contacts if backend returns fresher values
+            const char* ownerStr = doc["owner_contact"] | (const char*)nullptr;
+            const char* bfpStr   = doc["bfp_contact"]   | (const char*)nullptr;
             if (ownerStr && strlen(ownerStr) > 0) {
                 strncpy(ctx->ownerNumber, ownerStr, sizeof(ctx->ownerNumber) - 1);
                 ctx->ownerNumber[sizeof(ctx->ownerNumber) - 1] = '\0';
@@ -260,20 +271,41 @@ int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int
                 strncpy(ctx->bfpNumber, bfpStr, sizeof(ctx->bfpNumber) - 1);
                 ctx->bfpNumber[sizeof(ctx->bfpNumber) - 1] = '\0';
             }
-            CLOG("Updated SMS contacts from trigger-alert: Owner=%s BFP=%s",
+            CLOG("Contacts from trigger-alert: Owner=%s BFP=%s",
                  ctx->ownerNumber, ctx->bfpNumber);
+        } else {
+            CLOG("JSON parse error on alert response: %s", err.c_str());
         }
     } else {
-        CLOG("Alert POST Failed (%d): %s", code, http.getString().c_str());
+        CLOG("Alert POST failed (%d): %s", code, http.getString().c_str());
     }
 
     http.end();
     return code;
 }
 
+// ── SMS Delivery Confirmation POST ─────────────────────────
+// [19] Reports the GSM task's +CMGS outcome to confirm-sms-status so
+// alert_events.sms_sent_owner / sms_sent_bfp reflect real delivery.
+// alert_event_id links to the exact row — no recency guessing needed.
+int postSmsStatus(const char* role, bool success, const char* alertEventId) {
+    char payload[256];
+    snprintf(payload, sizeof(payload),
+        "{"
+          "\"device_id\":\"%s\","
+          "\"alert_event_id\":\"%s\","
+          "\"role\":\"%s\","
+          "\"success\":%s"
+        "}",
+        DEVICE_ID,
+        alertEventId,
+        role,
+        success ? "true" : "false"
+    );
+    return httpsPost(ENDPOINT_CONFIRM_SMS, payload);
+}
+
 // ── Remote Config Fetch ────────────────────────────────────
-// [13] Pull alert thresholds and SMS recipient numbers from DB.
-// Falls back to defaults on JSON parse error or non-200 HTTP code.
 bool fetchRemoteConfig(ConnectivityCtx* ctx) {
     WiFiClientSecure client;
     client.setCACert(SUPABASE_ROOT_CA);
@@ -298,16 +330,13 @@ bool fetchRemoteConfig(ConnectivityCtx* ctx) {
     http.end();
     CLOG("Remote config raw payload: %s", body.c_str());
 
-    // Allocate JSON document (512 bytes is sufficient for threshold/contact payload)
     JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, body);
-
-    if (error) {
-        CLOG("deserializeJson() failed: %s — using defaults", error.c_str());
+    DeserializationError err = deserializeJson(doc, body);
+    if (err) {
+        CLOG("deserializeJson() failed: %s — using defaults", err.c_str());
         return false;
     }
 
-    // Extract fields with automatic fallback if key is missing or null
     ctx->co_alert_ppm = doc["co_alert_ppm"] | CO_ALERT_PPM_DEFAULT;
     ctx->temp_alert_c = doc["temp_alert_c"] | TEMP_ALERT_PPM_DEFAULT;
 
@@ -316,20 +345,17 @@ bool fetchRemoteConfig(ConnectivityCtx* ctx) {
 
     strncpy(ctx->ownerNumber, ownerStr, sizeof(ctx->ownerNumber) - 1);
     ctx->ownerNumber[sizeof(ctx->ownerNumber) - 1] = '\0';
-
     strncpy(ctx->bfpNumber, bfpStr, sizeof(ctx->bfpNumber) - 1);
     ctx->bfpNumber[sizeof(ctx->bfpNumber) - 1] = '\0';
 
-    CLOG("Config parsed successfully: CO>=%.0f Temp>=%.0f Owner=%s BFP=%s",
+    CLOG("Config loaded: CO>=%.0f Temp>=%.0f Owner=%s BFP=%s",
          ctx->co_alert_ppm, ctx->temp_alert_c,
          ctx->ownerNumber, ctx->bfpNumber);
-
     return true;
 }
 
 // ── Init ───────────────────────────────────────────────────
 void connectivityInit(ConnectivityCtx* ctx) {
-    // Indicator GPIO setup
     pinMode(LED_YELLOW_PIN, OUTPUT);
     pinMode(LED_RED_PIN,    OUTPUT);
     pinMode(LED_BLUE_PIN,   OUTPUT);
@@ -337,44 +363,38 @@ void connectivityInit(ConnectivityCtx* ctx) {
     indicatorsOff();
     digitalWrite(LED_BLUE_PIN, LOW);
 
-    // Initialise context
-    ctx->deviceState      = DeviceState::OFFLINE;
-    ctx->alertTier        = AlertTier::CLEAR;
-    ctx->alertRiseCount   = 0;
-    ctx->alertFallCount   = 0;
-    ctx->lastWifiRetry_ms = 0;
-    ctx->lastTelemetry_ms = 0;
+    ctx->deviceState        = DeviceState::OFFLINE;
+    ctx->alertTier          = AlertTier::CLEAR;
+    ctx->alertRiseCount     = 0;
+    ctx->alertFallCount     = 0;
+    ctx->lastWifiRetry_ms   = 0;
+    ctx->lastTelemetry_ms   = 0;
     ctx->lastConfigFetch_ms = 0;
-    ctx->lastSmsSent_ms   = 0;
-    ctx->lastBlueBlink_ms = 0;
-    ctx->blueLedState     = false;
-    ctx->batteryMv        = 0;
-    ctx->rssi             = 0;
-    // Load threshold defaults (overridden by fetchRemoteConfig below)
-    ctx->co_alert_ppm     = CO_ALERT_PPM_DEFAULT;
-    ctx->temp_alert_c     = TEMP_ALERT_PPM_DEFAULT;
+    ctx->lastSmsSent_ms     = 0;
+    ctx->lastBlueBlink_ms   = 0;
+    ctx->blueLedState       = false;
+    ctx->batteryMv          = 0;
+    ctx->rssi               = 0;
+    ctx->co_alert_ppm       = CO_ALERT_PPM_DEFAULT;
+    ctx->temp_alert_c       = TEMP_ALERT_PPM_DEFAULT;
+    // [22] Zero out lastAlertEventId so first postSmsStatus() never sends garbage
+    memset(ctx->lastAlertEventId, 0, sizeof(ctx->lastAlertEventId));
     strncpy(ctx->ownerNumber, OWNER_SMS_NUMBER_DEFAULT, sizeof(ctx->ownerNumber) - 1);
     strncpy(ctx->bfpNumber,   BFP_SMS_NUMBER_DEFAULT,   sizeof(ctx->bfpNumber)   - 1);
 
-    // [1] WiFiManager: try saved NVS credentials; launch captive portal if none
     WiFiManager wm;
     wm.setConnectTimeout(WIFI_CONNECT_TIMEOUT_S);
-    wm.setConfigPortalTimeout(180);   // portal closes after 3 min of inactivity
-
-    // Blink blue LED during provisioning/connecting
+    wm.setConfigPortalTimeout(180);
     digitalWrite(LED_BLUE_PIN, HIGH);
 
-    // autoConnect: tries NVS credentials → launches AP if they fail
     bool connected = wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
 
     if (connected) {
         ctx->deviceState = DeviceState::ONLINE;
         ctx->rssi        = WiFi.RSSI();
-        digitalWrite(LED_BLUE_PIN, HIGH);   // solid blue = connected
-        CLOG("Wi-Fi connected via WiFiManager. IP=%s RSSI=%d",
+        digitalWrite(LED_BLUE_PIN, HIGH);
+        CLOG("Wi-Fi connected. IP=%s RSSI=%d",
              WiFi.localIP().toString().c_str(), ctx->rssi);
-
-        // Fetch remote config immediately after first connect
         fetchRemoteConfig(ctx);
         ctx->lastConfigFetch_ms = millis();
     } else {
@@ -403,14 +423,13 @@ void connectivityUpdate(ConnectivityCtx* ctx,
             ctx->lastWifiRetry_ms = now;
             CLOG("Attempting Wi-Fi reconnect...");
             WiFi.disconnect();
-            WiFi.begin();   // retry using NVS credentials
+            WiFi.begin();
         }
     } else {
         ctx->rssi = WiFi.RSSI();
         if (ctx->deviceState != DeviceState::ONLINE) {
-            // Probe Supabase reachability
             WiFiClientSecure probe;
-            probe.setCACert(SUPABASE_ROOT_CA); // Set Root CA for probe validation
+            probe.setCACert(SUPABASE_ROOT_CA);
             probe.setTimeout(5);
             String host = String(SUPABASE_URL);
             host.replace("https://", "");
@@ -425,7 +444,6 @@ void connectivityUpdate(ConnectivityCtx* ctx,
     }
 
     // ── Step 2: Periodic remote config re-fetch ─────────────
-    // [13] Re-fetch every 10 min so threshold/contact changes take effect
     if (ctx->deviceState == DeviceState::ONLINE &&
         now - ctx->lastConfigFetch_ms >= CONFIG_FETCH_INTERVAL_MS) {
         ctx->lastConfigFetch_ms = now;
@@ -452,14 +470,10 @@ void connectivityUpdate(ConnectivityCtx* ctx,
     ctx->batteryMv = readBatteryMv();
 
     // ── Step 4: Alert FSM (suppressed until sensor_ready) ───
-    // [9] While MQ-7 is warming up, skip all alert evaluation
     if (!sd.sensor_ready) {
         CLOG("Sensor warm-up in progress — alert FSM suppressed");
         indicatorsOff();
-        // Still post telemetry so dashboard can show "Initializing sensors..."
-        // (sensor_ready=false is included in the payload)
     } else {
-        // Determine current tier from live readings
         bool tier2Now = isTier2(sd.co_ppm, sd.temperature_c, ctx);
         bool tier1Now = isTier1(sd.co_ppm, sd.temperature_c, ctx);
         bool safeNow  = !tier1Now && !tier2Now;
@@ -475,18 +489,19 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                          ctx->alertRiseCount, ALERT_DEBOUNCE_COUNT,
                          (int)tier2Now, (int)tier1Now);
                     if (ctx->alertRiseCount >= ALERT_DEBOUNCE_COUNT) {
-                        // Debounce passed — determine which tier to enter
                         if (tier2Now) {
                             ctx->alertTier      = AlertTier::TIER2;
+                            ctx->alertRiseCount = 0;
                             ctx->alertFallCount = 0;
                             setTier2Indicators();
-                            CLOG("🔥 TIER 2 ALERT — both sensors over threshold");
+                            CLOG("TIER 2 ALERT — both sensors over threshold");
                             fireTier2Alert(ctx, sd, fix);
                         } else {
                             ctx->alertTier      = AlertTier::TIER1;
+                            ctx->alertRiseCount = 0;   // [21] reset so TIER1→TIER2 debounce starts fresh
                             ctx->alertFallCount = 0;
                             setTier1Indicators();
-                            CLOG("⚠ TIER 1 WARNING — single sensor over threshold");
+                            CLOG("TIER 1 WARNING — single sensor over threshold");
                             fireTier1Warning(ctx, sd, fix);
                         }
                     }
@@ -499,11 +514,10 @@ void connectivityUpdate(ConnectivityCtx* ctx,
             case AlertTier::TIER1:
                 setTier1Indicators();
                 if (tier2Now) {
-                    // Escalate to Tier 2
                     ctx->alertRiseCount++;
                     if (ctx->alertRiseCount >= ALERT_DEBOUNCE_COUNT) {
                         ctx->alertTier      = AlertTier::TIER2;
-                        ctx->alertRiseCount = 0;  // Reset rise counter after escalation
+                        ctx->alertRiseCount = 0;
                         ctx->alertFallCount = 0;
                         setTier2Indicators();
                         CLOG("Escalating TIER1 → TIER2");
@@ -538,11 +552,11 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                         indicatorsOff();
                     }
                 } else if (!tier2Now && tier1Now) {
-                    // De-escalate to Tier 1
                     ctx->alertFallCount++;
                     if (ctx->alertFallCount >= ALERT_RESOLUTION_COUNT) {
                         CLOG("De-escalating TIER2 → TIER1");
                         ctx->alertTier      = AlertTier::TIER1;
+                        ctx->alertRiseCount = 0;
                         ctx->alertFallCount = 0;
                         setTier1Indicators();
                     }
@@ -554,12 +568,10 @@ void connectivityUpdate(ConnectivityCtx* ctx,
     }
 
     // ── Step 5: Periodic telemetry POST ─────────────────────
-    // [11] Always post regardless of MQ-7 heating/measuring phase
     if (now - ctx->lastTelemetry_ms >= TELEMETRY_INTERVAL_MS) {
         ctx->lastTelemetry_ms = now;
         const char* phaseStr = (mq7GetPhase() == MQ7Phase::MEASURING)
                                ? "measuring" : "heating";
-
         if (ctx->deviceState == DeviceState::ONLINE) {
             int code = postTelemetry(sd, fix, ctx->batteryMv, ctx->rssi, phaseStr);
             if (code != 200 && code != 201) {
@@ -568,6 +580,21 @@ void connectivityUpdate(ConnectivityCtx* ctx,
             }
         } else {
             CLOG("Skip telemetry — state=%s", deviceStateStr(ctx->deviceState));
+        }
+    }
+
+    // ── Step 6: Drain SMS delivery results → confirm-sms-status ──
+    // [20] GSM task records +CMGS outcome in its result queue — pick
+    // up here and POST to backend so sms_sent_owner / sms_sent_bfp
+    // reflect real delivery. alert_event_id links to the exact row.
+    if (ctx->deviceState == DeviceState::ONLINE) {
+        char role[8];
+        bool success;
+        for (int i = 0; i < SMS_QUEUE_SIZE; i++) {
+            if (!gsmPopSmsResult(role, sizeof(role), &success)) break;
+            int code = postSmsStatus(role, success, ctx->lastAlertEventId);
+            CLOG("SMS status reported: role=%s success=%d → code=%d",
+                 role, (int)success, code);
         }
     }
 
@@ -585,30 +612,30 @@ void connectivityUpdate(ConnectivityCtx* ctx,
 }
 
 // ── Tier 1: yellow LED + trigger-alert POST (no SMS) ───────
-// [15] Backend sends the Telegram warning itself once this lands.
-// Defined here (not in header) as internal helper
 static void fireTier1Warning(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
     if (ctx->deviceState == DeviceState::ONLINE) {
         int code = postAlert(ctx, sd, fix, 1);
-        CLOG("Tier 1 Supabase alert POST: code=%d", code);
+        CLOG("Tier 1 alert POST: code=%d", code);
     }
 }
 
 // ── Tier 2: trigger-alert POST + owner SMS + BFP SMS ───────
-// [16] Backend sends the Telegram alert itself once this lands.
 static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
-    // 1. POST to Supabase trigger-alert (updates ctx->ownerNumber / ctx->bfpNumber if changed)
+    // 1. POST to trigger-alert — updates ctx->lastAlertEventId,
+    //    ownerNumber, bfpNumber from response
     if (ctx->deviceState == DeviceState::ONLINE) {
         int code = postAlert(ctx, sd, fix, 2);
-        CLOG("Tier 2 Supabase alert POST: code=%d", code);
+        CLOG("Tier 2 alert POST: code=%d", code);
     }
 
-    // 2. Dispatch SMS using the freshest contacts in ctx
+    // 2. Queue SMS using freshest contacts — non-blocking
     uint32_t now = millis();
     if (now - ctx->lastSmsSent_ms >= SMS_DEBOUNCE_MS || ctx->lastSmsSent_ms == 0) {
         ctx->lastSmsSent_ms = now;
         gsmSendOwnerSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng, ctx->ownerNumber);
         gsmSendBfpSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng, ctx->bfpNumber);
-        CLOG("Tier 2 SMS queued for owner=%s and BFP=%s", ctx->ownerNumber, ctx->bfpNumber);
+        CLOG("Tier 2 SMS queued: owner=%s bfp=%s", ctx->ownerNumber, ctx->bfpNumber);
+    } else {
+        CLOG("SMS debounced — %lu ms since last send", now - ctx->lastSmsSent_ms);
     }
 }
