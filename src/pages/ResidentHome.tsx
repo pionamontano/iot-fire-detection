@@ -515,7 +515,10 @@ export const ResidentHome = () => {
                 style={{ height: '100%', width: '100%' }}
                 zoomControl={false}
               >
-                <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
                 <Marker position={[displayLat, displayLng]} icon={markerIcon}>
                   <Popup>
                     <strong>{device.device_code}</strong><br />
