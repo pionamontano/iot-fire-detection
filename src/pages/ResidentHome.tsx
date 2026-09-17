@@ -97,7 +97,7 @@ export const ResidentHome = () => {
   const fetchData = useCallback(async (deviceId: string) => {
     try {
       const [deviceRes, readingRes, alertsRes, historyRes] = await Promise.all([
-        supabase.from('devices').select('*').eq('id', deviceId).single(),
+        supabase.from('devices_safe').select('*').eq('id', deviceId).single(),
         supabase.from('sensor_readings').select('*').eq('device_id', deviceId).order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('alert_events').select('*').eq('device_id', deviceId).order('triggered_at', { ascending: false }).limit(10),
         supabase.from('sensor_readings').select('*').eq('device_id', deviceId).order('recorded_at', { ascending: false }).limit(24)

@@ -44,7 +44,7 @@ export const ResidentAlertSettings = () => {
 
   const fetchDevice = async (deviceId: string) => {
     try {
-      const { data, error } = await supabase.from('devices').select('*').eq('id', deviceId).single();
+      const { data, error } = await supabase.from('devices_safe').select('*').eq('id', deviceId).single();
       if (data) {
         setDevice(data);
         setTempThreshold(data.temp_threshold || 55);

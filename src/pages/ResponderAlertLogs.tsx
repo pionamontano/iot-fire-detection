@@ -62,7 +62,7 @@ export const ResponderAlertLogs = () => {
           .select('*, devices(device_code, label, location_desc, is_active)')
           .order('triggered_at', { ascending: false })
           .limit(200),
-        supabase.from('devices').select('*').order('created_at', { ascending: false }),
+        supabase.from('devices_safe').select('*').order('created_at', { ascending: false }),
       ]);
 
       const allDevices = devicesRes.data || [];
