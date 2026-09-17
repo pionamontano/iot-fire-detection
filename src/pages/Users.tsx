@@ -208,9 +208,11 @@ export const Users = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Force status to approved for manually created users
-      await supabase.from('profiles').update({ status: 'approved' }).eq('id', data.user.id);
-
+      // create-user already inserts the profile without a status,
+      // so it lands on the column default ('approved') - this used
+      // to also fire a redundant client-side update here, which RLS
+      // silently blocked anyway (no policy lets an admin update
+      // another user's profile from the client).
       setShowAddModal(false);
       setNewUser({ fullName: '', email: '', password: '', role: 'resident', contactNumber: '' });
       fetchData();
