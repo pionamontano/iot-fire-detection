@@ -288,7 +288,7 @@ int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int
 // [19] Reports the GSM task's +CMGS outcome to confirm-sms-status so
 // alert_events.sms_sent_owner / sms_sent_bfp reflect real delivery.
 // alert_event_id links to the exact row — no recency guessing needed.
-int postSmsStatus(const char* role, bool success, const char* alertEventId) {
+static int postSmsStatus(const char* role, bool success, const char* alertEventId) {
     char payload[256];
     snprintf(payload, sizeof(payload),
         "{"
