@@ -136,8 +136,8 @@ export const Users = () => {
       if (selectedDeviceForApproval && selectedRequest.requested_role === 'resident') {
          await supabase.functions.invoke('assign-device', {
             body: {
-              userId: selectedRequest.user_id,
-              deviceId: selectedDeviceForApproval
+              profile_id: selectedRequest.user_id,
+              device_id: selectedDeviceForApproval
             }
          });
       }
@@ -231,8 +231,8 @@ export const Users = () => {
     try {
       const { data, error } = await supabase.functions.invoke('assign-device', {
         body: {
-          userId: selectedUser.id,
-          deviceId: selectedDevice
+          profile_id: selectedUser.id,
+          device_id: selectedDevice
         }
       });
 
