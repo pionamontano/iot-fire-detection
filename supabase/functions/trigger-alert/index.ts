@@ -156,12 +156,16 @@ serve(async (req: Request) => {
       : Promise.resolve({ data: null });
 
     // [FIX #6] Query for open alert to perform deduplication
+    // NOTE: alert_events has no `created_at` column — only `triggered_at`.
+    // Ordering by a nonexistent column made this query error on every call,
+    // which silently degraded to "always insert a new row" instead of
+    // escalating the existing open alert.
     const openAlertPromise = supabaseAdmin
       .from('alert_events')
       .select('id, alert_tier')
       .eq('device_id', device.id)
       .is('resolved_at', null)
-      .order('created_at', { ascending: false })
+      .order('triggered_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
