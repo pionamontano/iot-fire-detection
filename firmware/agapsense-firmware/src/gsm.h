@@ -23,7 +23,13 @@
 struct SmsJob {
     char number[20];
     char message[160];
+    char role[8];      // "owner" or "bfp" — carried through to the result queue
     bool pending;
+};
+
+struct SmsResult {
+    char role[8];
+    bool success;
 };
 
 /** Initialise SIM800L UART and run AT handshake + network registration. */
@@ -62,12 +68,23 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
                    const char* bfpNumber);
 
 /** Queue an SMS job for async processing by the GSM task. Holds up to
- *  SMS_QUEUE_SIZE jobs (config.h); logs and drops the message if full. */
-void gsmQueueSms(const char* number, const char* message);
+ *  SMS_QUEUE_SIZE jobs (config.h); logs and drops the message if full.
+ *  @param role short tag ("owner"/"bfp") carried through to the result
+ *  queue so the caller can report delivery status per recipient. */
+void gsmQueueSms(const char* number, const char* message, const char* role);
 
 /** Dequeue and blocking-send the oldest queued SMS, if any — call
- *  once per GSM FreeRTOS task loop iteration. */
+ *  once per GSM FreeRTOS task loop iteration. Pushes the outcome onto
+ *  the result queue for gsmPopSmsResult(). */
 void gsmProcessQueue();
+
+/**
+ * Pop one completed SMS delivery result (role + success) into the
+ * caller's buffers. Holds up to SMS_QUEUE_SIZE results; call in a loop
+ * until it returns false to drain everything from one tick.
+ * @return true if a result was available and popped.
+ */
+bool gsmPopSmsResult(char* role, size_t roleLen, bool* success);
 
 /** @return true if SIM800L is registered on network (home or roaming). */
 bool gsmIsRegistered();
