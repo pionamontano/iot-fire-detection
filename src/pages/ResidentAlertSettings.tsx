@@ -49,12 +49,20 @@ export const ResidentAlertSettings = () => {
         setDevice(data);
         setTempThreshold(data.temp_threshold || 55);
         setSmokeThreshold(data.co_threshold || 300);
-        setContactNumber(data.bfp_contact || '');
         setOrigTemp(data.temp_threshold || 55);
         setOrigSmoke(data.co_threshold || 300);
-        setOrigContact(data.bfp_contact || '');
       }
       if (error) console.error(error);
+      // The number that actually receives the resident's own evacuation
+      // SMS is profiles.contact_number (see trigger-alert's owner_contact
+      // lookup) - not devices.bfp_contact, which is the fire station's
+      // own contact number used for the technical BFP dispatch SMS. This
+      // page used to read/write bfp_contact by mistake, which meant
+      // "saving your SMS recipient" here would have overwritten the
+      // number the fire department gets alerted on for this device.
+      const contact = profile?.contact_number || '';
+      setContactNumber(contact);
+      setOrigContact(contact);
     } catch (e) {
       console.error(e);
     } finally {
@@ -63,8 +71,8 @@ export const ResidentAlertSettings = () => {
   };
 
   const handleSave = async () => {
-    if (!device) return;
-    
+    if (!device || !profile) return;
+
     // Validate contact number format if provided
     const phoneRegex = /^(09\d{9})$/;
     if (contactNumber && !phoneRegex.test(contactNumber)) {
@@ -76,19 +84,27 @@ export const ResidentAlertSettings = () => {
     setSuccessMsg('');
     setErrorMsg('');
     try {
-      const { error } = await supabase
-        .from('devices')
-        .update({
-          temp_threshold: tempThreshold,
-          co_threshold: smokeThreshold,
-          bfp_contact: contactNumber || null,
-        })
-        .eq('id', device.id);
-      
-      if (error) {
-        throw error;
+      // Thresholds go through a narrow RPC (residents have no direct
+      // UPDATE grant on devices - see 20260917080000_resident_alert_
+      // threshold_rpc.sql) that only ever touches temp_threshold/
+      // co_threshold on the caller's own device.
+      const { error: thresholdError } = await supabase.rpc('update_own_device_alert_settings', {
+        p_temp_threshold: tempThreshold,
+        p_co_threshold: smokeThreshold,
+      });
+      if (thresholdError) throw thresholdError;
+
+      // The resident's own contact number lives on their profile, not
+      // on the device - already covered by the existing "Users can
+      // update own profile" RLS policy.
+      if (contactNumber !== origContact) {
+        const { error: contactUpdateError } = await supabase
+          .from('profiles')
+          .update({ contact_number: contactNumber || null })
+          .eq('id', profile.id);
+        if (contactUpdateError) throw contactUpdateError;
       }
-      
+
       // Update originals so hasChanges resets
       setOrigTemp(tempThreshold);
       setOrigSmoke(smokeThreshold);
