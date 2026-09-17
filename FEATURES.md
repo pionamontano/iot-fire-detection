@@ -46,6 +46,8 @@ The backend logic is heavily decoupled into serverless Supabase Edge Functions (
 | **`manage-registration`**| Admin Action | Approves or rejects a pending user. If approved, updates their profile status and grants them their requested role. |
 | **`create-user`** | Admin Action | Bypasses the approval workflow to directly create and provision a pre-approved user (e.g., manually adding a new responder). |
 | **`assign-device`** / **`link-device`** | Admin Action | Links an IoT device's UUID to a specific resident in the `profiles` table so the resident gains RLS access to its telemetry. |
+| **`get-device-config`** | Called by IoT Device | Returns the device's current `co_threshold`/`temp_threshold`/`bfp_contact` and the linked resident's `contact_number`, so an admin can retune a device from the dashboard without re-flashing it. |
+| **`confirm-sms-status`** | Called by IoT Device | Reports the real SIM800L `+CMGS` delivery outcome for a Tier 2 SMS back to the originating `alert_events` row (`sms_sent_owner`/`sms_sent_bfp`), once per message. |
 
 ---
 
