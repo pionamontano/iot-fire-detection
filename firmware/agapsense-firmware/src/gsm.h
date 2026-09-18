@@ -23,6 +23,7 @@
 struct SmsJob {
     char number[20];
     char message[160];
+    char role[8];        // "owner" or "bfp" — threads through to gsmPopSmsResult()
     bool pending;
 };
 
@@ -62,12 +63,26 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
                    const char* bfpNumber);
 
 /** Queue an SMS job for async processing by the GSM task. Holds up to
- *  SMS_QUEUE_SIZE jobs (config.h); logs and drops the message if full. */
-void gsmQueueSms(const char* number, const char* message);
+ *  SMS_QUEUE_SIZE jobs (config.h); logs and drops the message if full.
+ *  @param role "owner" or "bfp" — carried through to gsmPopSmsResult()
+ *              so the Connectivity task can report delivery per-role. */
+void gsmQueueSms(const char* number, const char* message, const char* role);
 
 /** Dequeue and blocking-send the oldest queued SMS, if any — call
- *  once per GSM FreeRTOS task loop iteration. */
+ *  once per GSM FreeRTOS task loop iteration. Records the +CMGS
+ *  outcome for pickup via gsmPopSmsResult(). */
 void gsmProcessQueue();
+
+/**
+ * Pop one pending SMS delivery result (role + success), if any.
+ * Call in a drain loop (up to SMS_QUEUE_SIZE times) from the
+ * Connectivity task, feeding each result to postSmsStatus().
+ * @param roleOut buffer to receive the role string ("owner"/"bfp")
+ * @param roleOutSize size of roleOut
+ * @param success set to the SMS send outcome (+CMGS confirmation)
+ * @return true if a result was popped, false if none pending
+ */
+bool gsmPopSmsResult(char* roleOut, size_t roleOutSize, bool* success);
 
 /** @return true if SIM800L is registered on network (home or roaming). */
 bool gsmIsRegistered();

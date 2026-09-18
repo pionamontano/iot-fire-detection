@@ -139,7 +139,24 @@ serve(async (req: Request) => {
       throw reqError
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    // --- Soft, non-blocking check: does this device_code exist? ---
+    // device_code is free text on registration_requests, never validated
+    // against the real devices table - a resident may legitimately
+    // register before their device is provisioned, so an unrecognized
+    // code doesn't block registration, it's just surfaced back to the
+    // caller so the UI can show a heads-up and the admin reviewing the
+    // request knows to double check it.
+    let device_code_recognized: boolean | null = null
+    if (device_code) {
+      const { data: matchedDevice } = await supabaseAdmin
+        .from('devices')
+        .select('id')
+        .eq('device_code', device_code)
+        .maybeSingle()
+      device_code_recognized = !!matchedDevice
+    }
+
+    return new Response(JSON.stringify({ success: true, device_code_recognized }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })

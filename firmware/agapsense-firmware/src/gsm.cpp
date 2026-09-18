@@ -29,6 +29,20 @@ static uint8_t           smsTail  = 0;   // next free slot to enqueue
 static uint8_t           smsCount = 0;   // jobs currently queued
 static SemaphoreHandle_t smsMutex = nullptr;
 
+// ── Delivery-result ring buffer (mirrors smsQueue sizing) ──
+// gsmProcessQueue() records the +CMGS outcome here after each send;
+// the Connectivity task drains it via gsmPopSmsResult() and reports
+// each one to confirm-sms-status so alert_events.sms_sent_owner/
+// sms_sent_bfp reflect real delivery instead of staying false forever.
+struct SmsResult {
+    char role[8];
+    bool success;
+};
+static SmsResult         resultQueue[SMS_QUEUE_SIZE];
+static uint8_t           resultHead  = 0;
+static uint8_t           resultTail  = 0;
+static uint8_t           resultCount = 0;
+
 // ── Internal: drain UART until OK / ERROR / > or timeout ──
 static void gsmReadResponse(char* buf, size_t bufLen, uint32_t timeoutMs) {
     uint32_t start = millis();
@@ -136,7 +150,7 @@ void gsmSendOwnerSms(float co_ppm, float temp_c,
         co_ppm, temp_c, lat, lng
     );
     GSMLOG("Queuing owner SMS to %s", ownerNumber);
-    gsmQueueSms(ownerNumber, msg);
+    gsmQueueSms(ownerNumber, msg, "owner");
 }
 
 // ── BFP SMS: technical responder message ───────────────────
@@ -162,13 +176,13 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
         lat, lng
     );
     GSMLOG("Queuing BFP SMS to %s", bfpNumber);
-    gsmQueueSms(bfpNumber, msg);
+    gsmQueueSms(bfpNumber, msg, "bfp");
 }
 
 // ── Async queue (ring buffer, SMS_QUEUE_SIZE slots) ─────────
 // Tier 2 always queues two jobs back to back (owner + BFP), so the
 // queue must hold at least 2 without dropping either one.
-void gsmQueueSms(const char* number, const char* message) {
+void gsmQueueSms(const char* number, const char* message, const char* role) {
     if (!smsMutex) return;
     if (xSemaphoreTake(smsMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         if (smsCount < SMS_QUEUE_SIZE) {
@@ -177,6 +191,8 @@ void gsmQueueSms(const char* number, const char* message) {
             job->number[sizeof(job->number) - 1] = '\0';
             strncpy(job->message, message, sizeof(job->message) - 1);
             job->message[sizeof(job->message) - 1] = '\0';
+            strncpy(job->role, role, sizeof(job->role) - 1);
+            job->role[sizeof(job->role) - 1] = '\0';
             job->pending = true;
             smsTail = (smsTail + 1) % SMS_QUEUE_SIZE;
             smsCount++;
@@ -197,13 +213,15 @@ void gsmProcessQueue() {
 
     char num[20]  = {0};
     char msg[160] = {0};
+    char role[8]  = {0};
     bool haveJob  = false;
 
     if (xSemaphoreTake(smsMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         if (smsCount > 0) {
             SmsJob* job = &smsQueue[smsHead];
-            strncpy(num, job->number,  sizeof(num) - 1);
-            strncpy(msg, job->message, sizeof(msg) - 1);
+            strncpy(num,  job->number,  sizeof(num)  - 1);
+            strncpy(msg,  job->message, sizeof(msg)  - 1);
+            strncpy(role, job->role,    sizeof(role) - 1);
             job->pending = false;
             smsHead = (smsHead + 1) % SMS_QUEUE_SIZE;
             smsCount--;
@@ -213,8 +231,41 @@ void gsmProcessQueue() {
     }
 
     if (haveJob) {
-        gsmSendSms(num, msg);   // send outside mutex (blocking)
+        bool sent = gsmSendSms(num, msg);   // send outside mutex (blocking)
+
+        if (xSemaphoreTake(smsMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            if (resultCount < SMS_QUEUE_SIZE) {
+                SmsResult* res = &resultQueue[resultTail];
+                strncpy(res->role, role, sizeof(res->role) - 1);
+                res->role[sizeof(res->role) - 1] = '\0';
+                res->success = sent;
+                resultTail = (resultTail + 1) % SMS_QUEUE_SIZE;
+                resultCount++;
+            } else {
+                GSMLOG("WARN: SMS result queue full — dropping result for role=%s", role);
+            }
+            xSemaphoreGive(smsMutex);
+        }
     }
+}
+
+bool gsmPopSmsResult(char* roleOut, size_t roleOutSize, bool* success) {
+    if (!smsMutex || !roleOut || !success) return false;
+    bool popped = false;
+
+    if (xSemaphoreTake(smsMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (resultCount > 0) {
+            SmsResult* res = &resultQueue[resultHead];
+            strncpy(roleOut, res->role, roleOutSize - 1);
+            roleOut[roleOutSize - 1] = '\0';
+            *success = res->success;
+            resultHead = (resultHead + 1) % SMS_QUEUE_SIZE;
+            resultCount--;
+            popped = true;
+        }
+        xSemaphoreGive(smsMutex);
+    }
+    return popped;
 }
 
 bool gsmIsRegistered() {

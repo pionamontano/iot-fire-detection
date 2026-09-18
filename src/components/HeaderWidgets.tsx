@@ -220,7 +220,7 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
     setLoading(true);
     const term = searchQuery.trim();
     const { data, error } = await supabase
-      .from('devices')
+      .from('devices_safe')
       .select('*')
       .or(`device_code.ilike.%${term}%,label.ilike.%${term}%,location_desc.ilike.%${term}%`)
       .limit(5);

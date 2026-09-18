@@ -12,7 +12,7 @@ export const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [failures, setFailures] = useState(0);
+  const [locked, setLocked] = useState(false);
   const [lockoutTimer, setLockoutTimer] = useState(0);
   const [rememberMe, setRememberMe] = useState(false);
   const [scale, setScale] = useState(1);
@@ -43,7 +43,10 @@ export const Login = () => {
     let interval: ReturnType<typeof setInterval>;
     if (lockoutTimer > 0) {
       interval = setInterval(() => {
-        setLockoutTimer((prev) => prev - 1);
+        setLockoutTimer((prev) => {
+          if (prev <= 1) setLocked(false);
+          return prev - 1;
+        });
       }, 1000);
     }
     return () => clearInterval(interval);
@@ -62,18 +65,35 @@ export const Login = () => {
     setLoading(true);
     setError('');
 
+    // Real, server-backed rate limit check (login_attempts-based) -
+    // replaces the old in-memory-only failures counter, which reset
+    // on every page refresh and never actually blocked anything.
+    const { data: lockoutData } = await supabase.rpc('check_login_lockout', { p_email: email });
+    const lockoutStatus = lockoutData?.[0];
+    if (lockoutStatus?.locked) {
+      setLocked(true);
+      setLockoutTimer(lockoutStatus.retry_after_seconds);
+      setError('Too many failed attempts. Please wait before trying again.');
+      setLoading(false);
+      return;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
+    await supabase.from('login_attempts').insert({ email, success: !error });
+
     if (error) {
-      const newFailures = failures + 1;
-      setFailures(newFailures);
       setError(error.message || 'Incorrect email or password. Try again.');
-      
-      if (newFailures === 3) setLockoutTimer(10);
-      else if (newFailures === 5) setLockoutTimer(30);
+
+      const { data: newLockoutData } = await supabase.rpc('check_login_lockout', { p_email: email });
+      const newLockoutStatus = newLockoutData?.[0];
+      if (newLockoutStatus?.locked) {
+        setLocked(true);
+        setLockoutTimer(newLockoutStatus.retry_after_seconds);
+      }
 
       setLoading(false);
     }
@@ -85,7 +105,7 @@ export const Login = () => {
     </svg>
   );
 
-  if (failures >= 7) {
+  if (locked && lockoutTimer >= 900) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface p-4" style={{ fontFamily: "'Inter', sans-serif" }}>
         <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-[0_24px_48px_rgba(0,0,0,0.08)] border border-border text-center">

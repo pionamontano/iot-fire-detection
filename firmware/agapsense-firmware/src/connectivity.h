@@ -64,6 +64,9 @@ struct ConnectivityCtx {
     // Runtime SMS recipient numbers (fetched from DB at startup)
     char        ownerNumber[20];
     char        bfpNumber[20];
+    // alert_events.id (uuid) of the most recent postAlert() call —
+    // links postSmsStatus() reports back to the exact row.
+    char        lastAlertEventId[40];
 };
 
 // ── Public API ─────────────────────────────────────────────
@@ -82,9 +85,15 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
                   const char* mq7Phase);
 
 /** POST an alert (Tier 1 or Tier 2) to trigger-alert. Backend sends
- *  Telegram and resolves the address; alertTier is 1 or 2.
- *  Returns HTTP code. */
-int postAlert(const SensorData& sd, const GpsFix& fix, int alertTier);
+ *  Telegram and resolves the address; alertTier is 1 or 2. Parses
+ *  owner_contact/bfp_contact/alert_event_id from the response into
+ *  ctx. Returns HTTP code. */
+int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int alertTier);
+
+/** Report one SMS delivery outcome to confirm-sms-status.
+ *  role is "owner" or "bfp"; alertEventId links to the exact
+ *  alert_events row. Returns HTTP code. */
+int postSmsStatus(const char* role, bool success, const char* alertEventId);
 
 /** GET remote config from get-device-config Edge Function. */
 bool fetchRemoteConfig(ConnectivityCtx* ctx);
