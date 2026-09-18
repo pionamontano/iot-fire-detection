@@ -23,12 +23,16 @@
 struct SmsJob {
     char number[20];
     char message[160];
-    char role[8];      // "owner" or "bfp" — carried through to the result queue
+    char role[8];          // "owner" or "bfp" — carried through to the result queue
+    char alertEventId[40]; // snapshot of the alert this SMS belongs to, captured
+                            // at queue time — NOT re-read from ctx at drain time,
+                            // since ctx's copy can change before delivery completes
     bool pending;
 };
 
 struct SmsResult {
     char role[8];
+    char alertEventId[40];
     bool success;
 };
 
@@ -52,26 +56,35 @@ bool gsmSendSms(const char* to, const char* message);
  * Plain-language evacuation message + Google Maps link.
  * Composes the message and enqueues it via gsmQueueSms() — does not
  * block the caller.
+ * @param alertEventId the alert_events row this SMS belongs to (may be
+ *   empty if trigger-alert hasn't been posted yet, e.g. offline) — is
+ *   snapshotted into the job so a later, unrelated alert can't
+ *   overwrite the id this delivery result gets reported against.
  */
 void gsmSendOwnerSms(float co_ppm, float temp_c,
                      double lat, double lng,
-                     const char* ownerNumber);
+                     const char* ownerNumber,
+                     const char* alertEventId);
 
 /**
  * Role-specific Tier 2 SMS — BFP responder.
  * Technical message: device ID, CO, temp, GPS coords, Maps link.
  * Composes the message and enqueues it via gsmQueueSms() — does not
  * block the caller.
+ * @param alertEventId see gsmSendOwnerSms().
  */
 void gsmSendBfpSms(float co_ppm, float temp_c,
                    double lat, double lng,
-                   const char* bfpNumber);
+                   const char* bfpNumber,
+                   const char* alertEventId);
 
 /** Queue an SMS job for async processing by the GSM task. Holds up to
  *  SMS_QUEUE_SIZE jobs (config.h); logs and drops the message if full.
  *  @param role short tag ("owner"/"bfp") carried through to the result
- *  queue so the caller can report delivery status per recipient. */
-void gsmQueueSms(const char* number, const char* message, const char* role);
+ *  queue so the caller can report delivery status per recipient.
+ *  @param alertEventId snapshotted alongside role — see gsmSendOwnerSms(). */
+void gsmQueueSms(const char* number, const char* message,
+                 const char* role, const char* alertEventId);
 
 /** Dequeue and blocking-send the oldest queued SMS, if any — call
  *  once per GSM FreeRTOS task loop iteration. Pushes the outcome onto
@@ -79,12 +92,17 @@ void gsmQueueSms(const char* number, const char* message, const char* role);
 void gsmProcessQueue();
 
 /**
- * Pop one completed SMS delivery result (role + success) into the
- * caller's buffers. Holds up to SMS_QUEUE_SIZE results; call in a loop
- * until it returns false to drain everything from one tick.
+ * Pop one completed SMS delivery result (role + alertEventId + success)
+ * into the caller's buffers. Holds up to SMS_QUEUE_SIZE results — call
+ * in a loop until it returns false to drain everything from one tick,
+ * every tick, regardless of connectivity state (this just empties the
+ * fixed-size local queue; the caller decides whether it can reach the
+ * network to report each result onward).
  * @return true if a result was available and popped.
  */
-bool gsmPopSmsResult(char* role, size_t roleLen, bool* success);
+bool gsmPopSmsResult(char* role, size_t roleLen,
+                     char* alertEventId, size_t alertEventIdLen,
+                     bool* success);
 
 /** @return true if SIM800L is registered on network (home or roaming). */
 bool gsmIsRegistered();
