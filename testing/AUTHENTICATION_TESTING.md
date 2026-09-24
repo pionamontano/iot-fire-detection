@@ -23,11 +23,21 @@ status, and session lifecycle.
 > lockout had no server-side enforcement at all): login now goes through a
 > new `login` Edge Function instead of calling `signInWithPassword`
 > directly from the browser, so the lockout check-and-record happens
-> server-side and can no longer be skipped. See the note under Login
-> below. **This fix needs an extra deploy step beyond the usual
-> migration**: the new `login` function itself has to be deployed
-> (`supabase functions deploy login --no-verify-jwt`), not just applied
-> via the SQL editor.
+> server-side and can no longer be skipped. **This fix needs an extra
+> deploy step beyond the usual migration**: the new `login` function
+> itself has to be deployed (`supabase functions deploy login
+> --no-verify-jwt`), not just applied via the SQL editor.
+>
+> **A fourth fix, found by testing the third one live once deployed**:
+> even with enforcement no longer skippable, `check_login_lockout` itself
+> had no time decay — once a tier's failure count was hit, every check for
+> up to 15 minutes kept returning the same flat "locked" result forever,
+> because nothing ever let a new attempt through to become the next
+> failure. Confirmed live against the deployed `login` function: 7 real
+> `POST`s produced only 3 recorded `login_attempts` rows, identical to the
+> pre-`login`-function bug, just consistently enforced instead of
+> skippable. Fixed in `20260924090000_fix_login_lockout_escalation.sql` —
+> see the note under Login below.
 
 ## Login
 
@@ -51,7 +61,7 @@ status, and session lifecycle.
 - [x] Password input defaults to masked (`type="password"`) and the eye icon toggles visibility — confirmed live
 - [ ] Password value is never logged to the console or included in network responses beyond the Supabase auth request itself — not independently re-verified this pass (no evidence found of a leak, but not exhaustively audited)
 - [x] Repeated failed attempts trigger `check_login_lockout` and lock the account, showing the countdown timer and disabling the submit button — confirmed live for tier 1 (3 failures → 10s), pre-fix
-- [ ] Lockout of 900s+ (tier 3, 7 failures) replaces the whole page with the "Account Locked" screen — the *reachability* bug (below) is fixed, so tiers 2/3 can now genuinely be reached through repeated real failures; not re-verified end-to-end yet since that needs the `login` function actually deployed
+- [ ] Lockout of 900s+ (tier 3, 7 failures) replaces the whole page with the "Account Locked" screen — reachability was fixed twice over (see both findings below); not yet re-verified end-to-end against a full 7-failure escalation, which needs real wall-clock waiting through each tier's cooldown
 - [x] Every login attempt (success and failure) is recorded in `login_attempts` — confirmed live; now recorded server-side by the `login` function, not the browser
 
 ### ⚠️→✅ Architectural finding: the login lockout had no server-side enforcement
@@ -61,11 +71,15 @@ Two things confirmed live together told the real story:
 1. **Tiers 2 and 3 were unreachable through the UI.** `Login.tsx` called `check_login_lockout` *before* attempting sign-in, and returned early — without ever calling `signInWithPassword` or inserting a `login_attempts` row — whenever the account was already locked. Once 3 failures accrued (tier 1), every subsequent submission was intercepted before a new failure could ever be recorded, so the count could never reach 5 or 7 through the form. Confirmed live: after 7 real submit-button clicks against a disposable account, only **3** rows existed in `login_attempts` — clicks 4 through 7 never got past the client-side check.
 2. **`signInWithPassword` itself was never gated by any of this.** Confirmed live: 10 consecutive direct calls to Supabase's own `/auth/v1/token?grant_type=password` endpoint (bypassing the app entirely, as any scripted attacker would) all returned normal `invalid_credentials` responses with no throttling, no matter how "locked" the account appeared in the UI.
 
-**Fix:** `supabase/functions/login/index.ts` — a new Edge Function that does the check-then-record atomically, server-side, with the service role. `Login.tsx` now calls this function (via `supabase.functions.invoke`) instead of `signInWithPassword` directly, and adopts the returned session with `supabase.auth.setSession()`. This closes reachability for tiers 2/3 on *this app's own login page*: the check can no longer be skipped, and a failure is always recorded. `login_attempts` INSERT and `check_login_lockout` EXECUTE are also revoked from `anon`/`authenticated` in `20260924080000_lock_down_login_attempts_and_lockout_check.sql`, since only the function (service role) needs them now — this also closes a minor side issue (anyone could previously force-lock an arbitrary victim's account, or inject fake `login_attempts` rows, via a direct unauthenticated `POST`).
+**Fix (part 1 — skippability):** `supabase/functions/login/index.ts` — a new Edge Function that does the check-then-record atomically, server-side, with the service role. `Login.tsx` now calls this function (via `supabase.functions.invoke`) instead of `signInWithPassword` directly, and adopts the returned session with `supabase.auth.setSession()`. `login_attempts` INSERT and `check_login_lockout` EXECUTE are also revoked from `anon`/`authenticated` in `20260924080000_lock_down_login_attempts_and_lockout_check.sql`, since only the function (service role) needs them now — this also closes a minor side issue (anyone could previously force-lock an arbitrary victim's account, or inject fake `login_attempts` rows, via a direct unauthenticated `POST`).
 
-**What this does *not* close, and can't from application code:** a scripted attacker who skips this app entirely and calls Supabase's `/auth/v1/token` endpoint directly (with the public anon key, exactly as before) is still unaffected — GoTrue is a separate service with no reach into this project's Postgres policies or Edge Functions. That gap can only be closed at the platform level, via Supabase's own Auth rate-limiting (Dashboard → Authentication → Rate Limits) — worth checking/tightening there, since I don't have dashboard access to do it myself.
+**Second bug found by testing part 1, once deployed — reachability was still broken, just no longer skippable.** `check_login_lockout` itself had no time decay: once `recent_failures` crossed a threshold, *every* check for up to 15 minutes returned the same flat "locked" result, because nothing ever let a new attempt through to become the next failure. Confirmed live against the deployed function: 7 real `POST`s to it produced only 3 recorded `login_attempts` rows — the exact same symptom as the original bug, just now consistently enforced instead of skippable.
 
-**Deploy note:** unlike every other fix in this series, this one needs a second deploy step beyond `supabase db push`/the SQL editor — the `login` function itself has to be deployed with `supabase functions deploy login --no-verify-jwt` before `Login.tsx`'s new code path will work at all.
+**Fix (part 2 — escalation):** `20260924090000_fix_login_lockout_escalation.sql` rewrites `check_login_lockout` to track elapsed time since the *most recent* failure. Once the current tier's cooldown has actually elapsed, it lets exactly one more real attempt through (`locked: false`) instead of refusing forever; if that attempt also fails, the next check sees one more failure and escalates to the next tier (3→10s, 5→30s, 7→900s) for real. `retry_after_seconds` is now a genuinely decaying remaining-time value instead of a flat number that never changed.
+
+**What neither fix closes, and can't from application code:** a scripted attacker who skips this app entirely and calls Supabase's `/auth/v1/token` endpoint directly (with the public anon key, exactly as before) is still unaffected — GoTrue is a separate service with no reach into this project's Postgres policies or Edge Functions. That gap can only be closed at the platform level, via Supabase's own Auth rate-limiting (Dashboard → Authentication → Rate Limits) — worth checking/tightening there, since I don't have dashboard access to do it myself.
+
+**Deploy note:** the `login` function needs `supabase functions deploy login --no-verify-jwt` (already done); both migrations (`...080000` and `...090000`) still need to be applied via `supabase db push` or the SQL editor.
 
 ## Logout
 
