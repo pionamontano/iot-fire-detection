@@ -25,7 +25,7 @@ export const Devices = () => {
   // Editing an already-registered device's thresholds + BFP contact
   // (spec HW-1.1.5 / SW-2.5.5) — previously only settable at creation.
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
-  const [editForm, setEditForm] = useState({ temp_threshold: 65, co_threshold: 15, bfp_contact: '' });
+  const [editForm, setEditForm] = useState({ temp_threshold: 65, co_threshold: 200, bfp_contact: '' });
   const [savingEdit, setSavingEdit] = useState(false);
 
   // API key regeneration (spec SW-2.6.3) — shown once, right after
@@ -43,7 +43,7 @@ export const Devices = () => {
     latitude: '',
     longitude: '',
     temp_threshold: 65,
-    co_threshold: 15,   // stored as obscuration % in UI, but ppm in DB
+    co_threshold: 200,  // ppm, matches devices.co_threshold's own default
     bfp_contact: '',
   });
 
@@ -162,7 +162,7 @@ export const Devices = () => {
         latitude: '',
         longitude: '',
         temp_threshold: 65,
-        co_threshold: 15,
+        co_threshold: 200,
         bfp_contact: '',
       });
       fetchDevices();
@@ -273,11 +273,11 @@ export const Devices = () => {
                 value={form.co_threshold}
                 onChange={val => setForm({ ...form, co_threshold: val })}
                 min={0}
-                max={100}
-                unit="% Obscuration"
-                minLabel="Clear"
-                maxLabel="Hazardous"
-                warning={form.co_threshold < 10 ? 'Very sensitive — expect frequent alerts' : form.co_threshold > 80 ? 'Very high — smoke may go undetected' : undefined}
+                max={1000}
+                unit="ppm"
+                minLabel="Clear (0ppm)"
+                maxLabel="Hazardous (1000ppm)"
+                warning={form.co_threshold < 100 ? 'Very sensitive — expect frequent alerts' : form.co_threshold > 800 ? 'Very high — smoke may go undetected' : undefined}
               />
             </div>
 
@@ -326,7 +326,8 @@ export const Devices = () => {
                 devices.slice(0, 5).map(device => (
                   <div
                     key={device.id}
-                    className="bg-white rounded flex items-center gap-4 p-4 group hover:shadow-sm transition-shadow"
+                    onClick={() => openEditDevice(device)}
+                    className="bg-white rounded flex items-center gap-4 p-4 group hover:shadow-sm transition-shadow cursor-pointer"
                   >
                     {/* Icon */}
                     <div className="w-12 h-12 bg-[#EBE7E7] rounded-sm flex items-center justify-center shrink-0">
@@ -427,11 +428,11 @@ export const Devices = () => {
                 value={editForm.co_threshold}
                 onChange={val => setEditForm({ ...editForm, co_threshold: val })}
                 min={0}
-                max={100}
-                unit="% Obscuration"
-                minLabel="Clear"
-                maxLabel="Hazardous"
-                warning={editForm.co_threshold < 10 ? 'Very sensitive — expect frequent alerts' : editForm.co_threshold > 80 ? 'Very high — smoke may go undetected' : undefined}
+                max={1000}
+                unit="ppm"
+                minLabel="Clear (0ppm)"
+                maxLabel="Hazardous (1000ppm)"
+                warning={editForm.co_threshold < 100 ? 'Very sensitive — expect frequent alerts' : editForm.co_threshold > 800 ? 'Very high — smoke may go undetected' : undefined}
               />
 
               <FormField label="BFP Responder Contact">
