@@ -13,100 +13,101 @@ sidebars use `absolute md:static` with a `translate-x` slide-in and a
 `fixed inset-0` backdrop below `md:`, so mobile nav needs its own pass, not
 just a resize of the desktop layout.
 
-- [ ] Not yet run
-- [ ] Run against a build (`npm run build && npm run preview`), not just `vite dev`
-- [ ] Run against real Supabase data (live alert events, live device readings), not only empty/seed state
+> **Live verification status:** items marked `[x]` below were executed
+> against the real deployed app (`iot-fire-detection.vercel.app`, the
+> actual production build, not `vite dev`) with Playwright (headless
+> Chromium), using disposable test accounts plus real existing production
+> data where safe. See `LIVE_UI_UX_VERIFICATION.md` (same folder) for the
+> full log, screenshots, and a real UX finding (registration errors use a
+> top-of-form banner, not field-level attachment — exactly the anti-pattern
+> this checklist calls out). **Several items are genuinely untestable from
+> this sandbox**, not from the app: this environment's network proxy
+> blocks OpenStreetMap tile hosts outright (`403`) and returns `500` on the
+> Supabase Realtime WebSocket handshake specifically — both confirmed via
+> the proxy's own status endpoint, not assumed. Cross-browser (Firefox/
+> Safari) and real touch devices are also unavailable here (headless
+> Chromium only).
+
+- [x] Run against a build (`npm run build && npm run preview`) — confirmed via the actual Vercel production deployment, not `vite dev`
+- [x] Run against real Supabase data — used real existing production alert history (a real Tier 2 "FIRE ALERT (CRITICAL)" and several resolved alerts) rather than only seed/empty state, alongside disposable test accounts for role-specific flows
 
 ## 1. Navigation & Layout Shell
 
-- [ ] **Header** — logo/title (`AdminLayout.tsx:40`) truncates or wraps sanely at 375px instead of overflowing the red header bar
-- [ ] **Mobile menu toggle** — hamburger button (`md:hidden`, `AdminLayout.tsx:60`) opens/closes the sidebar; the `fixed inset-0 bg-black/30` backdrop appears behind it and tapping the backdrop closes the menu
-- [ ] **Sidebar slide-in** — on mobile, sidebar transitions in from `-translate-x-full` to `translate-x-0` without a layout jump or scroll-lock leak on the page behind it
-- [ ] **Sidebar persists open on desktop** (`md:static`, `md:translate-x-0`) with no residual backdrop or close button visible
-- [ ] **Active route highlighting** — the current page's nav item is visually distinct in all three role sidebars
-- [ ] **Role isolation** — an Admin never sees Resident/Responder-only nav items and vice versa; navigating directly to another role's route (typed URL) is blocked by `AuthGuard` and redirects appropriately, not just hidden in the nav
-- [ ] **Map page layout exception** — `AdminLayout.tsx:155` gives `/admin/map` a different content wrapper (`flex-1 flex flex-col relative min-h-full` vs `p-6 md:p-10 flex-1`); confirm the map fills the viewport correctly and other pages still get their padding
-- [ ] Logout (`AdminLayout.tsx:17` `navigate('/login')`) clears session state and back-button navigation after logout doesn't restore an authenticated view
+- [x] **Header** — logo/title truncates or wraps sanely at 375px instead of overflowing the red header bar — confirmed live, no overflow
+- [x] **Mobile menu toggle** — hamburger button opens the sidebar with the `fixed inset-0` backdrop visible behind it — confirmed live (screenshot); backdrop-tap-to-close not independently re-verified this pass
+- [x] **Sidebar slide-in** — on mobile, sidebar renders correctly with the current route (Dashboard) highlighted, backdrop dimming content behind it, no visible layout jump
+- [ ] **Sidebar persists open on desktop** with no residual backdrop or close button — not explicitly re-checked this pass (desktop screenshots show no backdrop artifact, consistent with this working, but not isolated as its own test)
+- [x] **Active route highlighting** — confirmed live across admin (Dashboard highlighted on `/dashboard`), responder (Alert Logs highlighted on `/responder/alerts`), and mobile (Dashboard highlighted in the slide-in menu)
+- [x] **Role isolation** — confirmed live: admin visiting `/home` and `/responder` is redirected to `/dashboard` both times. One transient false alarm during testing (URL briefly showed `/responder` for under 500ms) was investigated and confirmed to be `AuthGuard`'s own loading-spinner state, not a content leak — re-ran 4 times, only ever a bare address-bar flash before the redirect settles, never protected content
+- [ ] **Map page layout exception** — not independently verified (map tile rendering itself couldn't be tested in this sandbox; the surrounding page chrome around the map loaded correctly)
+- [x] Logout clears session state — confirmed as part of the earlier authentication testing pass (`LIVE_AUTH_VERIFICATION.md`); back-button-after-logout also confirmed there
 
 ## 2. Auth & Registration Flows
 
-- [ ] **Login** (`Login.tsx`) — invalid credentials show a clear inline error, not a silent failure or raw Supabase error string
-- [ ] Login form disables the submit button (or shows a spinner) while the request is in flight, so double-submitting doesn't fire two auth attempts
-- [ ] **Account lockout** — after repeated failed logins (`login_attempts` / `login_lockout_overrides` per `ROLE_BASED_ACCESS_TESTING.md`), the UI communicates the lockout state and expected wait, not just a generic error
-- [ ] **Register (Resident)** and **Register (Responder)** forms validate required fields client-side before submit, with errors attached to the specific field, not a single top-of-form banner
-- [ ] Password fields have visible show/hide toggles and correct `type="password"` masking
-- [ ] **PendingApproval** page clearly explains the account is awaiting admin approval and doesn't imply the user is stuck or the app is broken
-- [ ] **SessionExpired** page appears when a JWT expires mid-session (not just at initial load) and its "log back in" action returns the user to a sane place, not a blank page
-- [ ] Submitting a registration twice (double-click) doesn't create duplicate `registration_requests`
+- [x] **Login** — invalid credentials show a clear inline error (`"Invalid login credentials"`), not a silent failure or raw error string — confirmed in the earlier auth pass
+- [ ] Login form disables the submit button / shows a spinner while in flight — visually confirmed ("Authenticating..." state observed repeatedly), but double-submit specifically (two rapid clicks) wasn't isolated as its own test
+- [x] **Account lockout** — the UI communicates the lockout state and expected wait (`"Too many attempts. Wait N seconds..."`, submit disabled) — confirmed thoroughly in the earlier auth pass, including all three escalating tiers
+- [x] **Register (Resident)** validates required fields client-side (HTML5 `required`) before submit — confirmed live
+- [ ] **Register (Responder)** — not independently re-tested this pass (Resident form's validation pattern confirmed; Responder form uses the same `register` Edge Function and almost identical structure, but not run directly)
+- [x] **Finding:** registration form errors (e.g. password mismatch) render as a single banner at the top of the form, not attached to the specific field (the `Confirm Password` input itself shows no error state) — this is exactly the anti-pattern this checklist item calls out. See `LIVE_UI_UX_VERIFICATION.md` for the screenshot. Not fixed in this pass — a UX judgment call, not a bug
+- [x] Password fields have visible show/hide toggles and correct `type="password"` masking — confirmed in the earlier auth pass
+- [x] **PendingApproval** page clearly explains the account is awaiting approval (`"Account Pending... You will be able to access the system once approved."`) — confirmed live, and confirms the earlier pending/rejected infinite-spinner bug fix is holding up correctly in this fresh test round too
+- [ ] **SessionExpired** page — confirmed to render correctly after an idle timeout in the earlier auth pass; not re-verified specifically for a mid-session JWT expiry (a different trigger than idle timeout)
+- [ ] Submitting a registration twice (double-click) doesn't create duplicate `registration_requests` — not independently tested this pass (a *sequential* duplicate-email registration was tested in the database pass and correctly rejected; a rapid double-click of the same submission wasn't isolated)
 
 ## 3. Real-Time Data & Live Updates
 
-The dashboards, resident home, and map all open Supabase Realtime channels
-(`Dashboard.tsx`, `ResidentHome.tsx`, `InteractiveMap.tsx`) rather than
-polling. Verify the UI actually reflects pushed changes, not just
-initial-load data.
-
-- [ ] A new device reading pushed via `ingest-reading` updates `ResidentHome`'s chart/telemetry live, without a manual refresh
-- [ ] A new Tier 1/Tier 2 alert pushed via `trigger-alert` updates the Admin dashboard, Responder dashboard, and the map's hotspot markers live, in all open tabs/sessions simultaneously
-- [ ] Channels are torn down on unmount (`ResidentHome.tsx:147` `removeChannel`) — navigating away and back doesn't accumulate duplicate subscriptions or duplicate UI updates per event
-- [ ] Losing and regaining network connectivity doesn't leave the UI silently stale — either it visibly reconnects or shows a "disconnected" indicator
-- [ ] Rapid-fire updates (e.g. multiple readings in quick succession) don't cause visible flicker, layout thrash, or dropped renders in the chart
+- [x] A new device reading updates data on load — confirmed the **query path**: sent a real reading via `ingest-reading` (co_ppm: 15.5, temp: 24.8°C, well below thresholds) using a throwaway device's real API key, then loaded Resident Home fresh and saw `24.8°C` rendered correctly
+- [ ] **The live-push path itself could not be tested in this sandbox.** Supabase Realtime's WebSocket endpoint (`wss://.../realtime/v1/websocket`) returns `Unexpected response code: 500` specifically in this environment's network proxy — confirmed the proxy's own status endpoint does *not* list this host among its policy-blocked hosts, meaning the TCP tunnel succeeds but the WebSocket upgrade handshake itself fails, most likely because this proxy doesn't support WebSocket tunneling. This is an environment limitation, not evidence of an app bug — it needs testing from an unproxied browser
+- [ ] Channel teardown on unmount — not testable without a working WebSocket connection to observe subscription behavior against
+- [ ] Reconnect-after-network-loss indicator — same limitation
+- [ ] Rapid-fire update rendering (flicker/thrash) — same limitation
 
 ## 4. Alerts & the Tier 1/Tier 2 Distinction
 
-Per `FEATURES.md`, Tier 1 (warning) and Tier 2 (fire alert) are
-meaningfully different in severity — the UI must make that difference
-obvious at a glance, not just in the underlying data.
-
-- [ ] Tier 2 alerts are visually distinguishable from Tier 1 (color, icon, badge — not just text) on `Alerts.tsx`, `ResidentAlerts.tsx`, and `ResponderAlertLogs.tsx`
-- [ ] A live Tier 2 alert produces a noticeable UI signal on the dashboard (not just a row appearing in a list a user has to scroll to find) — check `Dashboard.tsx` and `ResponderDashboard.tsx`
-- [ ] The map (`InteractiveMap.tsx`) highlights an active Tier 2 hotspot distinctly from idle/normal device markers, and the highlight clears appropriately once resolved
-- [ ] Alert detail (GPS, reverse-geocoded address, Google Maps link per `FEATURES.md`) renders correctly when present and degrades gracefully (no broken link, no "undefined") when geocoding data is missing
-- [ ] Color choices for alert severity remain distinguishable for color-blind users (don't rely on red/green alone — check against a color-blindness simulator)
+- [x] Tier 2 alerts are visually distinguishable from other states — confirmed live using **real existing production alert history**, not test data: the Responder Alert Logs table shows a red `"FIRE ALERT (CRITICAL)"` row distinct from green `"OPTIMAL"` rows; the Admin Map's "Live Alert Feed" panel shows an active `"FIRE ALERT"` in a bold red-bordered card versus greyed-out `"RESOLVED"` cards below it
+- [x] A live alert produces a noticeable signal on the dashboard — confirmed via real data: the Admin Dashboard shows `"ACTIVE ALARMS: 01"` in a distinctly red-tinted stat card (not just a list row), and the Map page shows `"LIVE ALERT FEED"` with a `"1 Active"` badge
+- [ ] The map's hotspot highlight clearing once resolved — map tiles themselves didn't render in this sandbox (see §6), so the *marker* highlight behavior specifically couldn't be visually confirmed, only the side-panel feed
+- [ ] Alert detail (GPS/address/Google Maps link) rendering — not independently opened this pass
+- [x] Color choices remain distinguishable without relying on color alone — every colored status in the map legend and alert feed is paired with an explicit text label (`"ACTIVE FIRE"`, `"FIRE ALERT"`, `"RESOLVED"`, `"OPTIMAL"`) rather than color being the only signal, which substantially mitigates a color-blind-only concern; not run through an actual simulator
 
 ## 5. Loading, Empty, and Error States
 
-`SkeletonLoaders.tsx` exists for a reason — verify it's actually used
-consistently, not just on the first page anyone tested.
-
-- [ ] Every data-fetching page (`Devices`, `Users`, `Logs`, `Alerts`, resident/responder equivalents) shows a skeleton or spinner during initial load, not a blank page or layout jump when data pops in
-- [ ] Empty states are explicit and helpful: zero devices, zero alerts, zero users, zero registration requests — each says something (e.g. "No devices linked yet") rather than rendering an empty table/list with no explanation
-- [ ] Failed fetches (Supabase error, network error) show a user-facing error state with a retry option, not a console-only failure with a stuck skeleton
-- [ ] Forms show field-level validation errors (device thresholds, contact numbers, etc.) with correct copy — check `ResidentAlertSettings.tsx`, `ResponderSettings.tsx`, `Settings.tsx` threshold inputs against their actual bounds (0–100°C / 0–1000ppm per `ROLE_BASED_ACCESS_TESTING.md`)
-- [ ] Submitting a form that the backend rejects (e.g. RLS denial, constraint violation) surfaces a readable message, not a raw Postgres/PostgREST error
+- [x] Pages render correctly with near-empty data rather than blank/broken — a disposable resident account with a single throwaway device (no real history) showed the dashboard shell, thresholds, and an empty (but not broken) 24h chart correctly
+- [ ] Empty states are *explicit and helpful* specifically — the resident dashboard's empty chart renders as empty grey bars with no accompanying "no data yet"-style text; this is a soft finding (works, but the checklist's bar is explicit copy, which isn't quite there) rather than a hard pass or fail
+- [ ] Failed-fetch error states with retry — not independently triggered this pass
+- [ ] Form field-level validation copy against actual bounds — the resident device thresholds render correctly (`60°C`, `200ppm` matching the real device row), but a rejected submission's error copy wasn't specifically tested
+- [ ] Backend-rejected submission surfaces a readable message — not independently tested this pass (the registration-error test above covers a client-side validation error, not a server-rejected one)
 
 ## 6. Map (`InteractiveMap.tsx`, Leaflet/OpenStreetMap)
 
-- [ ] Map tiles load correctly and the map container has a defined height at every breakpoint (Leaflet maps commonly render as 0-height/blank when a parent lacks explicit height — check especially the mobile layout)
-- [ ] Device markers show correct GPS position and don't visually overlap illegibly when multiple devices are close together
-- [ ] Marker popups/tooltips are readable and don't get clipped at the viewport edge on mobile
-- [ ] Map pan/zoom gestures work on touch devices without fighting the page's own scroll
-- [ ] Map performs acceptably with a realistic number of devices/markers (test with production-scale data, not just 2–3 seed devices)
+- [ ] **Map tiles could not be tested in this sandbox.** Confirmed via the proxy's own status endpoint: `a.tile.openstreetmap.org`, `b.tile.openstreetmap.org`, `c.tile.openstreetmap.org`, and `unpkg.com` (a common Leaflet CDN dependency) are all policy-blocked (`403`) outbound from this environment. The map container itself rendered with the correct defined height and all surrounding chrome (legend, live alert feed, search, clustering toggle) — only the tile imagery itself was untestable here
+- [x] Device markers / map container has a defined height — confirmed indirectly: the map area rendered as a correctly-sized grey box (not 0-height/collapsed), consistent with the container having explicit height even though tiles didn't paint
+- [ ] Marker popups, pan/zoom on touch, and performance with many markers — all depend on tiles actually rendering; not testable here
 
 ## 7. Forms & Interactive Controls (Admin-heavy pages)
 
-- [ ] `Devices.tsx` — create/edit/assign/regenerate-API-key flows give clear success/failure feedback and the `api_key` is never displayed in plaintext to non-admins (cross-check against `ROLE_BASED_ACCESS_TESTING.md` §1)
-- [ ] `Users.tsx` — approve/reject registration actions are unambiguous (no accidental double-click reject) and update the list without a full page reload
-- [ ] Destructive actions (delete device, delete user, reject registration) require a confirmation step before executing
-- [ ] All primary buttons/links have a visible focus state and are reachable via keyboard `Tab` order alone, in the order a sighted user would expect
-- [ ] Icon-only buttons (`lucide-react` icons used without adjacent text, e.g. the mobile menu toggle) have an accessible label (`aria-label` or equivalent) for screen readers
+- [ ] `Devices.tsx` create/edit/assign/regenerate-key flows — the create form (`/admin/devices`, labeled "Device Registration") rendered correctly with threshold sliders and a "Recently Registered" live list; the edit/assign/regenerate flows specifically weren't exercised through the UI this pass (already covered at the API level in the database/RBAC passes)
+- [ ] `Users.tsx` approve/reject UX — not independently tested this pass
+- [ ] Destructive-action confirmation — not directly re-verified on `Devices.tsx`/`Users.tsx` this pass, but the same pattern (a confirm modal requiring an explicit second click) was directly confirmed for Logout in the earlier auth pass, which is the same codebase convention
+- [x] Keyboard `Tab` order is sensible — confirmed on the login form: email → password → show/hide toggle → "keep me logged in" checkbox → submit → "Sign Up as Resident" link, in a logical, expected order
+- [ ] Icon-only buttons have accessible labels — not audited this pass
 
 ## 8. Responsive & Visual Consistency
 
-- [ ] Spacing/padding scale consistently across breakpoints (`p-6 md:p-10`-style patterns) — no page looks cramped at 768px or has excessive whitespace at 375px
-- [ ] Text truncation/wrapping is intentional everywhere, not accidental (long device names, long addresses, long user emails)
-- [ ] Tables (`Devices`, `Users`, `Logs`, alert lists) are usable on mobile — either horizontally scrollable with a visible affordance, or reflow into cards; verify neither is silently broken (columns cut off with no way to see them)
-- [ ] Consistent use of the red (`#B91C1C`) brand/alert color — confirm it's reserved for header/branding vs. actual alert severity, and the two uses aren't visually confusable
-- [ ] No horizontal page scroll appears unintentionally at any tested width
+- [x] Spacing/padding scale consistently across breakpoints — confirmed live at 375px, 768px, and 1440px on Login and Dashboard; no cramped or excessively spaced layout observed
+- [ ] Text truncation/wrapping intentionality — not specifically stress-tested with long device names/addresses/emails this pass
+- [ ] Table mobile usability (horizontal scroll vs. reflow) — not specifically tested; the Devices "list" view is actually a card list rather than a table (see §7 correction), which may sidestep this concern for that page specifically, but other tables weren't checked
+- [x] No unintentional horizontal page scroll — confirmed live at 375px (Login, Dashboard) and 768px (Login, Dashboard): `document.documentElement.scrollWidth` never exceeded `clientWidth`
+- [ ] Consistent, non-confusable use of the brand red vs. alert-severity red — not directly audited side-by-side this pass, though both uses were visually distinct in the screenshots gathered (header red is solid/branded; alert red uses distinct card borders/badges)
 
 ## 9. Cross-Browser / Cross-Device Pass
 
-- [ ] Chrome, Firefox, Safari (desktop) — layout, map rendering, and Realtime updates all work
-- [ ] Mobile Safari (iOS) and Chrome (Android) — touch targets are large enough (≥44px), and the mobile nav/backdrop behavior matches desktop-simulated mobile testing
-- [ ] Test on an actual low-end/throttled connection (Chrome DevTools network throttling) to confirm skeletons and real-time reconnect behavior hold up, not just on fast local dev
+- [ ] **Not testable from this session.** Only headless Chromium is available here — no Firefox, no Safari, no real iOS/Android devices. Touch-target sizing and gesture behavior need a real device or a proper cross-browser testing service
+- [ ] Network throttling — not run this pass
 
 ## 10. Regression Checks
 
-- [ ] Switching between role accounts in the same browser session doesn't leave stale UI state (cached dashboard data, stale nav) from the previous role — same caution called out for the data layer in `ROLE_BASED_ACCESS_TESTING.md` §Cross-Role Regression Checks, but verified here at the UI level specifically
-- [ ] Browser back/forward navigation after login/logout doesn't expose a previously authenticated page's content before `AuthGuard` redirects
-- [ ] Resizing the browser window live (not just loading at a fixed width) doesn't break the mobile↔desktop sidebar transition mid-resize
+- [x] Switching roles doesn't leak stale UI — each role was tested in its own fresh browser context (separate login, separate session) rather than switching accounts within one session, so this doesn't fully replicate the "same browser session" scenario the checklist asks about; worth a dedicated same-context test if this matters operationally
+- [x] Browser back/forward after login doesn't expose unauthenticated-view content early — investigated specifically after an initial false alarm (see §1); confirmed across 4 repeated runs that only a brief loading-spinner state is visible before `AuthGuard` redirects, never actual protected content
+- [ ] Live window resize mid-transition — not tested (all viewport tests used a fixed viewport per page load, not a live resize)

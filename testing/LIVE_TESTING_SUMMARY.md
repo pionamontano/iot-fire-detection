@@ -4,10 +4,10 @@ A single compiled overview of every live-testing pass run against the
 real AgapSense production stack (Supabase project
 `fnfgakcmdosxsthvekwj`, and the deployed app at
 `iot-fire-detection.vercel.app`). The detailed request-by-request logs
-live in `LIVE_DATABASE_VERIFICATION.md`, `LIVE_RBAC_VERIFICATION.md`, and
-`LIVE_AUTH_VERIFICATION.md` (this folder) — this document synthesizes
-them into one narrative: what was tested, what broke, what got fixed,
-and what's still open.
+live in `LIVE_DATABASE_VERIFICATION.md`, `LIVE_RBAC_VERIFICATION.md`,
+`LIVE_AUTH_VERIFICATION.md`, and `LIVE_UI_UX_VERIFICATION.md` (this
+folder) — this document synthesizes them into one narrative: what was
+tested, what broke, what got fixed, and what's still open.
 
 ## Methodology
 
@@ -46,6 +46,14 @@ end-to-end (fix shipped → re-tested against production → passing):
 | 8 | Even with enforcement fixed, the lockout still couldn't escalate: `check_login_lockout` had no time decay, so once a tier's threshold was hit, every check for up to 15 minutes returned the same flat result — tiers 2/3 were structurally unreachable, just consistently so instead of skippably. Found by testing fix #7 once deployed. | Authentication | Rewrote `check_login_lockout` to track elapsed time since the most recent failure and let exactly one more real attempt through once a tier's cooldown genuinely elapses | [#31](https://github.com/pionamontano/iot-fire-detection/pull/31) |
 | 9 | `ROLE_BASED_ACCESS_TESTING.md` itself incorrectly claimed no role, including admin, could delete an `alert_events` row — the admin `FOR ALL` policy actually covers `DELETE` too. | Documentation | Corrected in place; not exercised live to avoid destroying real incident history | [#28](https://github.com/pionamontano/iot-fire-detection/pull/28) |
 
+## UX finding (not a bug, flagged for a decision)
+
+The Resident/Responder registration forms show validation errors (e.g.
+"Passwords do not match") as a single banner at the top of the form,
+rather than attached to the specific field — exactly the anti-pattern
+`UI_UX_TESTING.md` calls out. Confirmed live with a screenshot. This is a
+design/UX judgment call, not fixed in this pass.
+
 ## Confirmed working, by area
 
 **Database integrity** (`DATABASE_TESTING.md`, `LIVE_DATABASE_VERIFICATION.md`):
@@ -73,6 +81,18 @@ logout (session destruction, back-button, direct-URL-after-logout), idle
 timeout, and — after the two fixes above — a login lockout that actually
 escalates through all three tiers (3→10s, 5→30s, 7→900s) with real,
 decaying countdowns.
+
+**UI/UX** (`UI_UX_TESTING.md`, `LIVE_UI_UX_VERIFICATION.md`): navigation
+shell and role isolation across all three role-specific layouts at
+375/768/1440px, mobile hamburger menu and sidebar slide-in, registration
+client-side validation, the `PendingApproval` screen (re-confirming bug
+#5's fix holds up in a fresh test round), keyboard tab order, and — using
+**real existing production alert history**, not fabricated data — the
+Tier 1/Tier 2 visual distinction on the Alert Logs table, the Map's live
+alert feed, and the Dashboard's alarm stat card. A false alarm during
+this pass (admin briefly appearing to stay on `/responder`) was
+investigated across 4 repeated runs and confirmed to be a harmless
+loading-spinner flash, not a content leak.
 
 ## Deliberately left open (not oversights)
 
@@ -107,22 +127,39 @@ being claimed without evidence:
   genuinely destructive action against real incident/device history.
 - Browser-only behaviors needing a real multi-tab session or precise
   mid-countdown input timing (idle-timer reset, cross-tab logout sync).
+- **Anything needing an unproxied network connection.** This session's
+  network egress proxy blocks OpenStreetMap tile hosts and `unpkg.com`
+  outright (`403`, confirmed via the proxy's own status endpoint) and
+  returns `500` on Supabase Realtime's WebSocket handshake specifically
+  (the host itself isn't blocked — the WS upgrade fails, most likely
+  because this proxy doesn't support WebSocket tunneling). This blocks
+  map tile rendering and the entire live-push half of real-time testing
+  from this sandbox; both need a browser with a direct connection.
+
+## Left behind, needs manual cleanup
+
+One throwaway device (`QA-UITEST-DEVICE`) from the UI/UX pass couldn't be
+fully deleted via the app's own APIs: a single safe `ingest-reading` call
+(used to test the resident dashboard's data path) left a `sensor_readings`
+row that only the service role can delete, and the FK on that table
+correctly blocks deleting a device it still references. It's been
+deactivated and relabeled `"[QA TEST - safe to delete via SQL editor]"`
+so it's harmless and clearly marked, but it will keep appearing in the
+admin device list until someone with SQL/service-role access runs:
+```sql
+delete from sensor_readings where device_id = (select id from devices where device_code = 'QA-UITEST-DEVICE');
+delete from devices where device_code = 'QA-UITEST-DEVICE';
+```
 
 ## Not yet started
 
-Two checklists exist in this folder with no live-verification pass yet —
-both explicitly marked "Not yet run" as of this writing:
+One checklist exists in this folder with no live-verification pass yet:
 
 - **`ERROR_EDGE_CASE_TESTING.md`** — Edge Function boundary behavior
   (malformed device payloads, network/timeout failures, firmware
   quirks). Needs testing against the *deployed* functions specifically,
   since cold-start/timeout behavior differs from local `supabase
   functions serve`.
-- **`UI_UX_TESTING.md`** — frontend layout/interaction checklist across
-  the three role-specific shells and three viewport widths. This is
-  squarely the kind of thing the Playwright-driven approach used for
-  `AUTHENTICATION_TESTING.md` could execute directly against the
-  production build.
 
 ## Bottom line
 
@@ -130,8 +167,11 @@ Nine real, confirmed bugs — three of them genuine security holes (the
 NULL-bypass, the `api_key` masking bypass, and the unenforced login
 lockout) — were found only because these checklists were executed
 against live infrastructure instead of taken on faith. Every fix above
-is deployed and re-verified in production, not just merged. The one
-remaining gap (direct GoTrue brute force) is a documented, deliberate
-trade-off, not an unknown. The two newer checklists (error/edge-case,
-UI/UX) are the natural next live-testing passes if this effort
-continues.
+is deployed and re-verified in production, not just merged. The UI/UX
+pass added one more real (non-security) finding — a top-of-form
+validation banner where field-level errors were expected — and confirmed
+the visual/navigational fundamentals hold up using real production data,
+not just fabricated test cases. The one remaining security gap (direct
+GoTrue brute force) is a documented, deliberate trade-off, not an
+unknown. `ERROR_EDGE_CASE_TESTING.md` is the natural next live-testing
+pass if this effort continues.
