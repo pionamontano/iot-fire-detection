@@ -136,13 +136,18 @@ serve(async (req: Request) => {
       );
     }
 
+    // (0, 0) is the firmware's "no fix ever acquired" sentinel (gps.cpp lastFix
+    // init), not a real cached location — treat it the same as missing coords.
+    const hasCachedCoords =
+      isValidNumber(latitude) && isValidNumber(longitude) && !(latitude === 0 && longitude === 0);
+
     // 4. Run concurrent background operations
     const updateLastSeenPromise = supabaseAdmin
       .from('devices')
       .update({ last_seen_at: new Date().toISOString() })
       .eq('id', device.id);
 
-    const geocodePromise = (gps_valid && isValidNumber(latitude) && isValidNumber(longitude))
+    const geocodePromise = hasCachedCoords
       ? reverseGeocode(latitude, longitude)
       : Promise.resolve(null);
 
@@ -189,8 +194,8 @@ serve(async (req: Request) => {
     if (tier === 1) {
       tgText = `WARNING — Tier 1\n\nDevice: ${device.device_code}\nLocation: ${locationString}\nTime: ${timeString}\n\nElevated reading detected:\n- CO: ${co_ppm} ppm (threshold: ${device.co_threshold} ppm)\n- Temp: ${temp_celsius}°C (threshold: ${device.temp_threshold}°C)\n\nMonitor the area. No SMS dispatched at this level.`;
     } else {
-      const gpsString = (gps_valid && latitude && longitude)
-        ? `GPS: ${latitude}, ${longitude}\nNavigate: https://maps.google.com/?q=${latitude},${longitude}\n\n`
+      const gpsString = hasCachedCoords
+        ? `GPS: ${latitude}, ${longitude}${gps_valid ? '' : ' (estimated — last known)'}\nNavigate: https://maps.google.com/?q=${latitude},${longitude}\n\n`
         : `GPS: Unavailable\n\n`;
       
       tgText = `FIRE ALERT — Tier 2\n\nDevice: ${device.device_code}\nLocation: ${locationString}\nTime: ${timeString}\n\nSensor readings:\n- CO: ${co_ppm} ppm (threshold: ${device.co_threshold} ppm)\n- Temp: ${temp_celsius}°C (threshold: ${device.temp_threshold}°C)\n\n${gpsString}SMS alerts have been dispatched.`;
@@ -211,8 +216,8 @@ serve(async (req: Request) => {
           alert_tier: newTier,
           co_ppm,
           temp_celsius,
-          latitude: gps_valid ? latitude : undefined,
-          longitude: gps_valid ? longitude : undefined,
+          latitude: hasCachedCoords ? latitude : undefined,
+          longitude: hasCachedCoords ? longitude : undefined,
           gps_valid: gps_valid ?? false,
           address_resolved: address_resolved || undefined,
           ...(telegramSent && { telegram_sent: true }),
@@ -232,8 +237,8 @@ serve(async (req: Request) => {
           alert_tier: tier,
           co_ppm,
           temp_celsius,
-          latitude: gps_valid ? latitude : null,
-          longitude: gps_valid ? longitude : null,
+          latitude: hasCachedCoords ? latitude : null,
+          longitude: hasCachedCoords ? longitude : null,
           gps_valid: gps_valid ?? false,
           address_resolved,
           telegram_sent: telegramSent,

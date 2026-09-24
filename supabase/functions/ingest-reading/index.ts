@@ -77,15 +77,22 @@ serve(async (req: Request) => {
 
     const nowIso = new Date().toISOString();
 
+    // (0, 0) is the firmware's "no fix ever acquired" sentinel (gps.cpp lastFix
+    // init), not a real cached location — treat it the same as missing coords.
+    const hasCachedCoords =
+      isValidNumber(latitude) && isValidNumber(longitude) && !(latitude === 0 && longitude === 0);
+
     // 4. Batch async database writes
     const writePromises: Promise<any>[] = [
-      // Insert sensor reading — null out coordinates when GPS fix is not valid
+      // Insert sensor reading — coordinates are stored whenever a real fix (live or
+      // cached) is present, even when gps_valid is false; gps_valid marks them as
+      // an estimate rather than a live reading.
       supabaseAdmin.from('sensor_readings').insert({
         device_id: device.id,
         co_ppm,
         temp_celsius,
-        latitude:  gps_valid ? latitude  : null,
-        longitude: gps_valid ? longitude : null,
+        latitude:  hasCachedCoords ? latitude  : null,
+        longitude: hasCachedCoords ? longitude : null,
         gps_valid,
         on_battery,
         sensor_ready,

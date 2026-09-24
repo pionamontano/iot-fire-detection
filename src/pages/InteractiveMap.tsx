@@ -63,7 +63,7 @@ const iconCache = {
 const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[]): 'online' | 'alert' | 'fault' | 'offline' => {
   const alert = activeAlerts.find(a => a.device_id === device.id);
   if (alert) {
-    return alert.alert_tier === 1 ? 'alert' : 'fault';
+    return alert.alert_tier === 2 ? 'alert' : 'fault';
   }
   if (!device.is_active) return 'offline';
   if (device.last_seen_at) {

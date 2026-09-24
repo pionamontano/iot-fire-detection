@@ -80,14 +80,13 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
     if (profile.role === 'admin') return <Navigate to="/dashboard" replace />;
     if (profile.role === 'bfp_responder') return <Navigate to="/responder" replace />;
     if (profile.role === 'resident') {
-      // return profile.setup_complete ? <Navigate to="/home" replace /> : <Navigate to="/setup" replace />;
-      return <Navigate to="/home" replace />;
+      return profile.setup_complete ? <Navigate to="/home" replace /> : <Navigate to="/setup" replace />;
     }
   }
 
-  // Enforce resident setup
+  // Enforce resident setup — cannot be skipped by navigating directly to another route
   if (profile.role === 'resident' && !profile.setup_complete && location.pathname !== '/setup') {
-    // return <Navigate to="/setup" replace />;
+    return <Navigate to="/setup" replace />;
   }
   
   if (profile.role === 'resident' && profile.setup_complete && location.pathname === '/setup') {
