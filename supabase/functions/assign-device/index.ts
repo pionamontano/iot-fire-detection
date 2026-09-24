@@ -36,12 +36,12 @@ serve(async (req: Request) => {
     // Check role in profiles
     const { data: profile } = await supabaseClient
       .from('profiles')
-      .select('role')
+      .select('role, status')
       .eq('id', user.id)
       .single()
 
-    if (!profile || profile.role !== 'admin') {
-      return new Response(JSON.stringify({ error: 'Forbidden. Admin access required.' }), {
+    if (!profile || profile.role !== 'admin' || profile.status !== 'approved') {
+      return new Response(JSON.stringify({ error: 'Forbidden. Approved admin access required.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 403,
       })
@@ -62,6 +62,28 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
+
+    // Prevent assigning a device that's already claimed by a different
+    // resident (link-device already guards this for the self-service
+    // path; this path had no equivalent check).
+    if (device_id) {
+      const { data: existingProfiles, error: pError } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('device_id', device_id)
+        .eq('role', 'resident')
+        .neq('id', profile_id)
+        .limit(1)
+
+      if (pError) throw pError
+
+      if (existingProfiles && existingProfiles.length > 0) {
+        return new Response(JSON.stringify({ error: 'This device is already assigned to another resident.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 409,
+        })
+      }
+    }
 
     const { data: updatedProfile, error: updateError } = await supabaseAdmin
       .from('profiles')

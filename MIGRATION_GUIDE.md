@@ -99,7 +99,7 @@ VITE_SUPABASE_ANON_KEY=your_anon_public_key_here
 
 ## Step 5 — Deploy Edge Functions
 
-The project has 7 Supabase Edge Functions in `supabase/functions/`. These handle server-side logic (creating users, ingesting sensor data, triggering alerts, etc.).
+The project has 9 Supabase Edge Functions in `supabase/functions/`. These handle server-side logic (creating users, ingesting sensor data, triggering alerts, etc.).
 
 ### 5a. Link your project
 
@@ -126,7 +126,9 @@ supabase secrets set TELEGRAM_CHAT_ID=your_telegram_chat_id
 
 ```bash
 supabase functions deploy assign-device
+supabase functions deploy confirm-sms-status
 supabase functions deploy create-user
+supabase functions deploy get-device-config
 supabase functions deploy ingest-reading
 supabase functions deploy link-device
 supabase functions deploy manage-registration
@@ -145,7 +147,9 @@ supabase functions deploy
 | Function | Purpose |
 |---|---|
 | `assign-device` | Admin assigns a device to a user |
+| `confirm-sms-status` | IoT device reports real SMS delivery outcome after Tier 2 |
 | `create-user` | Admin creates a new user account |
+| `get-device-config` | IoT device fetches its current thresholds + SMS numbers |
 | `ingest-reading` | IoT device sends sensor data |
 | `link-device` | Links a device to a resident profile |
 | `manage-registration` | Admin approves/rejects user registrations |

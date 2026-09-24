@@ -57,7 +57,7 @@ export const ResponderDashboard = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [devicesRes, alertsRes] = await Promise.all([
-      supabase.from('devices').select('*').order('created_at', { ascending: false }),
+      supabase.from('devices_safe').select('*').order('created_at', { ascending: false }),
       supabase.from('alert_events').select('*, devices(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
     ]);
 

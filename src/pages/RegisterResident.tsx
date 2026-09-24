@@ -65,7 +65,9 @@ export const RegisterResident = () => {
       if (data?.error) throw new Error(data.error);
 
       // Registration successful, navigate to pending approval
-      navigate('/pending-approval');
+      navigate('/pending-approval', {
+        state: { deviceCodeUnrecognized: data?.device_code_recognized === false }
+      });
     } catch (err: any) {
       setError(err.message || "An unexpected error occurred during registration.");
     } finally {

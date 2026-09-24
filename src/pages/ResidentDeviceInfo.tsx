@@ -34,7 +34,7 @@ export const ResidentDeviceInfo = () => {
   const fetchData = async (deviceId: string) => {
     try {
       const [deviceRes, readingsRes] = await Promise.all([
-        supabase.from('devices').select('*').eq('id', deviceId).single(),
+        supabase.from('devices_safe').select('*').eq('id', deviceId).single(),
         supabase.from('sensor_readings').select('*').eq('device_id', deviceId).order('recorded_at', { ascending: false }).limit(20),
       ]);
       if (deviceRes.data) setDevice(deviceRes.data);

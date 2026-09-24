@@ -19,7 +19,7 @@ export const ResponderDevices = () => {
   const fetchDevices = async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from('devices')
+      .from('devices_safe')
       .select('*')
       .order('created_at', { ascending: false });
 

@@ -64,8 +64,8 @@ struct ConnectivityCtx {
     // Runtime SMS recipient numbers (fetched from DB at startup)
     char        ownerNumber[20];
     char        bfpNumber[20];
-    // UUID of the open alert_events row from the last trigger-alert
-    // response — threads through to confirm-sms-status
+    // alert_events.id (uuid) of the most recent postAlert() call —
+    // links postSmsStatus() reports back to the exact row.
     char        lastAlertEventId[40];
 };
 
@@ -89,6 +89,11 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
  *  alert_event_id / owner_contact / bfp_contact from the response and
  *  stores them in ctx. Returns HTTP code. */
 int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int alertTier);
+
+/** Report one SMS delivery outcome to confirm-sms-status.
+ *  role is "owner" or "bfp"; alertEventId links to the exact
+ *  alert_events row. Returns HTTP code. */
+int postSmsStatus(const char* role, bool success, const char* alertEventId);
 
 /** GET remote config from get-device-config Edge Function. */
 bool fetchRemoteConfig(ConnectivityCtx* ctx);

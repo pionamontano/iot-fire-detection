@@ -127,26 +127,12 @@ export const InteractiveMap = () => {
       ]);
 
       if (devicesRes.data) {
-        // Generate stable coordinates from device ID so markers don't jump on re-render
-        const withCoords = devicesRes.data.map((d, i) => {
-          if (!d.latitude || !d.longitude) {
-            // Simple deterministic hash from device ID to generate consistent offsets
-            let hash = 0;
-            for (let j = 0; j < d.id.length; j++) {
-              hash = ((hash << 5) - hash) + d.id.charCodeAt(j);
-              hash |= 0; // Convert to 32-bit integer
-            }
-            const latOffset = ((hash & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
-            const lngOffset = (((hash >> 16) & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
-            return {
-              ...d,
-              latitude: DEFAULT_CENTER[0] + latOffset,
-              longitude: DEFAULT_CENTER[1] + lngOffset
-            };
-          }
-          return d;
-        });
-        setDevices(withCoords);
+        // Only devices with a real install location (devices.latitude/
+        // longitude) get a marker - previously every device without one
+        // was placed at a fabricated position derived from a hash of its
+        // id, which looked plausible but was entirely fictional and could
+        // mislead a responder relying on this view.
+        setDevices(devicesRes.data);
       }
       if (alertsRes.data) setAlerts(alertsRes.data as unknown as AlertEvent[]);
     } catch (error) {
@@ -193,9 +179,10 @@ export const InteractiveMap = () => {
           <ZoomControl position="bottomright" />
           
           {displayedDevices.map(device => {
+            if (device.latitude == null || device.longitude == null) return null;
             const status = getDeviceStatus(device, activeAlerts);
             const activeAlertForDevice = activeAlerts.find(a => a.device_id === device.id);
-            
+
             return (
               <Marker 
                 key={device.id} 

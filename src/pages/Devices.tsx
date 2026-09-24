@@ -53,16 +53,17 @@ export const Devices = () => {
     e.preventDefault();
     setSubmitting(true);
 
-    const api_key = 'sk_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-
+    // api_key is generated server-side (devices.api_key column default,
+    // a CSPRNG via pgcrypto) - not set here.
     const { error } = await supabase.from('devices').insert([{
       device_code: form.device_code,
       label: form.label || form.device_code,
       location_desc: form.location_desc,
+      latitude: form.latitude ? parseFloat(form.latitude) : null,
+      longitude: form.longitude ? parseFloat(form.longitude) : null,
       co_threshold: form.co_threshold,
       temp_threshold: form.temp_threshold,
       bfp_contact: form.bfp_contact || null,
-      api_key,
     }]);
 
     if (!error) {

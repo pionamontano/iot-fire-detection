@@ -36,12 +36,12 @@ serve(async (req: Request) => {
     // Check role in profiles
     const { data: profile } = await supabaseClient
       .from('profiles')
-      .select('role')
+      .select('role, status')
       .eq('id', user.id)
       .single()
 
-    if (!profile || profile.role !== 'admin') {
-      return new Response(JSON.stringify({ error: 'Forbidden. Admin access required.' }), {
+    if (!profile || profile.role !== 'admin' || profile.status !== 'approved') {
+      return new Response(JSON.stringify({ error: 'Forbidden. Approved admin access required.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 403,
       })
