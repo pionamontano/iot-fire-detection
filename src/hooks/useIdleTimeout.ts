@@ -53,8 +53,12 @@ export const useIdleTimeout = (role: Role | null | undefined, enabled: boolean) 
       if (!timeoutMinutes) return;
       const idleMs = Date.now() - lastActivityRef.current;
       if (idleMs >= timeoutMinutes * 60 * 1000) {
-        await supabase.auth.signOut();
+        // Navigate before signing out: AuthGuard re-renders as soon as
+        // signOut() clears the session, and its own "no session -> /login"
+        // redirect would otherwise win the race and override this one,
+        // landing the user on a bare /login with no explanation.
         navigate('/session-expired', { replace: true });
+        await supabase.auth.signOut();
       }
     }, IDLE_CHECK_INTERVAL_MS);
 
