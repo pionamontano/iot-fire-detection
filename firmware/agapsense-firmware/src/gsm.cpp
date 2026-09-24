@@ -132,16 +132,29 @@ bool gsmSendSms(const char* to, const char* message) {
 // could stall the Connectivity task and its WDT reset).
 void gsmSendOwnerSms(float co_ppm, float temp_c,
                      double lat, double lng,
+                     const char* address,
                      const char* ownerNumber,
                      const char* alertEventId)
 {
-    char msg[160];
-    snprintf(msg, sizeof(msg),
-        "BANTAY APOY ALERTO!\n"
-        "Lumayas na agad. CO:%.0fppm Temp:%.1fC\n"
-        "Lokasyon: maps.google.com/?q=%.5f,%.5f",
-        co_ppm, temp_c, lat, lng
-    );
+    char msg[200];
+    if (address && address[0] != '\0') {
+        // Truncate to keep the whole message within a comfortable single
+        // SMS segment even with a long Nominatim display_name.
+        snprintf(msg, sizeof(msg),
+            "BANTAY APOY ALERTO!\n"
+            "Lumayas na agad. CO:%.0fppm Temp:%.1fC\n"
+            "Lokasyon: %.60s\n"
+            "maps.google.com/?q=%.5f,%.5f",
+            co_ppm, temp_c, address, lat, lng
+        );
+    } else {
+        snprintf(msg, sizeof(msg),
+            "BANTAY APOY ALERTO!\n"
+            "Lumayas na agad. CO:%.0fppm Temp:%.1fC\n"
+            "Lokasyon: maps.google.com/?q=%.5f,%.5f",
+            co_ppm, temp_c, lat, lng
+        );
+    }
     GSMLOG("Queuing owner SMS to %s", ownerNumber);
     gsmQueueSms(ownerNumber, msg, "owner", alertEventId);
 }
@@ -151,24 +164,41 @@ void gsmSendOwnerSms(float co_ppm, float temp_c,
 // block the caller.
 void gsmSendBfpSms(float co_ppm, float temp_c,
                    double lat, double lng,
+                   const char* address,
+                   const char* triggeredAt,
                    const char* bfpNumber,
                    const char* alertEventId)
 {
-    char msg[160];
-    // Include device ID, sensor readings, and coordinates.
-    // No timestamp: the ESP32 has no RTC/NTP, and the backend row's
-    // own triggered_at (DEFAULT now()) is the trustworthy record —
-    // this SMS body doesn't need to carry the time itself.
-    snprintf(msg, sizeof(msg),
-        "BFP ALERT [%s]\n"
-        "CO:%.0fppm Temp:%.1fC\n"
-        "GPS:%.5f,%.5f\n"
-        "maps.google.com/?q=%.5f,%.5f",
-        DEVICE_ID,
-        co_ppm, temp_c,
-        lat, lng,
-        lat, lng
-    );
+    char msg[220];
+    // Device ID, server timestamp (the ESP32 has no RTC/NTP of its own —
+    // triggered_at comes from trigger-alert's response), sensor readings,
+    // coordinates, and reverse-geocoded address when available (SW-2.2.2).
+    const char* timeStr = (triggeredAt && triggeredAt[0] != '\0') ? triggeredAt : "unknown";
+    if (address && address[0] != '\0') {
+        snprintf(msg, sizeof(msg),
+            "BFP ALERT [%s]\n"
+            "Time:%s\n"
+            "CO:%.0fppm Temp:%.1fC\n"
+            "GPS:%.5f,%.5f %.50s\n"
+            "maps.google.com/?q=%.5f,%.5f",
+            DEVICE_ID, timeStr,
+            co_ppm, temp_c,
+            lat, lng, address,
+            lat, lng
+        );
+    } else {
+        snprintf(msg, sizeof(msg),
+            "BFP ALERT [%s]\n"
+            "Time:%s\n"
+            "CO:%.0fppm Temp:%.1fC\n"
+            "GPS:%.5f,%.5f\n"
+            "maps.google.com/?q=%.5f,%.5f",
+            DEVICE_ID, timeStr,
+            co_ppm, temp_c,
+            lat, lng,
+            lat, lng
+        );
+    }
     GSMLOG("Queuing BFP SMS to %s", bfpNumber);
     gsmQueueSms(bfpNumber, msg, "bfp", alertEventId);
 }
@@ -209,7 +239,7 @@ void gsmProcessQueue() {
     if (!smsMutex) return;
 
     char num[20]          = {0};
-    char msg[160]         = {0};
+    char msg[220]         = {0};
     char role[8]          = {0};
     char alertEventId[40] = {0};
     bool haveJob          = false;

@@ -67,6 +67,11 @@ struct ConnectivityCtx {
     // alert_events.id (uuid) of the most recent postAlert() call —
     // links postSmsStatus() reports back to the exact row.
     char        lastAlertEventId[40];
+    // address_resolved / triggered_at from the most recent postAlert()
+    // response — backend-computed since the device has no reverse-geocoding
+    // or RTC/NTP of its own. Included in the Tier 2 SMS bodies (SW-2.2.2).
+    char        lastAddressResolved[100];
+    char        lastTriggeredAt[24];
 };
 
 // ── Public API ─────────────────────────────────────────────

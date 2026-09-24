@@ -273,6 +273,22 @@ int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int
             }
             CLOG("Contacts from trigger-alert: Owner=%s BFP=%s",
                  ctx->ownerNumber, ctx->bfpNumber);
+
+            // Reverse-geocoded address + server timestamp for the SMS bodies
+            // (SW-2.2.2) — reset first so a field missing from this response
+            // never carries a previous alert's stale value into this one.
+            memset(ctx->lastAddressResolved, 0, sizeof(ctx->lastAddressResolved));
+            memset(ctx->lastTriggeredAt, 0, sizeof(ctx->lastTriggeredAt));
+            const char* addressStr = doc["address_resolved"] | (const char*)nullptr;
+            const char* triggeredAtStr = doc["triggered_at"]  | (const char*)nullptr;
+            if (addressStr && strlen(addressStr) > 0) {
+                strncpy(ctx->lastAddressResolved, addressStr, sizeof(ctx->lastAddressResolved) - 1);
+                ctx->lastAddressResolved[sizeof(ctx->lastAddressResolved) - 1] = '\0';
+            }
+            if (triggeredAtStr && strlen(triggeredAtStr) > 0) {
+                strncpy(ctx->lastTriggeredAt, triggeredAtStr, sizeof(ctx->lastTriggeredAt) - 1);
+                ctx->lastTriggeredAt[sizeof(ctx->lastTriggeredAt) - 1] = '\0';
+            }
         } else {
             CLOG("JSON parse error on alert response: %s", err.c_str());
         }
@@ -379,6 +395,8 @@ void connectivityInit(ConnectivityCtx* ctx) {
     ctx->temp_alert_c       = TEMP_ALERT_PPM_DEFAULT;
     // [22] Zero out lastAlertEventId so first postSmsStatus() never sends garbage
     memset(ctx->lastAlertEventId, 0, sizeof(ctx->lastAlertEventId));
+    memset(ctx->lastAddressResolved, 0, sizeof(ctx->lastAddressResolved));
+    memset(ctx->lastTriggeredAt, 0, sizeof(ctx->lastTriggeredAt));
     strncpy(ctx->ownerNumber, OWNER_SMS_NUMBER_DEFAULT, sizeof(ctx->ownerNumber) - 1);
     strncpy(ctx->bfpNumber,   BFP_SMS_NUMBER_DEFAULT,   sizeof(ctx->bfpNumber)   - 1);
 
@@ -663,8 +681,10 @@ static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const Gps
     if (now - ctx->lastSmsSent_ms >= SMS_DEBOUNCE_MS || ctx->lastSmsSent_ms == 0) {
         ctx->lastSmsSent_ms = now;
         gsmSendOwnerSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng,
+                       ctx->lastAddressResolved,
                        ctx->ownerNumber, ctx->lastAlertEventId);
         gsmSendBfpSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng,
+                     ctx->lastAddressResolved, ctx->lastTriggeredAt,
                      ctx->bfpNumber, ctx->lastAlertEventId);
         CLOG("Tier 2 SMS queued: owner=%s bfp=%s event=%s", ctx->ownerNumber, ctx->bfpNumber,
              ctx->lastAlertEventId[0] ? ctx->lastAlertEventId : "(none)");

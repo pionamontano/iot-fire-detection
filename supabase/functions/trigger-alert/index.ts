@@ -256,12 +256,18 @@ serve(async (req: Request) => {
     }
 
     // 7. [FIX #5] Return response containing alert_event_id
+    // address_resolved and triggered_at are threaded back to the firmware
+    // so the SMS bodies can include them (spec SW-2.2.2) — the device has
+    // no other way to get a reverse-geocoded address, and no RTC/NTP of
+    // its own for a trustworthy timestamp.
     return new Response(
       JSON.stringify({
         success: true,
         alert_event_id: alertEventId,
         owner_contact: ownerContact,
         bfp_contact: device.bfp_contact || '',
+        address_resolved: address_resolved || '',
+        triggered_at: timeString,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
