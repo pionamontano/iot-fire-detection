@@ -11,22 +11,15 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DashboardSkeleton } from '../components/SkeletonLoaders';
+import { getConnectivityStatus } from '../lib/deviceStatus';
+import { useNowTick } from '../hooks/useNowTick';
 
 // Helper to determine device status based on alerts and last_seen_at
-const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[]): 'online' | 'alert' | 'offline' => {
+const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[], now: number): 'online' | 'reconnecting' | 'alert' | 'offline' => {
   const hasAlert = activeAlerts.some(a => a.device_id === device.id);
   if (hasAlert) return 'alert';
   if (!device.is_active) return 'offline';
-  // Consider device offline if not seen in last 5 minutes
-  if (device.last_seen_at) {
-    const lastSeen = new Date(device.last_seen_at).getTime();
-    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-    if (lastSeen < fiveMinAgo) return 'offline';
-  } else {
-    // Never seen = offline
-    return 'offline';
-  }
-  return 'online';
+  return getConnectivityStatus(device.last_seen_at, now);
 };
 
 // Format a number with commas
@@ -48,6 +41,7 @@ export const Dashboard = () => {
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const now = useNowTick();
 
   useEffect(() => {
     fetchData();
@@ -205,7 +199,7 @@ export const Dashboard = () => {
                 </div>
               ) : (
                 devices.slice(0, 6).map((device) => {
-                  const status = getDeviceStatus(device, activeAlerts);
+                  const status = getDeviceStatus(device, activeAlerts, now);
                   const isAlert = status === 'alert';
 
                   return (
@@ -331,13 +325,19 @@ export const Dashboard = () => {
 };
 
 // Status Badge component
-const StatusBadge = ({ status }: { status: 'online' | 'alert' | 'offline' }) => {
+const StatusBadge = ({ status }: { status: 'online' | 'reconnecting' | 'alert' | 'offline' }) => {
   const config = {
     online: {
       bg: 'bg-[#00799C]/10',
       dot: 'bg-[#10B981]',
       text: 'text-[#00799C]',
       label: 'Online'
+    },
+    reconnecting: {
+      bg: 'bg-[#FEF3C7]/60',
+      dot: 'bg-[#F59E0B]',
+      text: 'text-[#B45309]',
+      label: 'Reconnecting'
     },
     alert: {
       bg: 'bg-[#FFDAD6]/20',

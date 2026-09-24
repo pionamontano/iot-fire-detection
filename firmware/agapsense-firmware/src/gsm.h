@@ -22,7 +22,7 @@
 
 struct SmsJob {
     char number[20];
-    char message[160];
+    char message[220]; // large enough for the BFP message incl. a truncated address
     char role[8];          // "owner" or "bfp" — carried through to the result queue
     char alertEventId[40]; // snapshot of the alert this SMS belongs to, captured
                             // at queue time — NOT re-read from ctx at drain time,
@@ -56,6 +56,9 @@ bool gsmSendSms(const char* to, const char* message);
  * Plain-language evacuation message + Google Maps link.
  * Composes the message and enqueues it via gsmQueueSms() — does not
  * block the caller.
+ * @param address reverse-geocoded location from trigger-alert's response
+ *   (ctx->lastAddressResolved) — may be empty if geocoding failed or the
+ *   device is offline, in which case only the raw coordinates are sent.
  * @param alertEventId the alert_events row this SMS belongs to (may be
  *   empty if trigger-alert hasn't been posted yet, e.g. offline) — is
  *   snapshotted into the job so a later, unrelated alert can't
@@ -63,18 +66,27 @@ bool gsmSendSms(const char* to, const char* message);
  */
 void gsmSendOwnerSms(float co_ppm, float temp_c,
                      double lat, double lng,
+                     const char* address,
                      const char* ownerNumber,
                      const char* alertEventId);
 
 /**
  * Role-specific Tier 2 SMS — BFP responder.
- * Technical message: device ID, CO, temp, GPS coords, Maps link.
+ * Technical message: device ID, timestamp, CO, temp, GPS coords,
+ * reverse-geocoded address, Maps link (spec SW-2.2.2).
  * Composes the message and enqueues it via gsmQueueSms() — does not
  * block the caller.
+ * @param address see gsmSendOwnerSms().
+ * @param triggeredAt server-side timestamp from trigger-alert's response
+ *   (ctx->lastTriggeredAt) — the ESP32 has no RTC/NTP of its own, so this
+ *   is the only trustworthy time source available; may be empty if the
+ *   device is offline.
  * @param alertEventId see gsmSendOwnerSms().
  */
 void gsmSendBfpSms(float co_ppm, float temp_c,
                    double lat, double lng,
+                   const char* address,
+                   const char* triggeredAt,
                    const char* bfpNumber,
                    const char* alertEventId);
 

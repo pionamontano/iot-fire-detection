@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Device, AlertEvent } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,46 +11,46 @@ import {
   Plus,
   Pencil,
   Power,
+  ShieldCheck,
   ExternalLink,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
 } from 'lucide-react';
 import { TableBodySkeleton } from '../components/SkeletonLoaders';
+import { getConnectivityStatus } from '../lib/deviceStatus';
+import { useNowTick } from '../hooks/useNowTick';
 
 type DeviceWithStatus = Device & {
-  status: 'operational' | 'critical' | 'maintenance' | 'offline';
+  status: 'operational' | 'critical' | 'reconnecting' | 'maintenance' | 'offline';
   activeAlert?: AlertEvent;
 };
 
-const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[]): { status: DeviceWithStatus['status']; activeAlert?: AlertEvent } => {
+const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[], now: number): { status: DeviceWithStatus['status']; activeAlert?: AlertEvent } => {
   const alert = activeAlerts.find(a => a.device_id === device.id);
   if (alert) {
     return { status: 'critical', activeAlert: alert };
   }
   if (!device.is_active) return { status: 'offline' };
-  if (device.last_seen_at) {
-    const lastSeen = new Date(device.last_seen_at).getTime();
-    if (Date.now() - lastSeen > 5 * 60 * 1000) return { status: 'offline' };
-  } else {
-    return { status: 'offline' };
-  }
-  // Simplified logic for "maintenance" (we could base this on a boolean or time, but for now we'll just check if it's operational)
-  // In a real scenario, you'd have a maintenance flag. We'll default to operational.
+  const connectivity = getConnectivityStatus(device.last_seen_at, now);
+  if (connectivity === 'offline') return { status: 'offline' };
+  if (connectivity === 'reconnecting') return { status: 'reconnecting' };
   return { status: 'operational' };
 };
 
 const statusConfig = {
   operational: { label: 'Operational', color: '#10B981', dot: 'bg-[#10B981]' },
   critical: { label: 'Thermal Warning', color: '#DC2626', dot: 'bg-[#DC2626]' },
+  reconnecting: { label: 'Reconnecting', color: '#F59E0B', dot: 'bg-[#F59E0B]' },
   maintenance: { label: 'Maintenance', color: '#F59E0B', dot: 'bg-[#F59E0B]' },
   offline: { label: 'Offline', color: '#A1A1AA', dot: 'bg-[#A1A1AA]' },
 };
 
 export const Alerts = () => {
-  const [devices, setDevices] = useState<DeviceWithStatus[]>([]);
+  const [rawDevices, setRawDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const now = useNowTick();
 
   // New states for functionality
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -68,18 +68,20 @@ export const Alerts = () => {
       supabase.from('alert_events').select('*, devices(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
     ]);
 
-    const allAlerts = (alertsRes.data || []) as unknown as AlertEvent[];
-    const activeAlerts = allAlerts.filter(a => !a.resolved_at);
-
-    const devicesWithStatus: DeviceWithStatus[] = (devicesRes.data || []).map(d => {
-      const { status, activeAlert } = getDeviceStatus(d, activeAlerts);
-      return { ...d, status, activeAlert };
-    });
-
-    setDevices(devicesWithStatus);
-    setAlerts(allAlerts);
+    setRawDevices(devicesRes.data || []);
+    setAlerts((alertsRes.data || []) as unknown as AlertEvent[]);
     setLoading(false);
   }, []);
+
+  // Re-derived on every fetch AND every 30s tick, so a device's badge advances
+  // from Online → Reconnecting → Offline even with no new realtime event.
+  const devices = useMemo<DeviceWithStatus[]>(() => {
+    const activeAlerts = alerts.filter(a => !a.resolved_at);
+    return rawDevices.map(d => {
+      const { status, activeAlert } = getDeviceStatus(d, activeAlerts, now);
+      return { ...d, status, activeAlert };
+    });
+  }, [rawDevices, alerts, now]);
 
   useEffect(() => {
     fetchData();
@@ -132,10 +134,29 @@ export const Alerts = () => {
     setEditingDevice(null);
   };
 
+  // Manual resolve fallback (spec SW-2.1.6) — e.g. for a device that went
+  // offline mid-alert and can no longer auto-resolve via a safe reading.
+  const handleResolveAlert = async (device: DeviceWithStatus) => {
+    if (!device.activeAlert) return;
+    if (!window.confirm(`Resolve the active alert for ${device.device_code}? This should only be done once the reported condition is confirmed cleared.`)) {
+      return;
+    }
+    try {
+      await supabase
+        .from('alert_events')
+        .update({ resolved_at: new Date().toISOString() })
+        .eq('id', device.activeAlert.id);
+      fetchData();
+    } catch (err) {
+      console.error('Error resolving alert:', err);
+    }
+  };
+
   const filterOptions = [
     { value: 'all', label: 'All Statuses' },
     { value: 'operational', label: 'Operational' },
     { value: 'critical', label: 'Thermal Warning' },
+    { value: 'reconnecting', label: 'Reconnecting' },
     { value: 'maintenance', label: 'Maintenance' },
     { value: 'offline', label: 'Offline' },
   ];
@@ -300,6 +321,9 @@ export const Alerts = () => {
                             <div className="flex items-center gap-3 text-[#A1A1AA]">
                               <button onClick={() => handleEditLabel(device)} className="hover:text-[#1C1B1B] transition-colors" title="Rename Device"><Pencil className="w-4 h-4" /></button>
                               <button onClick={() => handleTogglePower(device)} className={`transition-colors ${device.is_active ? 'hover:text-red-500' : 'text-red-400 hover:text-green-500'}`} title="Toggle Active Status"><Power className="w-4 h-4" /></button>
+                              {device.activeAlert && (
+                                <button onClick={() => handleResolveAlert(device)} className="hover:text-[#10B981] transition-colors" title="Manually Resolve Alert"><ShieldCheck className="w-4 h-4" /></button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -366,9 +390,10 @@ export const Alerts = () => {
 
             <div className="flex flex-col gap-6">
               <LegendRow dot="bg-[#DC2626]" label="Critical Alarm" desc="Thermal threshold exceeded or smoke detected. Immediate response required." />
+              <LegendRow dot="bg-[#F59E0B]" label="Reconnecting" desc="No telemetry for 2–15 minutes. Connection may be recovering." />
               <LegendRow dot="bg-[#F59E0B]" label="Maintenance" desc="Sensor degradation detected or calibration cycle pending." />
               <LegendRow dot="bg-[#10B981]" label="Operational" desc="System healthy. Environment within safe operational parameters." />
-              <LegendRow dot="bg-[#A1A1AA]" label="Offline" desc="Device heartbeat lost. Network or power failure suspected." />
+              <LegendRow dot="bg-[#A1A1AA]" label="Offline" desc="No telemetry for over 15 minutes, or never connected." />
             </div>
           </div>
 

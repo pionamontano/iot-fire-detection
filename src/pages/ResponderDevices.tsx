@@ -1,8 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Device, SensorReading } from '../lib/supabase';
-import { Cpu, Search, Wifi, WifiOff, MapPin, Thermometer, Wind, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { Cpu, Search, Wifi, WifiOff, RefreshCw, MapPin, Thermometer, Wind, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { CardListSkeleton } from '../components/SkeletonLoaders';
+import { getConnectivityStatus, formatLastSeen, type ConnectivityStatus } from '../lib/deviceStatus';
+import { useNowTick } from '../hooks/useNowTick';
+
+const connectivityConfig: Record<ConnectivityStatus, { icon: typeof Wifi; iconBg: string; iconText: string; badge: string; label: string }> = {
+  online: { icon: Wifi, iconBg: 'bg-[#E0F2FE]', iconText: 'text-[#00799C]', badge: 'bg-[#E0F2FE] text-[#00799C]', label: 'ONLINE' },
+  reconnecting: { icon: RefreshCw, iconBg: 'bg-[#FEF3C7]', iconText: 'text-[#B45309]', badge: 'bg-[#FEF3C7] text-[#B45309]', label: 'RECONNECTING' },
+  offline: { icon: WifiOff, iconBg: 'bg-[#FEE2E2]', iconText: 'text-[#DC2626]', badge: 'bg-[#FEE2E2] text-[#DC2626]', label: 'OFFLINE' },
+};
 
 export const ResponderDevices = () => {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -11,6 +19,7 @@ export const ResponderDevices = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedReading, setExpandedReading] = useState<SensorReading | null>(null);
   const [loadingReading, setLoadingReading] = useState(false);
+  const now = useNowTick();
 
   useEffect(() => {
     fetchDevices();
@@ -54,7 +63,7 @@ export const ResponderDevices = () => {
     d.label.toLowerCase().includes(search.toLowerCase())
   );
 
-  const isOnline = (d: Device) => d.last_seen_at && (Date.now() - new Date(d.last_seen_at).getTime() < 5 * 60 * 1000);
+  const getStatus = (d: Device) => getConnectivityStatus(d.last_seen_at, now);
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,18 +78,22 @@ export const ResponderDevices = () => {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-surface-card border border-border rounded-lg p-4">
           <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint">Total Devices</span>
           <p className="text-2xl font-black text-text-heading mt-1">{devices.length}</p>
         </div>
         <div className="bg-surface-card border border-border rounded-lg p-4">
           <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint">Online</span>
-          <p className="text-2xl font-black text-[#00799C] mt-1">{devices.filter(isOnline).length}</p>
+          <p className="text-2xl font-black text-[#00799C] mt-1">{devices.filter(d => getStatus(d) === 'online').length}</p>
+        </div>
+        <div className="bg-surface-card border border-border rounded-lg p-4">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint">Reconnecting</span>
+          <p className="text-2xl font-black text-[#B45309] mt-1">{devices.filter(d => getStatus(d) === 'reconnecting').length}</p>
         </div>
         <div className="bg-surface-card border border-border rounded-lg p-4">
           <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint">Offline</span>
-          <p className="text-2xl font-black text-[#DC2626] mt-1">{devices.filter(d => !isOnline(d)).length}</p>
+          <p className="text-2xl font-black text-[#DC2626] mt-1">{devices.filter(d => getStatus(d) === 'offline').length}</p>
         </div>
         <div className="bg-surface-card border border-border rounded-lg p-4">
           <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint">Inactive</span>
@@ -111,7 +124,11 @@ export const ResponderDevices = () => {
             <Cpu className="w-12 h-12 mx-auto mb-3 text-border" />
             <p className="font-medium text-text-muted">No devices found.</p>
           </div>
-        ) : filtered.map(device => (
+        ) : filtered.map(device => {
+          const status = getStatus(device);
+          const cfg = connectivityConfig[status];
+          const StatusIcon = cfg.icon;
+          return (
           <div key={device.id} className="bg-surface-card border border-border rounded-lg overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
             {/* Device Row */}
             <button
@@ -119,8 +136,8 @@ export const ResponderDevices = () => {
               className="w-full flex items-center justify-between p-5 hover:bg-surface-alt/50 transition-colors text-left"
             >
               <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isOnline(device) ? 'bg-[#E0F2FE] text-[#00799C]' : 'bg-[#FEE2E2] text-[#DC2626]'}`}>
-                  {isOnline(device) ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${cfg.iconBg} ${cfg.iconText}`}>
+                  <StatusIcon className="w-5 h-5" />
                 </div>
                 <div>
                   <p className="font-bold text-text-heading text-sm">{device.device_code}</p>
@@ -135,10 +152,10 @@ export const ResponderDevices = () => {
                 </div>
                 <div className="hidden md:flex items-center gap-1.5 text-xs text-text-body">
                   <Clock className="w-3.5 h-3.5 text-text-faint" />
-                  <span>{device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'Never'}</span>
+                  <span>{formatLastSeen(device.last_seen_at, now)}</span>
                 </div>
-                <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${isOnline(device) ? 'bg-[#E0F2FE] text-[#00799C]' : 'bg-[#FEE2E2] text-[#DC2626]'}`}>
-                  {isOnline(device) ? 'ONLINE' : 'OFFLINE'}
+                <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${cfg.badge}`}>
+                  {cfg.label}
                 </span>
                 {expandedId === device.id ? <ChevronUp className="w-4 h-4 text-text-faint" /> : <ChevronDown className="w-4 h-4 text-text-faint" />}
               </div>
@@ -189,7 +206,8 @@ export const ResponderDevices = () => {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

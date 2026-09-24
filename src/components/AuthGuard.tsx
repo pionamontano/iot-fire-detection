@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import type { Role } from '../lib/supabase';
 
 interface AuthGuardProps {
@@ -10,6 +11,11 @@ interface AuthGuardProps {
 export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
   const { session, profile, loading, signOut } = useAuth();
   const location = useLocation();
+
+  // Enforced here (rather than per-page) so it covers every protected route
+  // regardless of role, using this instance's Outlet. Only active once a
+  // session + approved profile actually exist.
+  useIdleTimeout(profile?.role, Boolean(session && profile && profile.status === 'approved'));
 
   if (loading) {
     return (
@@ -80,14 +86,13 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
     if (profile.role === 'admin') return <Navigate to="/dashboard" replace />;
     if (profile.role === 'bfp_responder') return <Navigate to="/responder" replace />;
     if (profile.role === 'resident') {
-      // return profile.setup_complete ? <Navigate to="/home" replace /> : <Navigate to="/setup" replace />;
-      return <Navigate to="/home" replace />;
+      return profile.setup_complete ? <Navigate to="/home" replace /> : <Navigate to="/setup" replace />;
     }
   }
 
-  // Enforce resident setup
+  // Enforce resident setup — cannot be skipped by navigating directly to another route
   if (profile.role === 'resident' && !profile.setup_complete && location.pathname !== '/setup') {
-    // return <Navigate to="/setup" replace />;
+    return <Navigate to="/setup" replace />;
   }
   
   if (profile.role === 'resident' && profile.setup_complete && location.pathname === '/setup') {

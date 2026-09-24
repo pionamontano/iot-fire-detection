@@ -16,6 +16,8 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { getConnectivityStatus } from '../lib/deviceStatus';
+import { useNowTick } from '../hooks/useNowTick';
 
 // Default center: arbitrary coords for campus (e.g. Quezon City area)
 const DEFAULT_CENTER: [number, number] = [14.634, 121.045];
@@ -60,19 +62,18 @@ const iconCache = {
   offline: createCustomIcon('offline')
 };
 
-const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[]): 'online' | 'alert' | 'fault' | 'offline' => {
+// Note: this map only has pin colors for safe/Tier1/Tier2 (per spec SW-2.3.1) —
+// a "reconnecting" middle state isn't a distinct pin color here, so any
+// non-"online" connectivity state (reconnecting or offline) renders as the
+// offline pin. Connectivity itself is evaluated via the same shared
+// thresholds as the dashboard status badges (spec SW-2.4.3).
+const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[], now: number): 'online' | 'alert' | 'fault' | 'offline' => {
   const alert = activeAlerts.find(a => a.device_id === device.id);
   if (alert) {
-    return alert.alert_tier === 1 ? 'alert' : 'fault';
+    return alert.alert_tier === 2 ? 'alert' : 'fault';
   }
   if (!device.is_active) return 'offline';
-  if (device.last_seen_at) {
-    const lastSeen = new Date(device.last_seen_at).getTime();
-    if (Date.now() - lastSeen > 5 * 60 * 1000) return 'offline';
-  } else {
-    return 'offline';
-  }
-  return 'online';
+  return getConnectivityStatus(device.last_seen_at, now) === 'online' ? 'online' : 'offline';
 };
 
 const timeAgo = (dateStr: string) => {
@@ -95,7 +96,8 @@ export const InteractiveMap = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
-  
+  const now = useNowTick();
+
   // Controls
   const [hideOffline, setHideOffline] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'fires' | 'faults'>('all');
@@ -145,7 +147,7 @@ export const InteractiveMap = () => {
 
   // Filter devices to display
   const displayedDevices = devices.filter(d => {
-    const status = getDeviceStatus(d, activeAlerts);
+    const status = getDeviceStatus(d, activeAlerts, now);
     if (hideOffline && status === 'offline') return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -180,7 +182,7 @@ export const InteractiveMap = () => {
           
           {displayedDevices.map(device => {
             if (device.latitude == null || device.longitude == null) return null;
-            const status = getDeviceStatus(device, activeAlerts);
+            const status = getDeviceStatus(device, activeAlerts, now);
             const activeAlertForDevice = activeAlerts.find(a => a.device_id === device.id);
 
             return (
