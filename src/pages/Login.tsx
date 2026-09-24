@@ -65,38 +65,51 @@ export const Login = () => {
     setLoading(true);
     setError('');
 
-    // Real, server-backed rate limit check (login_attempts-based) -
-    // replaces the old in-memory-only failures counter, which reset
-    // on every page refresh and never actually blocked anything.
-    const { data: lockoutData } = await supabase.rpc('check_login_lockout', { p_email: email });
-    const lockoutStatus = lockoutData?.[0];
-    if (lockoutStatus?.locked) {
-      setLocked(true);
-      setLockoutTimer(lockoutStatus.retry_after_seconds);
-      setError('Too many failed attempts. Please wait before trying again.');
+    // Login goes through the `login` Edge Function rather than calling
+    // supabase.auth.signInWithPassword() directly. That function checks
+    // check_login_lockout and records the attempt server-side, with the
+    // service role, so the lockout is actually enforced for this app's
+    // own login page instead of being a client-side check a caller could
+    // skip (which is exactly what made tiers past the first one
+    // unreachable, and every attempt while "locked" a no-op instead of a
+    // recorded failure).
+    const { data, error: invokeError } = await supabase.functions.invoke('login', {
+      body: { email, password },
+    });
+
+    if (invokeError) {
+      let body: { error?: string; locked?: boolean; retry_after_seconds?: number } | null = null;
+      if (invokeError.context && typeof invokeError.context.json === 'function') {
+        try {
+          body = await invokeError.context.json();
+        } catch {
+          // fall through with body left null
+        }
+      }
+      setError(body?.error || invokeError.message || 'Incorrect email or password. Try again.');
+      if (body?.locked) {
+        setLocked(true);
+        setLockoutTimer(body.retry_after_seconds || 0);
+      }
       setLoading(false);
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const { error: setSessionError } = await supabase.auth.setSession({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
     });
 
-    await supabase.from('login_attempts').insert({ email, success: !error });
-
-    if (error) {
-      setError(error.message || 'Incorrect email or password. Try again.');
-
-      const { data: newLockoutData } = await supabase.rpc('check_login_lockout', { p_email: email });
-      const newLockoutStatus = newLockoutData?.[0];
-      if (newLockoutStatus?.locked) {
-        setLocked(true);
-        setLockoutTimer(newLockoutStatus.retry_after_seconds);
-      }
-
+    if (setSessionError) {
+      setError('Something went wrong finishing sign-in. Please try again.');
       setLoading(false);
+      return;
     }
+
+    // On success, AuthContext's onAuthStateChange listener picks up the
+    // adopted session and the redirect effect above fires once the
+    // profile resolves - loading intentionally stays true until then,
+    // matching the previous signInWithPassword-based behavior.
   };
 
   const ShieldIcon = ({ className }: { className?: string }) => (
