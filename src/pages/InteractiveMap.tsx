@@ -143,7 +143,11 @@ export const InteractiveMap = () => {
   };
 
   const activeAlerts = alerts.filter(a => !a.resolved_at);
-  const activeFireCount = activeAlerts.filter(a => a.alert_tier === 1).length;
+  // Tier 2 = dual-sensor confirmed fire (the severe one); Tier 1 = single-
+  // sensor warning. Same tier↔severity mapping bug as getDeviceStatus()
+  // above (spec SW-2.3.1) — this counter/filter/feed styling independently
+  // had tier 1 labeled "Fire" and tier 2 labeled "Fault", the reverse.
+  const activeFireCount = activeAlerts.filter(a => a.alert_tier === 2).length;
 
   // Filter devices to display
   const displayedDevices = devices.filter(d => {
@@ -158,8 +162,8 @@ export const InteractiveMap = () => {
 
   // Filter feed alerts
   const feedAlerts = alerts.filter(a => {
-    if (filterType === 'fires') return a.alert_tier === 1;
-    if (filterType === 'faults') return a.alert_tier === 2;
+    if (filterType === 'fires') return a.alert_tier === 2;
+    if (filterType === 'faults') return a.alert_tier === 1;
     return true;
   });
 
@@ -320,7 +324,7 @@ export const InteractiveMap = () => {
         <div className="flex-1 overflow-y-auto px-6 pb-6 flex flex-col gap-4">
           {feedAlerts.map(alert => {
             const isResolved = !!alert.resolved_at;
-            const isFire = alert.alert_tier === 1;
+            const isFire = alert.alert_tier === 2;
             const deviceLabel = alert.devices?.device_code || 'Unknown';
             const locLabel = alert.devices?.location_desc || 'Unknown Location';
             

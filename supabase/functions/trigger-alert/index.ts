@@ -9,6 +9,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-key',
 };
 
+// Builds a street → barangay/suburb → municipality/city string from
+// Nominatim's structured `address` fields (spec HW-1.2.3 / SW-2.3.2),
+// instead of relying on the single, inconsistently-granular display_name
+// (which might be street-level, might be just a country name, with no
+// way to tell which tier you got). Nominatim has no dedicated "barangay"
+// tag — for Philippine addresses it typically lands under suburb/village/
+// neighbourhood, so all three are checked.
+function buildTieredAddress(address: Record<string, string> | undefined): string | null {
+  if (!address) return null;
+
+  const street = [address.house_number, address.road].filter(Boolean).join(' ') || null;
+  const barangay = address.suburb || address.village || address.neighbourhood || address.quarter || null;
+  const municipality = address.city || address.municipality || address.town || address.county || null;
+
+  const parts = [street, barangay, municipality].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
 async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
   if (!lat || !lon) return null;
   try {
@@ -29,7 +47,10 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
 
     if (!res.ok) return null;
     const data = await res.json();
-    return data?.display_name || null;
+    // Tiered street/barangay/municipality string when the structured
+    // fields support it; fall back to Nominatim's own display_name
+    // (still better than nothing) before giving up entirely.
+    return buildTieredAddress(data?.address) || data?.display_name || null;
   } catch (e) {
     console.error('Geocoding error/timeout:', e);
     return null;

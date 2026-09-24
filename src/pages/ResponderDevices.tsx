@@ -192,13 +192,22 @@ export const ResponderDevices = () => {
                 ) : expandedReading ? (
                   <div className="bg-surface-card border border-border rounded-md p-4">
                     <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block mb-2">Latest Sensor Reading</span>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
-                      <div><span className="text-text-faint">Temp:</span> <strong>{expandedReading.temp_celsius.toFixed(1)}°C</strong></div>
-                      <div><span className="text-text-faint">CO/Smoke:</span> <strong>{expandedReading.co_ppm.toFixed(0)} PPM</strong></div>
-                      <div><span className="text-text-faint">GPS:</span> <strong>{expandedReading.gps_valid ? 'Fixed' : 'N/A'}</strong></div>
-                      <div><span className="text-text-faint">Power:</span> <strong>{expandedReading.on_battery ? 'Battery' : 'Mains'}</strong></div>
-                      <div><span className="text-text-faint">At:</span> <strong>{new Date(expandedReading.recorded_at).toLocaleString()}</strong></div>
-                    </div>
+                    {expandedReading.sensor_ready === false ? (
+                      // MQ-7 warm-up window (spec SW-2.1.1/SW-2.4.5) — raw
+                      // values aren't meaningful yet, so don't show them.
+                      <div className="flex items-center gap-2 text-xs text-text-faint">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Initializing sensors... (MQ-7 warming up)
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                        <div><span className="text-text-faint">Temp:</span> <strong>{expandedReading.temp_celsius.toFixed(1)}°C</strong></div>
+                        <div><span className="text-text-faint">CO/Smoke:</span> <strong>{expandedReading.co_ppm.toFixed(0)} PPM</strong></div>
+                        <div><span className="text-text-faint">GPS:</span> <strong>{expandedReading.gps_valid ? 'Fixed' : 'N/A'}</strong></div>
+                        <div><span className="text-text-faint">Power:</span> <strong>{expandedReading.on_battery ? 'Battery' : 'Mains'}</strong></div>
+                        <div><span className="text-text-faint">At:</span> <strong>{new Date(expandedReading.recorded_at).toLocaleString()}</strong></div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-text-faint">No sensor readings available for this device.</p>

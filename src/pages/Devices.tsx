@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Device } from '../lib/supabase';
-import { Cpu, ChevronRight, Info, Loader2, AlertTriangle } from 'lucide-react';
+import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check } from 'lucide-react';
 import { CardListSkeleton } from '../components/SkeletonLoaders';
 
 const timeAgo = (dateStr: string) => {
@@ -19,6 +19,21 @@ export const Devices = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // device_id -> latest on_battery (spec HW-1.5.2/SW-2.4.4)
+  const [batteryByDevice, setBatteryByDevice] = useState<Record<string, boolean>>({});
+
+  // Editing an already-registered device's thresholds + BFP contact
+  // (spec HW-1.1.5 / SW-2.5.5) — previously only settable at creation.
+  const [editingDevice, setEditingDevice] = useState<Device | null>(null);
+  const [editForm, setEditForm] = useState({ temp_threshold: 65, co_threshold: 15, bfp_contact: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // API key regeneration (spec SW-2.6.3) — shown once, right after
+  // regenerating, since the raw key otherwise only appears in `devices`
+  // rows the admin already has (devices_safe masks it for other roles).
+  const [regeneratingKey, setRegeneratingKey] = useState(false);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
 
   // Form state matching Figma fields
   const [form, setForm] = useState({
@@ -34,13 +49,26 @@ export const Devices = () => {
 
   const fetchDevices = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('devices')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const [devicesRes, batteryRes] = await Promise.all([
+      supabase.from('devices').select('*').order('created_at', { ascending: false }),
+      // Latest readings across devices, to derive each device's current
+      // on_battery state (no per-device "latest reading" view exists, so
+      // the most recent batch is reduced client-side below).
+      supabase.from('sensor_readings')
+        .select('device_id, on_battery, recorded_at')
+        .order('recorded_at', { ascending: false })
+        .limit(300),
+    ]);
 
-    if (!error && data) {
-      setDevices(data);
+    if (!devicesRes.error && devicesRes.data) {
+      setDevices(devicesRes.data);
+    }
+    if (batteryRes.data) {
+      const latestByDevice: Record<string, boolean> = {};
+      for (const r of batteryRes.data) {
+        if (!(r.device_id in latestByDevice)) latestByDevice[r.device_id] = r.on_battery;
+      }
+      setBatteryByDevice(latestByDevice);
     }
     setLoading(false);
   }, []);
@@ -48,6 +76,66 @@ export const Devices = () => {
   useEffect(() => {
     fetchDevices();
   }, [fetchDevices]);
+
+  const openEditDevice = (device: Device) => {
+    setEditingDevice(device);
+    setEditForm({
+      temp_threshold: device.temp_threshold,
+      co_threshold: device.co_threshold,
+      bfp_contact: device.bfp_contact || '',
+    });
+    setNewApiKey(null);
+    setKeyCopied(false);
+  };
+
+  const handleRegenerateKey = async () => {
+    if (!editingDevice) return;
+    if (!window.confirm(
+      `Regenerate the API key for ${editingDevice.device_code}? The device will be unable to authenticate with the old key immediately — it must be reflashed or reconfigured with the new key.`
+    )) return;
+
+    setRegeneratingKey(true);
+    const { data, error } = await supabase.rpc('regenerate_device_api_key', { p_device_id: editingDevice.id });
+    if (error) {
+      alert('Failed to regenerate API key: ' + error.message);
+    } else {
+      setNewApiKey(data as string);
+      setKeyCopied(false);
+    }
+    setRegeneratingKey(false);
+  };
+
+  const copyNewApiKey = async () => {
+    if (!newApiKey) return;
+    try {
+      await navigator.clipboard.writeText(newApiKey);
+      setKeyCopied(true);
+    } catch {
+      // Clipboard API can be unavailable (e.g. insecure context) — the
+      // key is still selectable/copyable by hand from the input below.
+    }
+  };
+
+  const saveEditDevice = async () => {
+    if (!editingDevice) return;
+    setSavingEdit(true);
+    const { error } = await supabase
+      .from('devices')
+      .update({
+        temp_threshold: editForm.temp_threshold,
+        co_threshold: editForm.co_threshold,
+        bfp_contact: editForm.bfp_contact || null,
+      })
+      .eq('id', editingDevice.id);
+
+    if (error) {
+      alert('Failed to update device: ' + error.message);
+    } else {
+      setEditingDevice(null);
+      fetchDevices();
+    }
+    setSavingEdit(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,10 +341,26 @@ export const Devices = () => {
                           {timeAgo(device.created_at)}
                         </span>
                       </div>
-                      <p className="text-[#5B403D] text-[11px] leading-[16.5px] mt-0.5 truncate">
-                        {device.location_desc}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-[#5B403D] text-[11px] leading-[16.5px] truncate">
+                          {device.location_desc}
+                        </p>
+                        {batteryByDevice[device.id] && (
+                          <span title="Running on backup battery" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] text-[9px] font-bold uppercase tracking-wide shrink-0">
+                            <BatteryWarning className="w-3 h-3" /> Battery
+                          </span>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Edit */}
+                    <button
+                      onClick={() => openEditDevice(device)}
+                      title="Edit thresholds and BFP contact"
+                      className="text-[#A1A1AA] hover:text-[#AF101A] transition-colors shrink-0"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
 
                     {/* Chevron */}
                     <ChevronRight className="w-3 h-3 text-[#E5E2E1] shrink-0 group-hover:text-[#AF101A] transition-colors" />
@@ -291,6 +395,115 @@ export const Devices = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Device Modal — thresholds + BFP contact for an existing device */}
+      {editingDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setEditingDevice(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[#1C1B1B] font-extrabold text-xl">Edit Device Settings</h3>
+              <button onClick={() => setEditingDevice(null)} className="text-[#A1A1AA] hover:text-[#1C1B1B] transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-[#5B403D] text-sm mb-6">
+              Update alert thresholds and BFP contact for <span className="font-bold">{editingDevice.device_code}</span>. Changes take effect on the device's next config sync.
+            </p>
+
+            <div className="flex flex-col gap-6">
+              <ThresholdSlider
+                label="Temperature Alert Threshold"
+                value={editForm.temp_threshold}
+                onChange={val => setEditForm({ ...editForm, temp_threshold: val })}
+                min={20}
+                max={120}
+                unit="°C"
+                minLabel="Safe (20°C)"
+                maxLabel="Critical (120°C)"
+                warning={editForm.temp_threshold < 40 ? 'Very low — may cause frequent false alarms' : editForm.temp_threshold > 80 ? 'Dangerously high — fire may go undetected' : undefined}
+              />
+              <ThresholdSlider
+                label="Smoke Particulate Threshold"
+                value={editForm.co_threshold}
+                onChange={val => setEditForm({ ...editForm, co_threshold: val })}
+                min={0}
+                max={100}
+                unit="% Obscuration"
+                minLabel="Clear"
+                maxLabel="Hazardous"
+                warning={editForm.co_threshold < 10 ? 'Very sensitive — expect frequent alerts' : editForm.co_threshold > 80 ? 'Very high — smoke may go undetected' : undefined}
+              />
+
+              <FormField label="BFP Responder Contact">
+                <input
+                  type="tel"
+                  placeholder="+639XXXXXXXXX"
+                  value={editForm.bfp_contact}
+                  onChange={e => setEditForm({ ...editForm, bfp_contact: e.target.value })}
+                  className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+                />
+              </FormField>
+
+              {/* API Key Regeneration (spec SW-2.6.3) */}
+              <div className="border-t border-[#E5E2E1] pt-6">
+                <FormField label="Device API Key">
+                  {newApiKey ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={newApiKey}
+                          onFocus={e => e.target.select()}
+                          className="flex-1 border border-[#E5E2E1] rounded px-4 py-2.5 text-xs font-mono bg-[#F6F3F2] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={copyNewApiKey}
+                          title="Copy to clipboard"
+                          className="px-3 rounded border border-[#E5E2E1] text-[#5B403D] hover:bg-[#F6F3F2] transition-colors shrink-0"
+                        >
+                          {keyCopied ? <Check className="w-4 h-4 text-[#10B981]" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <div className="flex items-start gap-1.5 text-[#F59E0B]">
+                        <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                        <span className="text-[10px] font-bold">Copy this now — it won't be shown again. Reconfigure the device with this key before it goes offline.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleRegenerateKey}
+                      disabled={regeneratingKey}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded border border-[#E5E2E1] text-[#5B403D] text-sm font-bold hover:bg-[#F6F3F2] transition-colors disabled:opacity-60 w-fit"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                      {regeneratingKey ? 'Regenerating...' : 'Regenerate API Key'}
+                    </button>
+                  )}
+                </FormField>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-8">
+              <button
+                onClick={() => setEditingDevice(null)}
+                className="px-4 py-2 text-sm font-bold text-[#5B403D] hover:bg-[#F6F3F2] rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEditDevice}
+                disabled={savingEdit}
+                className="px-4 py-2 text-sm font-bold text-white bg-[#AF101A] hover:bg-[#8F0C14] rounded transition-colors disabled:opacity-60"
+              >
+                {savingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Inline style for form inputs */}
       <style dangerouslySetInnerHTML={{__html: `

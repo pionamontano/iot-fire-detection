@@ -53,7 +53,12 @@ bool gsmSendSms(const char* to, const char* message);
 
 /**
  * Role-specific Tier 2 SMS — property owner.
- * Plain-language evacuation message + Google Maps link.
+ * Plain-language evacuation message + Google Maps link, with the
+ * reverse-geocoded address appended last (spec SW-2.2.2). No concatenated-
+ * SMS setup exists on this module (plain AT+CMGS text mode), so the link
+ * is placed before the address on purpose: if the message is long enough
+ * to be truncated at the module/network's single-segment limit, only the
+ * address's tail is lost, never the link.
  * Composes the message and enqueues it via gsmQueueSms() — does not
  * block the caller.
  * @param address reverse-geocoded location from trigger-alert's response
@@ -72,8 +77,10 @@ void gsmSendOwnerSms(float co_ppm, float temp_c,
 
 /**
  * Role-specific Tier 2 SMS — BFP responder.
- * Technical message: device ID, timestamp, CO, temp, GPS coords,
- * reverse-geocoded address, Maps link (spec SW-2.2.2).
+ * Technical message: device ID, timestamp, CO, temp, Maps link (which
+ * already encodes the coordinates — no separate GPS line, to save space),
+ * reverse-geocoded address appended last (spec SW-2.2.2), for the same
+ * truncation-safety reason documented on gsmSendOwnerSms().
  * Composes the message and enqueues it via gsmQueueSms() — does not
  * block the caller.
  * @param address see gsmSendOwnerSms().

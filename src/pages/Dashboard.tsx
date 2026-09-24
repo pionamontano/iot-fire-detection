@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Device, AlertEvent, Profile } from '../lib/supabase';
-import { 
-  Users, 
-  Cpu, 
-  Activity, 
+import {
+  Users,
+  Cpu,
+  Activity,
   AlertTriangle,
   Settings,
-  Loader2
+  Loader2,
+  BatteryWarning
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DashboardSkeleton } from '../components/SkeletonLoaders';
@@ -36,6 +37,9 @@ interface ActivityLogEntry {
 export const Dashboard = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
+  // device_id -> latest on_battery (spec HW-1.5.2/SW-2.4.4 — previously
+  // this indicator existed only on Resident/Responder views, never Admin)
+  const [batteryByDevice, setBatteryByDevice] = useState<Record<string, boolean>>({});
   const [totalUsers, setTotalUsers] = useState(0);
   const [fireEvents24h, setFireEvents24h] = useState(0);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
@@ -67,7 +71,7 @@ export const Dashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [devicesRes, alertsRes, profilesRes, fireEvents24hRes, recentAlertsRes] = await Promise.all([
+      const [devicesRes, alertsRes, profilesRes, fireEvents24hRes, recentAlertsRes, batteryRes] = await Promise.all([
         supabase.from('devices').select('*').order('created_at', { ascending: true }),
         supabase.from('alert_events').select('*, devices(*)').is('resolved_at', null),
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
@@ -79,10 +83,24 @@ export const Dashboard = () => {
         supabase.from('alert_events')
           .select('*, devices(label, device_code)')
           .order('triggered_at', { ascending: false })
-          .limit(5)
+          .limit(5),
+        // Latest readings across devices, to derive each device's current
+        // on_battery state (no per-device "latest reading" view exists,
+        // so the most recent batch is reduced client-side below).
+        supabase.from('sensor_readings')
+          .select('device_id, on_battery, recorded_at')
+          .order('recorded_at', { ascending: false })
+          .limit(300)
       ]);
 
       if (devicesRes.data) setDevices(devicesRes.data);
+      if (batteryRes.data) {
+        const latestByDevice: Record<string, boolean> = {};
+        for (const r of batteryRes.data) {
+          if (!(r.device_id in latestByDevice)) latestByDevice[r.device_id] = r.on_battery;
+        }
+        setBatteryByDevice(latestByDevice);
+      }
       if (alertsRes.data) setActiveAlerts(alertsRes.data as unknown as AlertEvent[]);
       if (profilesRes.count !== null) setTotalUsers(profilesRes.count);
       if (fireEvents24hRes.count !== null) setFireEvents24h(fireEvents24hRes.count);
@@ -201,9 +219,10 @@ export const Dashboard = () => {
                 devices.slice(0, 6).map((device) => {
                   const status = getDeviceStatus(device, activeAlerts, now);
                   const isAlert = status === 'alert';
+                  const onBattery = batteryByDevice[device.id];
 
                   return (
-                    <div 
+                    <div
                       key={device.id}
                       className={`flex border-b border-[#F4F4F5] hover:bg-gray-50 transition-colors ${isAlert ? 'bg-[#F4A185]/10' : ''}`}
                     >
@@ -212,10 +231,15 @@ export const Dashboard = () => {
                           {device.device_code}
                         </span>
                       </div>
-                      <div className="flex-1 px-6 py-5 flex items-center">
+                      <div className="flex-1 px-6 py-5 flex items-center gap-2">
                         <span className={`text-[#52525B] font-medium text-[14px] leading-5 ${isAlert ? 'font-bold' : ''}`}>
                           {device.location_desc}
                         </span>
+                        {onBattery && (
+                          <span title="Running on backup battery" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#B45309] text-[10px] font-bold uppercase tracking-wide">
+                            <BatteryWarning className="w-3 h-3" /> Battery
+                          </span>
+                        )}
                       </div>
                       <div className="w-[191px] px-6 py-5 flex items-center justify-end">
                         <StatusBadge status={status} />
