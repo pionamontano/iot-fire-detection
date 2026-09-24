@@ -1,0 +1,430 @@
+{
+  "info": {
+    "_postman_id": "a3f0e6c2-6b1a-4b8e-9f3d-1c2d3e4f5a6b",
+    "name": "AgapSense — Hardware Simulation",
+    "description": "Simulates the AgapSense fire/CO detector firmware talking to the Supabase Edge Functions, for use before real hardware is wired up.\n\nAll four requests groups mirror `supabase/functions/*` exactly (see FIRMWARE_GUIDE.md for the real firmware call sites). Every call authenticates with an `x-device-key` header checked against a row in `devices.api_key` — grab a real key from the Supabase Table Editor (devices table, admin/service-role view) for one of the seeded devices (AGS-001..AGS-005) before running these.\n\nSet up an environment with:\n- `base_url` — e.g. `https://YOUR_PROJECT_REF.supabase.co/functions/v1`\n- `device_api_key` — the `devices.api_key` value for the device you're simulating\n- `device_human_id` — the device's `device_code` (e.g. `AGS-001`); sent as `?device_id=` on get-device-config but is informational only, not used for auth\n\n`alert_event_id` is populated automatically by the Trigger Alert requests' test scripts, for chaining into Confirm SMS Status.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://YOUR_PROJECT_REF.supabase.co/functions/v1", "type": "string" },
+    { "key": "device_api_key", "value": "sk_replace_with_a_real_device_api_key", "type": "string" },
+    { "key": "device_human_id", "value": "AGS-001", "type": "string" },
+    { "key": "alert_event_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "01 - Device Config",
+      "item": [
+        {
+          "name": "Get Device Config (boot + every 10 min)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/get-device-config?device_id={{device_human_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["get-device-config"],
+              "query": [
+                { "key": "device_id", "value": "{{device_human_id}}" }
+              ]
+            },
+            "description": "Mirrors connectivity.cpp:fetchRemoteConfig(). Returns co_alert_ppm, temp_alert_c, owner_number, bfp_number for the authenticated device."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has thresholds', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('co_alert_ppm');",
+                  "  pm.expect(json).to.have.property('temp_alert_c');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Telemetry (Ingest Reading)",
+      "item": [
+        {
+          "name": "Ingest Reading - Normal",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"co_ppm\": 8,\n  \"temp_celsius\": 27.5,\n  \"latitude\": 14.8447,\n  \"longitude\": 120.8112,\n  \"gps_valid\": true,\n  \"on_battery\": false,\n  \"sensor_ready\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ingest-reading",
+              "host": ["{{base_url}}"],
+              "path": ["ingest-reading"]
+            },
+            "description": "Mirrors postTelemetry(), sent every TELEMETRY_INTERVAL_MS (30s). Routine reading well under thresholds — will also auto-resolve any open alert_events row for this device."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        },
+        {
+          "name": "Ingest Reading - On Battery, No GPS Fix Yet",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"co_ppm\": 6,\n  \"temp_celsius\": 26.8,\n  \"latitude\": 0,\n  \"longitude\": 0,\n  \"gps_valid\": false,\n  \"on_battery\": true,\n  \"sensor_ready\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ingest-reading",
+              "host": ["{{base_url}}"],
+              "path": ["ingest-reading"]
+            },
+            "description": "(0, 0) is the firmware's 'no GPS fix ever acquired' sentinel — the backend treats it as no coordinates at all rather than storing (0,0) as a real location."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        },
+        {
+          "name": "Ingest Reading - Sensor Warming Up (sensor_ready=false)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"co_ppm\": 0,\n  \"temp_celsius\": 24.0,\n  \"sensor_ready\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ingest-reading",
+              "host": ["{{base_url}}"],
+              "path": ["ingest-reading"]
+            },
+            "description": "MQ-7 sensor still in its warm-up phase. sensor_ready=false suppresses the auto-resolve-alert check even if the reading is below threshold."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Alerts (Trigger Alert)",
+      "item": [
+        {
+          "name": "Trigger Alert - Tier 1 Warning (single sensor over threshold)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tier\": 1,\n  \"co_ppm\": 220,\n  \"temp_celsius\": 45.0,\n  \"latitude\": 14.8447,\n  \"longitude\": 120.8112,\n  \"gps_valid\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/trigger-alert",
+              "host": ["{{base_url}}"],
+              "path": ["trigger-alert"]
+            },
+            "description": "Mirrors postAlert() on Tier 1 entry. Backend logs the alert, resolves the address, sends a Telegram warning — no SMS at this tier."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.alert_event_id) { pm.environment.set('alert_event_id', json.alert_event_id); }",
+                  "pm.test('Returns alert_event_id', () => pm.expect(json).to.have.property('alert_event_id'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Trigger Alert - Tier 2 Fire (escalates the open alert)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tier\": 2,\n  \"co_ppm\": 350,\n  \"temp_celsius\": 68.0,\n  \"latitude\": 14.8447,\n  \"longitude\": 120.8112,\n  \"gps_valid\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/trigger-alert",
+              "host": ["{{base_url}}"],
+              "path": ["trigger-alert"]
+            },
+            "description": "Run right after Tier 1 to see the dedup/escalation path: same alert_events row gets bumped to tier 2 instead of a duplicate row. Both sensors over threshold — backend also dispatches owner + BFP SMS."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.alert_event_id) { pm.environment.set('alert_event_id', json.alert_event_id); }",
+                  "pm.test('Returns owner_contact and bfp_contact', () => {",
+                  "  pm.expect(json).to.have.property('owner_contact');",
+                  "  pm.expect(json).to.have.property('bfp_contact');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Trigger Alert - Tier 2, Legacy Firmware Field Names",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alert_tier\": 2,\n  \"co_ppm\": 400,\n  \"temperature_c\": 72.0,\n  \"lat\": 14.8461,\n  \"lng\": 120.8148,\n  \"gps_valid\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/trigger-alert",
+              "host": ["{{base_url}}"],
+              "path": ["trigger-alert"]
+            },
+            "description": "Confirms the backend's backward-compatible field fallback (alert_tier/temperature_c/lat/lng) still works for firmware builds that haven't picked up the tier/temp_celsius/latitude/longitude rename."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - SMS Delivery Confirmation",
+      "item": [
+        {
+          "name": "Confirm SMS Status - Owner Delivered",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alert_event_id\": \"{{alert_event_id}}\",\n  \"role\": \"owner\",\n  \"success\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/confirm-sms-status",
+              "host": ["{{base_url}}"],
+              "path": ["confirm-sms-status"]
+            },
+            "description": "Run after a Tier 2 Trigger Alert request (which populates {{alert_event_id}}). Mirrors postSmsStatus() reporting a real +CMGS success back for the owner SMS."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));"] }
+            }
+          ]
+        },
+        {
+          "name": "Confirm SMS Status - BFP Delivery Failed",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alert_event_id\": \"{{alert_event_id}}\",\n  \"role\": \"bfp\",\n  \"success\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/confirm-sms-status",
+              "host": ["{{base_url}}"],
+              "path": ["confirm-sms-status"]
+            },
+            "description": "Simulates a GSM module reporting a failed +CMGS for the BFP SMS leg."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Auth & Validation Failures",
+      "item": [
+        {
+          "name": "Get Device Config - Missing x-device-key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/get-device-config?device_id={{device_human_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["get-device-config"],
+              "query": [{ "key": "device_id", "value": "{{device_human_id}}" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 401', () => pm.response.to.have.status(401));"] }
+            }
+          ]
+        },
+        {
+          "name": "Ingest Reading - Invalid/Unknown API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "sk_this_key_does_not_exist" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"co_ppm\": 5,\n  \"temp_celsius\": 25.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ingest-reading",
+              "host": ["{{base_url}}"],
+              "path": ["ingest-reading"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 401', () => pm.response.to.have.status(401));"] }
+            }
+          ]
+        },
+        {
+          "name": "Ingest Reading - Non-Numeric Payload",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"co_ppm\": \"high\",\n  \"temp_celsius\": 25.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ingest-reading",
+              "host": ["{{base_url}}"],
+              "path": ["ingest-reading"]
+            },
+            "description": "co_ppm must be a finite number — this should be rejected before any database write."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 400', () => pm.response.to.have.status(400));"] }
+            }
+          ]
+        },
+        {
+          "name": "Trigger Alert - Invalid Tier",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tier\": 3,\n  \"co_ppm\": 300,\n  \"temp_celsius\": 60.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/trigger-alert",
+              "host": ["{{base_url}}"],
+              "path": ["trigger-alert"]
+            },
+            "description": "tier must be exactly 1 or 2."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 400', () => pm.response.to.have.status(400));"] }
+            }
+          ]
+        },
+        {
+          "name": "Trigger Alert - gps_valid true but coords missing",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tier\": 1,\n  \"co_ppm\": 210,\n  \"temp_celsius\": 44.0,\n  \"gps_valid\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/trigger-alert",
+              "host": ["{{base_url}}"],
+              "path": ["trigger-alert"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 400', () => pm.response.to.have.status(400));"] }
+            }
+          ]
+        },
+        {
+          "name": "Confirm SMS Status - Unknown alert_event_id",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-device-key", "value": "{{device_api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alert_event_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"role\": \"owner\",\n  \"success\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/confirm-sms-status",
+              "host": ["{{base_url}}"],
+              "path": ["confirm-sms-status"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 404', () => pm.response.to.have.status(404));"] }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
