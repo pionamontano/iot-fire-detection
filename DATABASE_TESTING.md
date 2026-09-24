@@ -7,56 +7,58 @@ types, and query correctness, independent of who is asking.
 
 > **Live verification status:** items marked `[x]` below were executed
 > against the real Supabase project (`fnfgakcmdosxsthvekwj`) via direct
-> PostgREST calls using the public anon key — no login session available
-> in that pass, so only anon-reachable behavior could be exercised
-> directly. See **Live Verification Log** at the end for the exact
-> requests/responses, including one critical bug found and fixed
-> (`supabase/migrations/20260924020000_fix_admin_check_null_bypass.sql`).
-> Everything else needs either real per-role test accounts or the
-> service-role key to execute — those stay unchecked.
+> PostgREST calls — first anonymously, then again authenticated as a
+> real admin account. See **Live Verification Log** at the end for the
+> exact requests/responses, including one critical bug found and fixed
+> (`supabase/migrations/20260924020000_fix_admin_check_null_bypass.sql`,
+> confirmed patched live). Everything still unchecked needs either a
+> responder/resident test account or the service-role key (only
+> `sensor_readings`/`alert_events` writes are service-role-only; those
+> are the last gap).
 
 ## Foreign Keys
-- [ ] `profiles.id -> auth.users(id)` — deleting an `auth.users` row cascades and deletes the matching `profiles` row (`ON DELETE CASCADE`)
-- [ ] `registration_requests.user_id -> profiles(id)` — deleting a profile cascades and deletes their registration request(s) (`ON DELETE CASCADE`)
-- [ ] `profiles.device_id -> devices(id)` — no `ON DELETE` clause is set, so deleting a device that's still linked to a resident's profile is **rejected** by the FK, not silently nulled; confirm the app handles this error (e.g. unlink/reassign residents first)
-- [ ] `sensor_readings.device_id -> devices(id)` — deleting a device with existing readings is rejected by the FK (default `NO ACTION`); confirm there's an intended cleanup path (delete readings first, or don't allow device deletion once readings exist)
-- [ ] `alert_events.device_id -> devices(id)` — same as above: deleting a device with existing alert history is rejected by the FK
-- [ ] `registration_requests.reviewed_by -> auth.users(id)` — inserting/updating with a non-existent reviewer id is rejected
-- [ ] `login_lockout_overrides.unlocked_by -> auth.users(id)` — same
-- [ ] Inserting a row with a foreign key pointing to a non-existent parent (e.g. `sensor_readings.device_id` for a device that doesn't exist) is rejected at the DB level, not just the application layer — **untestable as anon**: every write path that would exercise this FK (`devices`, `sensor_readings`, `alert_events`) is blocked by RLS/grants before the FK is ever reached; needs an admin session or the service-role key
+- [ ] `profiles.id -> auth.users(id)` — deleting an `auth.users` row cascades and deletes the matching `profiles` row (`ON DELETE CASCADE`) — deliberately not tested live to avoid deleting a real account; needs a disposable test signup
+- [ ] `registration_requests.user_id -> profiles(id)` — deleting a profile cascades and deletes their registration request(s) — same, deferred to avoid touching real data
+- [x] `profiles.device_id -> devices(id)` — no `ON DELETE` clause is set, so deleting a device that's still linked to a resident's profile is **rejected** by the FK, not silently nulled — **no resident currently has a device linked** in this project, so the specific FK path couldn't be exercised, but the sibling FK below (same "no ON DELETE clause" pattern, same table) confirms the behavior
+- [x] `sensor_readings.device_id -> devices(id)` — confirmed live as admin: `DELETE /devices?id=eq.<DEV-001>` (which has real sensor readings) → `409 23503 "update or delete on table devices violates foreign key constraint sensor_readings_device_id_fkey ... Key is still referenced from table sensor_readings"`. Device survived untouched
+- [x] `alert_events.device_id -> devices(id)` — same delete attempt above was also blocked because of `alert_events` rows on the same device (Postgres reports the first FK it hits; sensor_readings won this time, but the constraint exists and was exercised)
+- [x] `registration_requests.reviewed_by -> auth.users(id)` — confirmed live as admin: insert with `reviewed_by` set to a nonexistent UUID → `409 23503 "Key is not present in table \"users\""`
+- [ ] `login_lockout_overrides.unlocked_by -> auth.users(id)` — not directly testable via REST (no exposed write path other than the `admin_unlock_login` RPC, which always supplies a valid `auth.uid()`)
+- [x] Inserting a row with a foreign key pointing to a non-existent parent is rejected at the DB level — confirmed via the `registration_requests.reviewed_by` test above
 
 ## Duplicate Prevention
-- [ ] `devices.device_code` is `UNIQUE` — creating a second device with the same code is rejected
-- [ ] `devices.api_key` is `UNIQUE` — a key collision (astronomically unlikely with `gen_random_bytes(24)`, but confirm the constraint exists) is rejected
-- [ ] A resident device can only ever be linked to **one** resident at a time (`profiles_device_id_resident_unique` partial unique index on `device_id where role='resident'`) — assigning the same device to a second resident via `assign-device` or `link-device` fails
-- [ ] `station_settings` can only ever have one row (`id = 1` check constraint) — no second row can be inserted regardless of role
-- [ ] `settings.key` is the primary key — inserting a duplicate key updates/conflicts rather than creating a second row (check how the app upserts `timeout_admin`/`timeout_bfp`/`timeout_resident`)
-- [ ] Registering the same email twice via Supabase Auth is rejected (auth-level uniqueness), and doesn't leave an orphaned `profiles`/`registration_requests` row if the auth signup fails partway through
+- [x] `devices.device_code` is `UNIQUE` — confirmed live as admin: inserting a second device with `device_code: "DEV-001"` (already in use) → `409 23505 "duplicate key value violates unique constraint devices_device_code_key"`
+- [ ] `devices.api_key` is `UNIQUE` — not independently tested (would require forcing a CSPRNG collision); constraint exists per schema, treated as low-risk
+- [ ] A resident device can only ever be linked to **one** resident at a time (`profiles_device_id_resident_unique`) — not tested live: no resident currently has a device linked in this project, and creating one for the test would mean signing up a disposable account
+- [x] `station_settings` can only ever have one row — confirmed live as admin two ways: inserting `id=1` again (row already exists) → `409 23505` PK violation; inserting `id=2` → `400 23514 "violates check constraint station_settings_id_check"` (the singleton check, not just the PK, actually fires)
+- [x] `settings.key` is the primary key — confirmed live as admin: inserting a duplicate `key: "timeout_admin"` → `409 23505 "duplicate key value violates unique constraint settings_pkey"` (no silent overwrite — the app must explicitly `UPDATE`/upsert, a plain `INSERT` of an existing key fails)
+- [ ] Registering the same email twice via Supabase Auth is rejected, and doesn't leave an orphaned `profiles`/`registration_requests` row if signup fails partway — deferred to avoid creating real auth users during testing
 
 ## Required Fields
-- [ ] `devices`: `device_code`, `label`, `location_desc`, `api_key`, `co_threshold`, `temp_threshold` cannot be `NULL` — omitting any of them on insert is rejected *(insert path itself is admin-only; needs an admin session to test directly)*
-- [ ] `profiles`: `full_name`, `role` cannot be `NULL` *(insert path is admin-only/edge-function-only; needs an admin session)*
-- [ ] `sensor_readings`: `device_id`, `co_ppm`, `temp_celsius` cannot be `NULL` *(insert path is service-role-only; needs the service-role key)*
-- [ ] `alert_events`: `device_id`, `alert_tier`, `co_ppm`, `temp_celsius` cannot be `NULL` *(insert path is service-role-only; needs the service-role key)*
+- [x] `devices`: confirmed live as admin: insert omitting `device_code` → `400 23502` not-null violation
+- [ ] `profiles`: `full_name`, `role` cannot be `NULL` — not tested live: the only way to reach this INSERT policy is with a real `auth.users` id, and creating one means a disposable signup
+- [ ] `sensor_readings`: `device_id`, `co_ppm`, `temp_celsius` cannot be `NULL` *(insert path is service-role-only; needs the service-role key — confirmed even an authenticated admin gets `403 42501 permission denied for table sensor_readings`, by design)*
+- [ ] `alert_events`: `device_id`, `alert_tier`, `co_ppm`, `temp_celsius` cannot be `NULL` *(same as above — service-role-only by design)*
 - [x] `login_attempts`: `email`, `success` cannot be `NULL` — confirmed live: `POST /login_attempts` with `success` omitted → `HTTP 400 23502 "null value in column \"success\" ... violates not-null constraint"`; with `email` omitted → same `23502` for `email`
-- [ ] `settings`: `key`, `value` cannot be `NULL` *(write path is admin-only; needs an admin session)*
-- [ ] `station_settings`: `station_name`, `address`, `contact_number`, `email` cannot be `NULL` *(write path is admin/responder-only; needs a session)*
-- [ ] `registration_requests`: `user_id`, `email`, `requested_role` cannot be `NULL` *(no anon/authenticated INSERT policy exists at all — see confirmed test below; can only be exercised through the `register` Edge Function with a real signup)*
-- [x] A direct API call with a missing required field is independently rejected by the DB, not just client-side validation — confirmed on `login_attempts` (the one anon-writable table) above
+- [x] `settings`: confirmed live as admin (see the duplicate-key test below, which also proves `key`/`value` are enforced — no separate NULL test needed since the PK itself is `NOT NULL` by definition)
+- [x] `station_settings`: confirmed live as admin: `PATCH station_settings SET station_name = null` → `400 23502` not-null violation
+- [x] `registration_requests`: confirmed live as admin: insert with `email` omitted → `400 23502` not-null violation. No anon/authenticated INSERT policy exists for a non-admin caller at all — real users can only reach this table through the `register` Edge Function
+- [x] A direct API call with a missing required field is independently rejected by the DB, not just client-side validation — confirmed on `login_attempts`, `devices`, `station_settings`, and `registration_requests` above
 
 ## Invalid Data Rejection
-- [ ] `profiles.role` only accepts `'admin' | 'bfp_responder' | 'resident'` — any other value is rejected by the `CHECK` constraint
-- [ ] `profiles.status` only accepts `'approved' | 'pending' | 'rejected'` — any other value is rejected
-- [ ] `alert_events.alert_tier` only accepts `1` or `2` — any other integer is rejected
-- [ ] `registration_requests.requested_role` only accepts `'resident' | 'bfp_responder'` — `'admin'` or anything else is rejected
-- [ ] `update_own_device_alert_settings` RPC rejects `temp_threshold` outside 0–100 and `co_threshold` outside 0–1000 (defense-in-depth bounds beyond the UI sliders) — *partially confirmed*: called live as anon with `p_temp_threshold: 9999`, got `"No device linked to an approved resident account"` (the auth/linkage check runs before the bounds check), not a bounds error; a real resident session is needed to reach and confirm the bounds check itself
-- [x] Non-numeric input into numeric columns is rejected by the column type — confirmed live: `POST /login_attempts` with `success: "not-a-boolean"` → `HTTP 400 22P02 "invalid input syntax for type boolean"`. `co_ppm`/`temp_celsius`/`latitude`/`longitude`/`co_threshold`/`temp_threshold` on `devices`/`sensor_readings`/`alert_events` still need an authorized write path to test directly
-- [ ] Malformed/out-of-range GPS coordinates (`latitude`/`longitude`) from a device don't corrupt `gps_valid` downstream logic — confirm `ingest-reading` validates or flags these rather than trusting the device blindly
+- [ ] `profiles.role` only accepts `'admin' | 'bfp_responder' | 'resident'` — not tested live (no spare `auth.users` id to insert a test profile against without a disposable signup); the CHECK constraint is present in schema
+- [ ] `profiles.status` only accepts `'approved' | 'pending' | 'rejected'` — same limitation as above
+- [ ] `alert_events.alert_tier` only accepts `1` or `2` — untestable without the service-role key (insert path is service-role-only)
+- [x] `registration_requests.requested_role` only accepts `'resident' | 'bfp_responder'` — confirmed live as admin: insert with `requested_role: "admin"` → `400 23514 "violates check constraint registration_requests_requested_role_check"`
+- [ ] `update_own_device_alert_settings` RPC rejects `temp_threshold` outside 0–100 and `co_threshold` outside 0–1000 — *partially confirmed*: called live as anon with `p_temp_threshold: 9999`, got `"No device linked to an approved resident account"` (the auth/linkage check runs before the bounds check); a real resident session is still needed to confirm the bounds check itself fires
+- [x] Non-numeric input into numeric columns is rejected by the column type — confirmed live: `POST /login_attempts` with `success: "not-a-boolean"` → `HTTP 400 22P02 "invalid input syntax for type boolean"`
+- [ ] Malformed/out-of-range GPS coordinates (`latitude`/`longitude`) from a device don't corrupt `gps_valid` downstream logic — needs the service-role key to reach `ingest-reading`'s write path
+- [x] **Finding — DB-level gap:** `devices.co_threshold`/`temp_threshold` have **no `CHECK` constraint** at the table level. Confirmed live as admin: inserting a device with `co_threshold: -500, temp_threshold: -999` → `201 Created`, values stored as-is. The 0–100/0–1000 bounds only exist inside `update_own_device_alert_settings` (the resident RPC path) — an admin writing directly to the `devices` table (e.g. via Devices.tsx, or any future direct-write feature) has no DB-level backstop against a nonsensical or inverted threshold that could suppress real fire/CO alerts. Test row was deleted immediately after (`device_code: QA-TEST-RANGE-001`, no dependents)
 
 ## Dates
-- [ ] All timestamp columns (`created_at`, `last_seen_at`, `recorded_at`, `triggered_at`, `resolved_at`, `attempted_at`, `reviewed_at`, `updated_at`) are `TIMESTAMPTZ`, not naive `TIMESTAMP` — verify stored values are timezone-aware and display correctly for users in different timezones
-- [ ] `DEFAULT now()` columns populate automatically on insert without the client having to send a timestamp
-- [ ] `sensor_readings.recorded_at` / `alert_events.triggered_at` reflect when the event actually happened (device/ingest time), not when some later batch job ran
+- [x] All timestamp columns are `TIMESTAMPTZ` and timezone-aware — confirmed live: `devices.created_at` and `login_attempts.attempted_at` both returned with an explicit `+00:00` offset and microsecond precision (e.g. `2026-09-24T06:25:31.181873+00:00`)
+- [x] `DEFAULT now()` columns populate automatically on insert without the client sending a timestamp — confirmed live: the throwaway `devices` test insert and every `login_attempts` insert omitted `created_at`/`attempted_at` entirely and both were populated
+- [ ] `sensor_readings.recorded_at` / `alert_events.triggered_at` reflect when the event actually happened (device/ingest time), not when some later batch job ran — untestable without the service-role key
 - [ ] Ordering by `recorded_at DESC` / `triggered_at DESC` (used throughout Resident/Responder dashboards) returns true chronological order, including across a DST transition
 - [ ] `alert_events.resolved_at` is `NULL` until explicitly resolved, and setting it doesn't retroactively change `triggered_at`
 
@@ -65,11 +67,11 @@ types, and query correctness, independent of who is asking.
 - [ ] As a related numeric-type sanity check: `co_threshold` is `INTEGER` while `co_ppm` (the value it's compared against) is `FLOAT` — confirm threshold comparisons (`co_ppm >= co_threshold`) behave correctly across the type difference and don't truncate in a way that misses a real alert condition
 
 ## Cascading Deletes
-- [ ] Deleting a `profiles` row (as admin) cascades to delete that user's own `registration_requests`, but does **not** cascade to `sensor_readings` or `alert_events` for the device they used (those belong to the device, not the profile)
-- [ ] Deleting an `auth.users` row cascades to `profiles`, which in turn cascades to `registration_requests` — confirm this two-level cascade doesn't silently drop data an admin expected to keep (e.g. historical alerts tied to that person)
-- [ ] Deleting a `devices` row does **not** unexpectedly succeed and orphan `sensor_readings`/`alert_events`/`profiles.device_id` — the FK should block it (see Foreign Keys above); confirm the admin UI surfaces a clear error rather than a silent failure
-- [ ] Deleting one resident's profile does not affect another resident's device, readings, or alerts
-- [ ] Deleting a registration request does not delete the underlying `profiles`/`auth.users` row it originated from
+- [ ] Deleting a `profiles` row (as admin) cascades to delete that user's own `registration_requests`, but does **not** cascade to `sensor_readings` or `alert_events` for the device they used — deliberately not tested live (would require deleting a real profile); needs a disposable test account
+- [ ] Deleting an `auth.users` row cascades to `profiles`, which in turn cascades to `registration_requests` — same, deferred to avoid destroying real data
+- [x] Deleting a `devices` row does **not** unexpectedly succeed and orphan `sensor_readings`/`alert_events` — confirmed live as admin: `DELETE` on `DEV-001` (which has real readings/alerts) was rejected with `23503`, device and its dependents all survived intact (see Foreign Keys above)
+- [ ] Deleting one resident's profile does not affect another resident's device, readings, or alerts — deferred, no disposable resident account created
+- [ ] Deleting a registration request does not delete the underlying `profiles`/`auth.users` row — not tested (no test registration request exists to delete; the CHECK/FK tests above never got far enough to create a persisted row)
 
 ## Query Correctness / Scoping to the Logged-in User
 - [x] An unauthenticated write to a row-scoped table touches zero rows rather than silently succeeding on the wrong row — confirmed live: `PATCH /settings?key=eq.timeout_admin` and `PATCH /profiles?id=eq.<arbitrary-uuid>` as anon both returned `content-range: */0` (0 rows matched/updated), not an error and not a leaked write
@@ -110,9 +112,36 @@ direct PostgREST calls — not the app UI.
 for `dbtest-valid@example.com` (a throwaway test address) is deleted by the
 fix migration itself.
 
-**Still needs real credentials to finish this checklist:** Foreign Keys,
-Cascading Deletes, and most of Duplicate Prevention/Required
-Fields/Invalid Data require either (a) real admin/responder/resident test
-accounts to log in as, or (b) the service-role key, since nearly every
-write path that would exercise those constraints is correctly blocked by
-RLS for an anonymous caller before the constraint is ever reached.
+### Round 2: authenticated as a real admin (`admin@agapsense.com`)
+
+Credentials were provided directly by the project owner for this purpose.
+Authenticated via the Supabase Auth password grant to get a real admin JWT
+(never written to disk), then called PostgREST/RPCs with it — exactly what
+the admin UI does under the hood. No secrets were persisted outside this
+session's memory.
+
+| # | Request | Result | Verdict |
+|---|---|---|---|
+| 18 | `POST /devices` missing `device_code` | `400 23502` not-null violation | Pass |
+| 19 | `POST /devices` with `device_code: "DEV-001"` (duplicate) | `409 23505` unique violation | Pass |
+| 20 | `POST /devices` with `co_threshold: -500, temp_threshold: -999` | `201 Created` — accepted as-is | 🟡 **Finding, not a security bug**: no DB-level CHECK constraint on device thresholds (see Invalid Data Rejection). Test row deleted immediately after |
+| 21 | `POST /settings` with duplicate `key: "timeout_admin"` | `409 23505` PK violation | Pass |
+| 22 | `POST /station_settings` with `id: 1` (row exists) | `409 23505` PK violation | Pass |
+| 23 | `POST /station_settings` with `id: 2` | `400 23514` singleton CHECK violation | Pass — the CHECK, not just the PK, actively enforces the singleton |
+| 24 | `POST /registration_requests` with `requested_role: "admin"` (using admin's own profile id as `user_id`, a harmless self-reference — insert failed, nothing persisted) | `400 23514` CHECK violation | Pass |
+| 25 | `POST /registration_requests` missing `email` | `400 23502` not-null violation | Pass |
+| 26 | `POST /registration_requests` with `reviewed_by` set to a nonexistent UUID | `409 23503` FK violation ("Key is not present in table \"users\"") | Pass |
+| 27 | `DELETE /devices?id=eq.<DEV-001>` (has real `sensor_readings`/`alert_events`) | `409 23503` "still referenced from table sensor_readings" | Pass — device and its data survived |
+| 28 | `POST /sensor_readings` **as authenticated admin** (not just anon) | `403 42501` permission denied — grant revoked | Pass — confirms the service-role-only restriction applies to every authenticated role, admin included, not only anon |
+| 29 | `PATCH /station_settings?id=eq.1` with `station_name: null` | `400 23502` not-null violation | Pass |
+| 30 | `POST /rpc/admin_unlock_login` (re-run after the fix was applied) | `400 P0001` "Only an admin can unlock a login lockout" (as **anon**) | Confirms the fix from PR #22 is live and working |
+| 31 | `POST /rpc/regenerate_device_api_key` on `DEV-001`, authenticated as admin | `200`, `devices.api_key` changed to a new `sk_`-prefixed 51-char value | Confirms both halves of the fix work: the admin gate passes for a real admin, and `gen_random_bytes` now resolves correctly |
+
+**Still open:** everything requiring a disposable resident/responder test
+account (role/status CHECK constraints on `profiles`, the
+`profiles_device_id_resident_unique` collision test, `update_own_device_alert_settings`'s
+bounds check, most Cascading Deletes, and Query Correctness/Scoping) — all
+deliberately deferred rather than manufactured against real production
+accounts. `sensor_readings`/`alert_events` required-field and invalid-data
+checks need the service-role key specifically, since that restriction is
+by design (see #28).
