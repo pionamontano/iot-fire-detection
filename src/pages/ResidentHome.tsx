@@ -2,10 +2,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Device, AlertEvent, SensorReading } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  Wifi, WifiOff, ShieldAlert, BellRing, Clock, 
-  MapPin, Activity, CheckCircle2, AlertTriangle, 
-  Battery, Signal, Zap, Shield, PhoneCall, RefreshCw, XCircle, Cpu
+import {
+  Wifi, WifiOff, ShieldAlert, BellRing, Clock,
+  MapPin, Activity, CheckCircle2, AlertTriangle,
+  Battery, Signal, Zap, Shield, PhoneCall, RefreshCw, XCircle, Cpu, Loader2
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -334,24 +334,35 @@ export const ResidentHome = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-8">
-              <ProgressBar 
-                label="AMBIENT TEMPERATURE" 
-                value={latestReading?.temp_celsius ?? 0} 
-                unit="°C" 
-                max={100} 
-                threshold={device.temp_threshold} 
-                isCritical={(latestReading?.temp_celsius ?? 0) >= device.temp_threshold}
-              />
-              <ProgressBar 
-                label="PARTICULATE DENSITY" 
-                value={latestReading?.co_ppm ?? 0} 
-                unit="PPM" 
-                max={1000} 
-                threshold={device.co_threshold} 
-                isCritical={(latestReading?.co_ppm ?? 0) >= device.co_threshold}
-              />
-            </div>
+            {latestReading?.sensor_ready === false ? (
+              // MQ-7 warm-up window (spec SW-2.1.1/SW-2.4.5): raw values and
+              // threshold bars are unreliable/unset until sensor_ready flips
+              // true, so show a placeholder instead of misleading numbers.
+              <div className="flex flex-col items-center justify-center gap-3 py-12 mb-8 text-center">
+                <Loader2 className="w-6 h-6 text-[#00799C] animate-spin" />
+                <span className="text-sm font-bold text-[#52525B] uppercase tracking-wider">Initializing sensors...</span>
+                <span className="text-xs text-[#A1A1AA] max-w-xs">MQ-7 gas sensor is warming up. Live readings and thresholds will appear once calibration completes.</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-8">
+                <ProgressBar
+                  label="AMBIENT TEMPERATURE"
+                  value={latestReading?.temp_celsius ?? 0}
+                  unit="°C"
+                  max={100}
+                  threshold={device.temp_threshold}
+                  isCritical={(latestReading?.temp_celsius ?? 0) >= device.temp_threshold}
+                />
+                <ProgressBar
+                  label="PARTICULATE DENSITY"
+                  value={latestReading?.co_ppm ?? 0}
+                  unit="PPM"
+                  max={1000}
+                  threshold={device.co_threshold}
+                  isCritical={(latestReading?.co_ppm ?? 0) >= device.co_threshold}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-[#F4F4F5]">
               <div className="flex items-center gap-3">

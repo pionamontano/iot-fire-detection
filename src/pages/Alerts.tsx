@@ -12,6 +12,7 @@ import {
   Pencil,
   Power,
   ShieldCheck,
+  BatteryWarning,
   ExternalLink,
   ChevronLeft,
   ChevronRight,
@@ -51,6 +52,9 @@ export const Alerts = () => {
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const now = useNowTick();
+  // device_id -> latest on_battery (spec HW-1.5.2/SW-2.4.4 — previously
+  // this indicator existed only on Resident/Responder views, never Admin)
+  const [batteryByDevice, setBatteryByDevice] = useState<Record<string, boolean>>({});
 
   // New states for functionality
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -63,13 +67,27 @@ export const Alerts = () => {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [devicesRes, alertsRes] = await Promise.all([
+    const [devicesRes, alertsRes, batteryRes] = await Promise.all([
       supabase.from('devices').select('*').order('created_at', { ascending: false }),
       supabase.from('alert_events').select('*, devices(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
+      // Latest readings across devices, to derive each device's current
+      // on_battery state (no per-device "latest reading" view exists, so
+      // the most recent batch is reduced client-side below).
+      supabase.from('sensor_readings')
+        .select('device_id, on_battery, recorded_at')
+        .order('recorded_at', { ascending: false })
+        .limit(300),
     ]);
 
     setRawDevices(devicesRes.data || []);
     setAlerts((alertsRes.data || []) as unknown as AlertEvent[]);
+    if (batteryRes.data) {
+      const latestByDevice: Record<string, boolean> = {};
+      for (const r of batteryRes.data) {
+        if (!(r.device_id in latestByDevice)) latestByDevice[r.device_id] = r.on_battery;
+      }
+      setBatteryByDevice(latestByDevice);
+    }
     setLoading(false);
   }, []);
 
@@ -312,10 +330,17 @@ export const Alerts = () => {
                             </span>
                           </td>
                           <td className="px-5 py-4 align-top">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-bold" style={{ color: cfg.color }}>
-                              <span className={`w-2 h-2 rounded-full ${cfg.dot}`}></span>
-                              {cfg.label}
-                            </span>
+                            <div className="flex flex-col gap-1 items-start">
+                              <span className="inline-flex items-center gap-1.5 text-xs font-bold" style={{ color: cfg.color }}>
+                                <span className={`w-2 h-2 rounded-full ${cfg.dot}`}></span>
+                                {cfg.label}
+                              </span>
+                              {batteryByDevice[device.id] && (
+                                <span title="Running on backup battery" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] text-[9px] font-bold uppercase tracking-wide">
+                                  <BatteryWarning className="w-3 h-3" /> Battery
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-5 py-4 align-top">
                             <div className="flex items-center gap-3 text-[#A1A1AA]">
