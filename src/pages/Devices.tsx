@@ -326,7 +326,8 @@ export const Devices = () => {
                 devices.slice(0, 5).map(device => (
                   <div
                     key={device.id}
-                    className="bg-white rounded flex items-center gap-4 p-4 group hover:shadow-sm transition-shadow"
+                    onClick={() => openEditDevice(device)}
+                    className="bg-white rounded flex items-center gap-4 p-4 group hover:shadow-sm transition-shadow cursor-pointer"
                   >
                     {/* Icon */}
                     <div className="w-12 h-12 bg-[#EBE7E7] rounded-sm flex items-center justify-center shrink-0">
