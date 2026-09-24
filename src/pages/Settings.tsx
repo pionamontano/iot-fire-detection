@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Save, Clock, ShieldCheck, Activity, UserCheck, BellRing, Settings as SettingsIcon } from 'lucide-react';
+import { Save, Clock, ShieldCheck, Activity, UserCheck, BellRing, Settings as SettingsIcon, Unlock } from 'lucide-react';
 import { SettingsFormSkeleton } from '../components/SkeletonLoaders';
 
 export const Settings = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Manual unlock for a login-rate-limit lockout (spec SW-2.6.2's
+  // "requiring Administrator intervention") — the lockout itself is
+  // otherwise purely time-window based and only expires on its own.
+  const [unlockEmail, setUnlockEmail] = useState('');
+  const [unlocking, setUnlocking] = useState(false);
+  const [unlockMessage, setUnlockMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -27,6 +34,21 @@ export const Settings = () => {
 
   const handleChange = (key: string, value: string) => {
     setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleUnlock = async () => {
+    const email = unlockEmail.trim();
+    if (!email) return;
+    setUnlocking(true);
+    setUnlockMessage(null);
+    const { error } = await supabase.rpc('admin_unlock_login', { p_email: email });
+    if (error) {
+      setUnlockMessage('Failed: ' + error.message);
+    } else {
+      setUnlockMessage(`${email} can now sign in again immediately.`);
+      setUnlockEmail('');
+    }
+    setUnlocking(false);
   };
 
   const handleSave = async () => {
@@ -129,6 +151,39 @@ export const Settings = () => {
                   <p className="text-xs text-text-warm mt-2">Time before a node is marked offline. Managed by Edge Functions.</p>
                 </div>
               </div>
+            </div>
+
+            {/* Account Lockouts */}
+            <div className="pt-8 border-t border-border">
+              <h4 className="text-xs font-bold text-text-body uppercase tracking-[0.1em] mb-1 flex items-center gap-2">
+                <Unlock className="w-3.5 h-3.5" />
+                Account Lockouts
+              </h4>
+              <p className="text-xs text-text-warm mb-5">
+                A locked-out account (7+ failed logins) normally clears itself after 15 minutes.
+                Enter the account's email to lift the lockout immediately.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                <input
+                  type="email"
+                  placeholder="user@example.com"
+                  value={unlockEmail}
+                  onChange={(e) => setUnlockEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+                  className="flex-1 w-full sm:w-auto bg-surface-card border border-border rounded-md px-4 py-2.5 text-sm text-text focus:border-teal focus:ring-1 focus:ring-teal/30 transition-all"
+                />
+                <button
+                  onClick={handleUnlock}
+                  disabled={unlocking || !unlockEmail.trim()}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-border text-text-body text-sm font-bold hover:bg-surface-alt transition-colors disabled:opacity-50 shrink-0"
+                >
+                  <Unlock className="w-4 h-4" />
+                  {unlocking ? 'Unlocking...' : 'Unlock Account'}
+                </button>
+              </div>
+              {unlockMessage && (
+                <p className={`text-xs font-semibold mt-3 ${unlockMessage.startsWith('Failed') ? 'text-[#DC2626]' : 'text-teal'}`}>{unlockMessage}</p>
+              )}
             </div>
 
           </div>
