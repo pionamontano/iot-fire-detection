@@ -50,10 +50,10 @@ delete from public.devices;
 insert into public.devices
   (device_code, label, location_desc, latitude, longitude, co_threshold, temp_threshold, bfp_contact, is_active)
 values
-  ('AGS-001', 'Unit 1 — Barangay Hall',      'Barangay Holy Spirit Hall, Commonwealth Ave, Quezon City',        14.6994, 121.0800, 200, 60.0, '+63 2 8555 1234', true),
-  ('AGS-002', 'Unit 2 — Public Market',      'Holy Spirit Public Market, Quezon City',                          14.6971, 121.0765, 200, 60.0, '+63 2 8555 1234', true),
-  ('AGS-003', 'Unit 3 — Elementary School',  'Holy Spirit Elementary School, Quezon City',                      14.7015, 121.0822, 200, 60.0, '+63 2 8555 1234', true),
-  ('AGS-004', 'Unit 4 — Health Center',      'Barangay Holy Spirit Health Center, Quezon City',                 14.6958, 121.0791, 200, 60.0, '+63 2 8555 1234', true),
-  ('AGS-005', 'Unit 5 — Residential Block A','Residential Block A, Commonwealth Ave, Quezon City',              14.7002, 121.0748, 200, 60.0, '+63 2 8555 1234', true);
+  ('AGS-001', 'Unit 1 — Barangay Hall',      'Barangay Look Hall, Malolos City, Bulacan',              14.8447, 120.8112, 200, 60.0, '+63 44 791 1234', true),
+  ('AGS-002', 'Unit 2 — Public Market',      'Malolos Public Market, Malolos City, Bulacan',           14.8461, 120.8148, 200, 60.0, '+63 44 791 1234', true),
+  ('AGS-003', 'Unit 3 — Elementary School',  'Malolos Elementary School, Malolos City, Bulacan',       14.8478, 120.8130, 200, 60.0, '+63 44 791 1234', true),
+  ('AGS-004', 'Unit 4 — Health Center',      'Malolos City Health Center, Malolos City, Bulacan',      14.8455, 120.8095, 200, 60.0, '+63 44 791 1234', true),
+  ('AGS-005', 'Unit 5 — Residential Block A','Residential Block A, Sto. Rosario, Malolos City, Bulacan', 14.8502, 120.8090, 200, 60.0, '+63 44 791 1234', true);
 
 commit;
