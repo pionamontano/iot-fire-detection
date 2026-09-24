@@ -330,13 +330,10 @@ export const Login = () => {
                 </div>
               )}
 
-              <div className="text-center mt-2 group relative inline-block mx-auto">
-                <button type="button" className="text-[#534341] text-xs hover:text-[#231918] transition-colors">
+              <div className="text-center mt-2">
+                <Link to="/forgot-password" className="text-[#534341] text-xs hover:text-[#231918] transition-colors">
                   Forgot password?
-                </button>
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1 bg-[#231918] text-white text-[10px] rounded whitespace-nowrap pointer-events-none">
-                  Contact your administrator to reset your password.
-                </div>
+                </Link>
               </div>
             </div>
           </form>

@@ -31,6 +31,8 @@ import { SessionExpired } from './pages/SessionExpired';
 import { RegisterResident } from './pages/RegisterResident';
 import { RegisterResponder } from './pages/RegisterResponder';
 import { PendingApproval } from './pages/PendingApproval';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 
 function App() {
   return (
@@ -43,6 +45,8 @@ function App() {
           <Route path="/register/responder" element={<RegisterResponder />} />
           <Route path="/pending-approval" element={<PendingApproval />} />
           <Route path="/session-expired" element={<SessionExpired />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Admin Routes */}
           <Route element={<AuthGuard allowedRoles={['admin']} />}>
