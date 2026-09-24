@@ -144,14 +144,14 @@ void gsmSendOwnerSms(float co_ppm, float temp_c,
             "BANTAY APOY ALERTO!\n"
             "Lumayas na agad. CO:%.0fppm Temp:%.1fC\n"
             "Lokasyon: %.60s\n"
-            "maps.google.com/?q=%.5f,%.5f",
+            "https://maps.google.com/?q=%.5f,%.5f",
             co_ppm, temp_c, address, lat, lng
         );
     } else {
         snprintf(msg, sizeof(msg),
             "BANTAY APOY ALERTO!\n"
             "Lumayas na agad. CO:%.0fppm Temp:%.1fC\n"
-            "Lokasyon: maps.google.com/?q=%.5f,%.5f",
+            "Lokasyon: https://maps.google.com/?q=%.5f,%.5f",
             co_ppm, temp_c, lat, lng
         );
     }
@@ -180,7 +180,7 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
             "Time:%s\n"
             "CO:%.0fppm Temp:%.1fC\n"
             "GPS:%.5f,%.5f %.50s\n"
-            "maps.google.com/?q=%.5f,%.5f",
+            "https://maps.google.com/?q=%.5f,%.5f",
             DEVICE_ID, timeStr,
             co_ppm, temp_c,
             lat, lng, address,
@@ -192,7 +192,7 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
             "Time:%s\n"
             "CO:%.0fppm Temp:%.1fC\n"
             "GPS:%.5f,%.5f\n"
-            "maps.google.com/?q=%.5f,%.5f",
+            "https://maps.google.com/?q=%.5f,%.5f",
             DEVICE_ID, timeStr,
             co_ppm, temp_c,
             lat, lng,
