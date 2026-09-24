@@ -59,14 +59,40 @@ their original value (`60`) immediately after.
 | 28 | Browser console during #27 | No errors; pure client-side navigation race | Root cause: `AuthGuard` re-renders on `session` becoming null (from `signOut()`) and its own `<Navigate to="/login">` overrides the idle-timeout hook's `navigate('/session-expired')` |
 | 29 | Same idle-timeout test, re-run after swapping the order in `useIdleTimeout.ts` (navigate first, `signOut()` after) | Landed on `/session-expired` correctly | Pass — fix confirmed live |
 
+## Round 2 — server-side login lockout enforcement (`login` Edge Function)
+
+Follow-up pass, once finding #3 below got its own fix. All requests direct
+to the deployed `login` function (`POST /functions/v1/login`), not the
+browser — the Edge Function *is* the thing under test here.
+
+| # | Test | Result | Verdict |
+|---|---|---|---|
+| 30 | `POST /functions/v1/login` with correct admin credentials | `200`, real `access_token`/`refresh_token` returned | Pass — the function correctly proxies a real sign-in |
+| 31 | 7 direct `POST`s to the deployed function against a fresh disposable email, back-to-back with no waiting | Only **3** rows landed in `login_attempts`; attempts 4–7 all got `429 locked` immediately | 🔴 **Second bug found**, by testing the first fix once deployed — enforcement was no longer skippable, but `check_login_lockout` itself had no time decay, so it stayed stuck at tier 1 forever within the 15-minute window. See fix below |
+| 32 | Full 7-failure escalation, this time with real waits between attempts matching each tier's cooldown (10s → 10s → 30s → 30s), re-run after `20260924090000_fix_login_lockout_escalation.sql` | Failures 3–4 → tier 1 (10s each); failure 5 → tier 2 (30s); failure 6 → tier 2 again (30s); failure 7 → **tier 3, `retry_after_seconds: 900`** | Pass — exactly **7** rows in `login_attempts` this time (verified directly), confirming every cooldown-respecting attempt was recorded and the tiers escalate for real: 3→10s, 4→10s, 5→30s, 6→30s, 7→900s |
+| 33 | Test account unlocked via `admin_unlock_login` afterward | `204` | Cleanup — no account left sitting on a 900s lock |
+
 ## Bugs found and fixed in this pass
 
 1. **Pending/rejected accounts stuck on infinite "Authenticating..."** — `supabase/migrations/20260924070000_fix_own_profile_read_for_pending_rejected.sql`. Lets a user always read their own profile row regardless of status, without reopening the original HIGH-03 vulnerability (bulk-reading *other* users' profiles while unapproved).
 2. **Idle timeout lands on `/login` instead of `/session-expired`** — `src/hooks/useIdleTimeout.ts`. Reordered to navigate before signing out, avoiding the `AuthGuard` redirect race.
+3. **Login lockout had no server-side enforcement** (originally flagged as an architectural gap, not fixed — see below for how it got resolved). The web form's own lockout UX worked as far as tier 1, but a scripted attacker calling Supabase Auth directly was entirely unaffected — `login_attempts`/`check_login_lockout` never gated the real authentication call. Fixed by moving sign-in through a new `login` Edge Function (`supabase/functions/login/index.ts`) that checks the lockout and records the outcome atomically, server-side, with the service role. `login_attempts` INSERT and `check_login_lockout` EXECUTE were also revoked from `anon`/`authenticated` (`20260924080000_lock_down_login_attempts_and_lockout_check.sql`), since only the function needs them now.
+4. **Login lockout tiers didn't escalate even with enforcement fixed** — found by testing fix #3 live once deployed (test #31 above). `check_login_lockout` had no time decay: once a tier's failure count was hit, every check for up to 15 minutes returned the same flat result, since nothing ever let a new attempt through to become the next failure. Fixed in `20260924090000_fix_login_lockout_escalation.sql` by tracking elapsed time since the most recent failure and letting exactly one more real attempt through once the current tier's cooldown has genuinely elapsed. Confirmed live end-to-end (test #32): all three tiers now fire for real.
 
-## Finding flagged for a decision, not fixed
+## Gap confirmed still open — by design, not an oversight
 
-3. **Login lockout has no server-side enforcement** (see the architectural note in `AUTHENTICATION_TESTING.md`). The web form's own lockout UX works as far as tier 1, but a scripted attacker calling Supabase Auth directly is entirely unaffected — `login_attempts`/`check_login_lockout` never gates the real authentication call. Fixing this properly means moving real sign-in through a server-side gate (an Edge Function, or Supabase's native rate-limiting), which is a larger change than the two bugs above.
+A scripted attacker who skips this app entirely and calls Supabase's own
+`/auth/v1/token?grant_type=password` endpoint directly (with the public
+anon key) is unaffected by any of the above — GoTrue is a separate service
+with no reach into this project's Postgres policies or Edge Functions.
+Checked the project's actual Supabase dashboard settings (Authentication →
+Rate Limits): "Rate limit for sign-ups and sign-ins" is **30 requests / 5
+min per IP** (the Supabase default), which is real but looser than this
+app's own per-email tier-1 threshold (3 failures). Deliberately left
+as-is per the project owner's decision — tightening it risks locking out
+multiple legitimate users (e.g. BFP responders) sharing a station's IP,
+and Supabase's CAPTCHA/Attack Protection feature would be the more
+targeted lever if this is revisited later.
 
 ## Still not independently testable
 
