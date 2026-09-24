@@ -138,14 +138,18 @@ void gsmSendOwnerSms(float co_ppm, float temp_c,
 {
     char msg[200];
     if (address && address[0] != '\0') {
-        // Truncate to keep the whole message within a comfortable single
-        // SMS segment even with a long Nominatim display_name.
+        // Maps link comes before the address, not after: no concatenated-SMS
+        // setup exists on this module (plain AT+CMGS text mode), so a message
+        // this long risks silent truncation at the single-segment ~160 GSM-7
+        // char boundary. If it's cut, this ordering means only the address's
+        // tail is lost — the link (the one thing the spec calls mandatory in
+        // every message) always survives intact.
         snprintf(msg, sizeof(msg),
             "BANTAY APOY ALERTO!\n"
             "Lumayas na agad. CO:%.0fppm Temp:%.1fC\n"
-            "Lokasyon: %.60s\n"
-            "https://maps.google.com/?q=%.5f,%.5f",
-            co_ppm, temp_c, address, lat, lng
+            "https://maps.google.com/?q=%.5f,%.5f\n"
+            "Lokasyon: %.40s",
+            co_ppm, temp_c, lat, lng, address
         );
     } else {
         snprintf(msg, sizeof(msg),
@@ -172,30 +176,34 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
     char msg[220];
     // Device ID, server timestamp (the ESP32 has no RTC/NTP of its own —
     // triggered_at comes from trigger-alert's response), sensor readings,
-    // coordinates, and reverse-geocoded address when available (SW-2.2.2).
+    // maps link (which already encodes lat/lng — no separate "GPS:" line;
+    // every byte matters here, see below), and reverse-geocoded address
+    // when available (SW-2.2.2).
     const char* timeStr = (triggeredAt && triggeredAt[0] != '\0') ? triggeredAt : "unknown";
     if (address && address[0] != '\0') {
+        // Address is appended last, after the maps link, for the same
+        // truncation-safety reason as gsmSendOwnerSms() above — no
+        // concatenated-SMS setup exists, so if this gets cut at the
+        // module/network's single-segment (~160 GSM-7 char) limit, only
+        // the address's tail is lost, never the link.
         snprintf(msg, sizeof(msg),
             "BFP ALERT [%s]\n"
             "Time:%s\n"
             "CO:%.0fppm Temp:%.1fC\n"
-            "GPS:%.5f,%.5f %.50s\n"
-            "https://maps.google.com/?q=%.5f,%.5f",
+            "https://maps.google.com/?q=%.5f,%.5f\n"
+            "Loc:%.40s",
             DEVICE_ID, timeStr,
             co_ppm, temp_c,
-            lat, lng, address,
-            lat, lng
+            lat, lng, address
         );
     } else {
         snprintf(msg, sizeof(msg),
             "BFP ALERT [%s]\n"
             "Time:%s\n"
             "CO:%.0fppm Temp:%.1fC\n"
-            "GPS:%.5f,%.5f\n"
             "https://maps.google.com/?q=%.5f,%.5f",
             DEVICE_ID, timeStr,
             co_ppm, temp_c,
-            lat, lng,
             lat, lng
         );
     }
