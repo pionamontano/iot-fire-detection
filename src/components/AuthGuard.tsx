@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import type { Role } from '../lib/supabase';
 
 interface AuthGuardProps {
@@ -10,6 +11,11 @@ interface AuthGuardProps {
 export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
   const { session, profile, loading, signOut } = useAuth();
   const location = useLocation();
+
+  // Enforced here (rather than per-page) so it covers every protected route
+  // regardless of role, using this instance's Outlet. Only active once a
+  // session + approved profile actually exist.
+  useIdleTimeout(profile?.role, Boolean(session && profile && profile.status === 'approved'));
 
   if (loading) {
     return (
