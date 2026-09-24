@@ -489,6 +489,10 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                          ctx->alertRiseCount, ALERT_DEBOUNCE_COUNT,
                          (int)tier2Now, (int)tier1Now);
                     if (ctx->alertRiseCount >= ALERT_DEBOUNCE_COUNT) {
+                        // New incident starting from CLEAR — forget any
+                        // id from a previous, already-resolved alert so
+                        // it can never leak into this one's SMS reports.
+                        memset(ctx->lastAlertEventId, 0, sizeof(ctx->lastAlertEventId));
                         if (tier2Now) {
                             ctx->alertTier      = AlertTier::TIER2;
                             ctx->alertRiseCount = 0;
@@ -587,14 +591,35 @@ void connectivityUpdate(ConnectivityCtx* ctx,
     // [20] GSM task records +CMGS outcome in its result queue — pick
     // up here and POST to backend so sms_sent_owner / sms_sent_bfp
     // reflect real delivery. alert_event_id links to the exact row.
-    if (ctx->deviceState == DeviceState::ONLINE) {
+    //
+    // The drain itself always runs, regardless of connectivity: the
+    // result queue is a fixed SMS_QUEUE_SIZE ring buffer, and leaving it
+    // undrained while OFFLINE (e.g. a busy stretch with repeated Tier 2
+    // re-triggers, each sent over the cellular modem independent of
+    // WiFi) would permanently overflow it. Only the confirm-sms-status
+    // POST itself needs the network, so that part alone is skipped
+    // (not retried) while not ONLINE — same as an empty alert_event_id,
+    // which means this SMS's alert never reached the backend in the
+    // first place, so there's nothing to attach the result to.
+    {
         char role[8];
+        char alertEventId[40];
         bool success;
         for (int i = 0; i < SMS_QUEUE_SIZE; i++) {
-            if (!gsmPopSmsResult(role, sizeof(role), &success)) break;
-            int code = postSmsStatus(role, success, ctx->lastAlertEventId);
-            CLOG("SMS status reported: role=%s success=%d → code=%d",
-                 role, (int)success, code);
+            if (!gsmPopSmsResult(role, sizeof(role),
+                                 alertEventId, sizeof(alertEventId), &success)) break;
+
+            if (ctx->deviceState != DeviceState::ONLINE) {
+                CLOG("SMS result role=%s success=%d dropped — offline",
+                     role, (int)success);
+            } else if (alertEventId[0] == '\0') {
+                CLOG("SMS result role=%s success=%d dropped — no alert_event_id",
+                     role, (int)success);
+            } else {
+                int code = postSmsStatus(role, success, alertEventId);
+                CLOG("SMS status reported: role=%s success=%d event=%s → code=%d",
+                     role, (int)success, alertEventId, code);
+            }
         }
     }
 
@@ -628,13 +653,21 @@ static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const Gps
         CLOG("Tier 2 alert POST: code=%d", code);
     }
 
-    // 2. Queue SMS using freshest contacts — non-blocking
+    // 2. Queue SMS using freshest contacts — non-blocking. Snapshot
+    //    ctx->lastAlertEventId into the job now: it reflects this call's
+    //    own postAlert() result above (or stays empty if we're offline
+    //    or the POST failed). Callers reset it to empty on every
+    //    CLEAR→TIERx transition (see connectivityUpdate()), so it can
+    //    never carry a stale, unrelated alert's id into this SMS.
     uint32_t now = millis();
     if (now - ctx->lastSmsSent_ms >= SMS_DEBOUNCE_MS || ctx->lastSmsSent_ms == 0) {
         ctx->lastSmsSent_ms = now;
-        gsmSendOwnerSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng, ctx->ownerNumber);
-        gsmSendBfpSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng, ctx->bfpNumber);
-        CLOG("Tier 2 SMS queued: owner=%s bfp=%s", ctx->ownerNumber, ctx->bfpNumber);
+        gsmSendOwnerSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng,
+                       ctx->ownerNumber, ctx->lastAlertEventId);
+        gsmSendBfpSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng,
+                     ctx->bfpNumber, ctx->lastAlertEventId);
+        CLOG("Tier 2 SMS queued: owner=%s bfp=%s event=%s", ctx->ownerNumber, ctx->bfpNumber,
+             ctx->lastAlertEventId[0] ? ctx->lastAlertEventId : "(none)");
     } else {
         CLOG("SMS debounced — %lu ms since last send", now - ctx->lastSmsSent_ms);
     }

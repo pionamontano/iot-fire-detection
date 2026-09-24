@@ -86,8 +86,8 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
 
 /** POST an alert (Tier 1 or Tier 2) to trigger-alert. Backend sends
  *  Telegram and resolves the address; alertTier is 1 or 2. Parses
- *  owner_contact/bfp_contact/alert_event_id from the response into
- *  ctx. Returns HTTP code. */
+ *  alert_event_id / owner_contact / bfp_contact from the response and
+ *  stores them in ctx. Returns HTTP code. */
 int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int alertTier);
 
 /** Report one SMS delivery outcome to confirm-sms-status.
