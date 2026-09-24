@@ -1,0 +1,34 @@
+-- =============================================================
+-- CRITICAL fix: devices_safe (20260917020000) masks api_key to
+-- NULL for non-admin roles, but only when the caller queries the
+-- devices_safe VIEW. Row Level Security is row-level, not
+-- column-level: the base `devices` table still carries its own
+-- SELECT policies for bfp_responder ("BFP Responder can read
+-- devices") and resident ("Resident can read own device"), so any
+-- resident or responder can bypass the masking entirely just by
+-- querying `/rest/v1/devices` directly instead of
+-- `/rest/v1/devices_safe` - the exact same rows, full plaintext
+-- api_key included. A responder's policy in particular grants every
+-- device, not just their own, so this exposed every device's IoT
+-- ingestion/alert secret to any approved responder account.
+--
+-- Confirmed live: a disposable resident test account's own device
+-- returned a null api_key via devices_safe, but the real key via a
+-- direct query against devices.
+--
+-- Fix: remove the non-admin SELECT policies from the base table.
+-- devices_safe is a `security_invoker` view, so it still enforces
+-- the same row-level visibility (a resident's own device, a
+-- responder's full list) via the base table's RLS at query time -
+-- only now there is no read path into `devices` left for a
+-- non-admin role to bypass through. Admin access is untouched
+-- ("Admin full access on devices" already covers admin SELECT).
+--
+-- The one frontend caller that read the base table directly for a
+-- non-admin page (ResidentAccount.tsx, device_code only - no key
+-- involved) is switched to devices_safe in the same change so it
+-- keeps working after this policy is dropped.
+-- =============================================================
+
+drop policy if exists "BFP Responder can read devices" on public.devices;
+drop policy if exists "Resident can read own device" on public.devices;

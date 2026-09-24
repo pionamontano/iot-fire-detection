@@ -31,7 +31,7 @@ export const ResidentAccount = () => {
   }, [profile]);
 
   const fetchDevice = async (id: string) => {
-    const { data } = await supabase.from('devices').select('device_code').eq('id', id).single();
+    const { data } = await supabase.from('devices_safe').select('device_code').eq('id', id).single();
     if (data) setDeviceCode(data.device_code);
   };
 
