@@ -61,12 +61,16 @@ cp config.example.h config.h
 Then edit `config.h`:
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `DEVICE_API_KEY` — from your Supabase
   project and the device row created in the admin dashboard (Devices page).
-- `DEVICE_ID` — must match the device's ID in the `devices` table.
 - `OWNER_SMS_NUMBER_DEFAULT` / `BFP_SMS_NUMBER_DEFAULT` — fallback numbers used
   only until `fetchRemoteConfig()` pulls the real ones from the DB.
-- `SUPABASE_ROOT_CA` — the USERTrust root cert bundled in the example is what
-  Supabase's edge network currently uses; replace it only if Supabase changes
-  their certificate chain and TLS handshakes start failing.
+- `DEVICE_ID` is informational only — the edge functions authenticate by
+  `DEVICE_API_KEY` alone, so a readable label (e.g. `AGS-001`) is fine.
+- `SUPABASE_ROOT_CA` — the example bundles the **GTS Root R4** cert (Google
+  Trust Services, cross-signed by GlobalSign, valid until 2028-01-28), which
+  is the root of the chain Supabase currently serves
+  (`supabase.co` → `WE1` → `GTS Root R4`). Paste **only that one certificate**
+  (not the leaf or the `WE1` intermediate — those rotate). If TLS handshakes
+  start failing, re-extract it (see below).
 
 ---
 
@@ -296,4 +300,22 @@ pio device monitor      # serial monitor at 115200 baud
 | GPS `valid` always false | No sky view / cold-start fix can take minutes outdoors; check `GPS_RX_PIN`/`GPS_TX_PIN` wiring |
 | SMS never sent, `gsmIsRegistered()` false | SIM800L needs a dedicated ~2 A-capable 4.0 V supply with a large (1000 µF+) cap — brownouts during transmit are the most common failure |
 | Alerts never fire despite high readings | Check `sensor_ready` (150 s warm-up) and confirm 3 consecutive readings are required (`ALERT_DEBOUNCE_COUNT`) |
-| TLS handshake failures on all HTTPS calls | Supabase's certificate chain changed — update `SUPABASE_ROOT_CA` in `config.h` |
+| TLS handshake failures on all HTTPS calls | Supabase's certificate chain changed, or the cert block in `config.h` is truncated/contains extra certs — re-extract the root (see below) and update `SUPABASE_ROOT_CA` |
+
+### Re-extracting the CA certificate
+
+Replace `<ref>` with your project ref (the part before `.supabase.co`).
+
+```powershell
+# Windows PowerShell (openssl ships with Git for Windows)
+"" | & "C:\Program Files\Git\usr\bin\openssl.exe" s_client -connect <ref>.supabase.co:443 -showcerts
+```
+
+```bash
+# macOS / Linux
+openssl s_client -connect <ref>.supabase.co:443 -showcerts </dev/null
+```
+
+The output lists the chain as certificates 0, 1, 2. Copy the **last**
+`-----BEGIN CERTIFICATE-----` … `-----END CERTIFICATE-----` block (the root) into
+`SUPABASE_ROOT_CA`. Don't include openssl's `s:`/`i:`/`v:` label lines.
