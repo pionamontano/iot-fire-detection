@@ -93,7 +93,7 @@ void gsmInit() {
         if (strstr(r, ",1") || strstr(r, ",5")) { reg = true; break; }
         delay(2000);
     }
-    GSMLOG(reg ? "SIM800L registered on network" : "WARN: not registered — SMS will fail");
+    GSMLOG("%s", reg ? "SIM800L registered on network" : "WARN: not registered — SMS will fail");
     gsmSendAT("AT+CSQ", "OK", 1000);  // log signal quality
 }
 
@@ -122,7 +122,8 @@ bool gsmSendSms(const char* to, const char* message) {
     char response[256];
     gsmReadResponse(response, sizeof(response), 15000);
     bool sent = (strstr(response, "+CMGS") != nullptr);
-    GSMLOG(sent ? "SMS sent OK" : "ERROR: SMS send failed — %s", response);
+    if (sent) { GSMLOG("SMS sent OK"); }
+    else      { GSMLOG("ERROR: SMS send failed — %s", response); }
     return sent;
 }
 
