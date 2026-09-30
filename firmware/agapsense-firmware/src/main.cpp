@@ -98,12 +98,13 @@ static void taskGPS(void* pvParams) {
 // ============================================================
 static void taskConnectivity(void* pvParams) {
     LOG("taskConnectivity started on core %d", xPortGetCoreID());
-    esp_task_wdt_add(nullptr);
-
+    // connectivityInit() blocks in WiFiManager's captive portal for up to 180 s,
+    // longer than WDT_TIMEOUT_S, so this task only joins the WDT afterwards.
     // Wait for sensors to initialise before network activity
     vTaskDelay(pdMS_TO_TICKS(5000));
 
     connectivityInit(&g_connCtx);
+    esp_task_wdt_add(nullptr);
 
     for (;;) {
         esp_task_wdt_reset();
@@ -119,8 +120,10 @@ static void taskConnectivity(void* pvParams) {
 // ============================================================
 static void taskGSM(void* pvParams) {
     LOG("taskGSM started on core %d", xPortGetCoreID());
-    esp_task_wdt_add(nullptr);
+    // gsmInit() can block longer than WDT_TIMEOUT_S (boot delay, auto-baud,
+    // up to 30 s network registration), so join the WDT only once it returns.
     gsmInit();
+    esp_task_wdt_add(nullptr);
     for (;;) {
         esp_task_wdt_reset();
         gsmProcessQueue();
