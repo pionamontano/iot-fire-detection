@@ -250,14 +250,22 @@ export const ResidentHome = () => {
   // Calculate uptime (based on last_seen_at freshness)
   const uptimeStr = isOnline ? '99.98%' : 'OFFLINE';
 
+  // Status tiles only reflect the latest reading while the device is actually
+  // reporting. With no reading (or a stale one from an offline device) they show
+  // NO DATA instead of defaulting to a healthy-looking OK / Mains.
+  const hasLiveData = !!latestReading && !!isOnline;
+  const sensorOk = hasLiveData && latestReading?.sensor_ready !== false;
+
   // System integrity items based on real data
   const integrityItems = [
-    { label: 'Heartbeat', status: isOnline ? 'ACTIVE' : 'DOWN', icon: Activity, ok: isOnline },
-    { label: 'Sensor Core', status: latestReading?.sensor_ready !== false ? 'OK' : 'FAULT', icon: CheckCircle2, ok: latestReading?.sensor_ready !== false },
-    { label: 'GPS Sync', status: latestReading?.gps_valid ? 'FIXED' : 'SEARCHING', icon: MapPin, ok: !!latestReading?.gps_valid },
-    { label: 'Network (GSM)', status: isOnline ? 'STRONG' : 'NO SIGNAL', icon: Signal, ok: isOnline },
-    { label: 'Power', status: latestReading?.on_battery ? 'BATTERY' : 'MAINS', icon: Zap, ok: !latestReading?.on_battery },
-    { label: 'Tamper Switch', status: 'SECURE', icon: Shield, ok: true },
+    { label: 'Heartbeat', status: isOnline ? 'ACTIVE' : 'DOWN', icon: Activity, ok: isOnline, noData: false },
+    { label: 'Sensor Core', status: !hasLiveData ? 'NO DATA' : sensorOk ? 'OK' : 'FAULT', icon: CheckCircle2, ok: sensorOk, noData: !hasLiveData },
+    { label: 'GPS Sync', status: !hasLiveData ? 'NO DATA' : latestReading?.gps_valid ? 'FIXED' : 'SEARCHING', icon: MapPin, ok: hasLiveData && !!latestReading?.gps_valid, noData: !hasLiveData },
+    // The device reports over Wi-Fi; there is no GSM signal telemetry, so this
+    // tile is the device's connection to the server (from last_seen_at).
+    { label: 'Device Connection', status: isOnline ? 'CONNECTED' : 'NO CONNECTION', icon: Signal, ok: isOnline, noData: false },
+    { label: 'Power', status: !hasLiveData ? 'NO DATA' : latestReading?.on_battery ? 'BATTERY' : 'MAINS', icon: Zap, ok: hasLiveData && !latestReading?.on_battery, noData: !hasLiveData },
+    { label: 'Tamper Switch', status: 'SECURE', icon: Shield, ok: true, noData: false },
   ];
 
   const timeSinceRefresh = () => {
@@ -369,28 +377,28 @@ export const ResidentHome = () => {
                 <MapPin size={18} className="text-[#00799C]" />
                 <div className="flex flex-col">
                   <span className="text-[9px] font-bold text-[#A1A1AA] uppercase tracking-wider">GPS STATUS</span>
-                  <span className="text-xs font-black text-[#18181B]">{latestReading?.gps_valid ? 'Fixed' : 'Searching'}</span>
+                  <span className="text-xs font-black text-[#18181B]">{!hasLiveData ? 'No data' : latestReading?.gps_valid ? 'Fixed' : 'Searching'}</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Battery size={18} className={latestReading?.on_battery ? 'text-[#DC2626]' : 'text-[#00799C]'} />
+                <Battery size={18} className={!hasLiveData ? 'text-[#A1A1AA]' : latestReading?.on_battery ? 'text-[#DC2626]' : 'text-[#00799C]'} />
                 <div className="flex flex-col">
                   <span className="text-[9px] font-bold text-[#A1A1AA] uppercase tracking-wider">POWER</span>
-                  <span className="text-xs font-black text-[#18181B]">{latestReading?.on_battery ? 'Battery' : 'Mains AC'}</span>
+                  <span className="text-xs font-black text-[#18181B]">{!hasLiveData ? 'No data' : latestReading?.on_battery ? 'Battery' : 'Mains AC'}</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <Signal size={18} className={isOnline ? 'text-[#00799C]' : 'text-[#DC2626]'} />
                 <div className="flex flex-col">
-                  <span className="text-[9px] font-bold text-[#A1A1AA] uppercase tracking-wider">NETWORK</span>
+                  <span className="text-[9px] font-bold text-[#A1A1AA] uppercase tracking-wider">CONNECTION</span>
                   <span className="text-xs font-black text-[#18181B]">{isOnline ? 'Connected' : 'Disconnected'}</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <CheckCircle2 size={18} className={latestReading?.sensor_ready !== false ? 'text-[#00799C]' : 'text-[#DC2626]'} />
+                <CheckCircle2 size={18} className={!hasLiveData ? 'text-[#A1A1AA]' : sensorOk ? 'text-[#00799C]' : 'text-[#DC2626]'} />
                 <div className="flex flex-col">
                   <span className="text-[9px] font-bold text-[#A1A1AA] uppercase tracking-wider">SENSOR</span>
-                  <span className="text-xs font-black text-[#18181B]">{latestReading?.sensor_ready !== false ? 'Ready' : 'Fault'}</span>
+                  <span className="text-xs font-black text-[#18181B]">{!hasLiveData ? 'No data' : sensorOk ? 'Ready' : 'Fault'}</span>
                 </div>
               </div>
             </div>
@@ -492,10 +500,10 @@ export const ResidentHome = () => {
               {integrityItems.map((item, i) => (
                 <div key={i} className="flex items-center justify-between bg-white p-3 rounded shadow-sm">
                   <div className="flex items-center gap-3">
-                    <item.icon size={16} className={item.ok ? 'text-[#00799C]' : 'text-[#DC2626]'} />
+                    <item.icon size={16} className={item.noData ? 'text-[#A1A1AA]' : item.ok ? 'text-[#00799C]' : 'text-[#DC2626]'} />
                     <span className="text-xs font-bold text-[#18181B]">{item.label}</span>
                   </div>
-                  <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${item.ok ? 'bg-[#E0F2FE] text-[#00799C]' : 'bg-[#FEE2E2] text-[#DC2626]'}`}>
+                  <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${item.noData ? 'bg-[#F4F4F5] text-[#71717A]' : item.ok ? 'bg-[#E0F2FE] text-[#00799C]' : 'bg-[#FEE2E2] text-[#DC2626]'}`}>
                     {item.status}
                   </span>
                 </div>
