@@ -1,201 +1,191 @@
-import math, html
-W,H=1900,940
-SYM="#8b1a1a"; WIRE="#2e7d32"; TXT="#111111"; NET="#0b3d91"; FRAME="#777777"; GREY="#555555"
-items=[]   # ('line',pts,color,w) ('rect',x,y,w,h,fill,stroke,sw) ('text',x,y,s,size,anchor,bold,color) ('circ',cx,cy,r,fill,stroke) ('tri',x,y,w,h,dir,fill,stroke)
-def line(pts,c=SYM,w=1.6): items.append(('line',pts,c,w))
-def wire(*pts): line(list(pts),WIRE,1.8)
-def rect(x,y,w,h,fill="none",stroke=SYM,sw=1.6): items.append(('rect',x,y,w,h,fill,stroke,sw))
-def text(x,y,s,size=10,anchor="start",bold=False,color=TXT): items.append(('text',x,y,s,size,anchor,bold,color))
-def dot(x,y,r=3,c=WIRE): items.append(('circ',x,y,r,c,c))
-def tri(x,y,w,h,d="east"): items.append(('tri',x,y,w,h,d,"#ffffff",SYM))
-def T(pt,x,y,rot): # local->global; rot 0 or 90 (x->down)
+import html
+W,H=1900,1100
+SYM="#d35b5b"; WIRE="#5fae82"; TXT="#555555"; FRAME="#e08a8a"; TAGC="#7a9a88"
+items=[]
+def line(pts,c=SYM,w=1.1): items.append(('line',pts,c,w))
+def wire(*pts): line(list(pts),WIRE,1.0)
+def rect(x,y,w,h,fill="none",stroke=SYM,sw=1.1): items.append(('rect',x,y,w,h,fill,stroke,sw))
+def text(x,y,s,size=9,anchor="start",bold=False,color=TXT): items.append(('text',x,y,s,size,anchor,bold,color))
+def dot(x,y,r=2.4,c=WIRE): items.append(('circ',x,y,r,c,c))
+def poly(pts,c=SYM,fill="none"): items.append(('poly',pts,c,fill))
+def T(pt,x,y,rot):
     px,py=pt
     return (x+px,y+py) if rot==0 else (x-py,y+px)
 def tx(x,y,rot,*pts): return [T(p,x,y,rot) for p in pts]
 
-# ---- symbols ----
-def section(x,y,w,h,title):
-    rect(x,y,w,h,"none",FRAME,1.4); text(x+10,y+16,title,13,"start",True)
-def label(x,y,name,side="r",dy=7):   # net label sitting above wire end
-    if side=="r": text(x+3,y-dy,name,10,"start",True,NET)
-    else: text(x-3,y-dy,name,10,"end",True,NET)
-def gnd(x,y):
-    line([(x,y),(x,y+8)]); line([(x-10,y+8),(x+10,y+8)]); line([(x-6,y+13),(x+6,y+13)]); line([(x-2.5,y+18),(x+2.5,y+18)])
-def pwr(x,y,name):   # wire end at (x,y), symbol goes up
-    line([(x,y),(x,y-10)],SYM); line([(x-9,y-10),(x+9,y-10)],SYM); text(x,y-20,name,10,"middle",True)
-def res(x,y,rot,ref,val,L=60,side=1,below=False):
-    a=(L-30)/2; pts=[(0,0),(a,0)]; z=[(a+i*5,(-6 if i%2==0 else 6)) for i in range(1,6)]
-    pts+=[(a,0)]+z+[(a+30,0),(L,0)]; pts=[(0,0),(a,0)]+z+[(a+30,0),(L,0)]
-    line(tx(x,y,rot,*pts))
+# ---------- symbols ----------
+def res(x,y,rot,ref,val,L=60,side=1):
+    a=(L-30)/2; z=[(a+i*5,(-5 if i%2==0 else 5)) for i in range(1,6)]
+    line(tx(x,y,rot,(0,0),(a,0),*z,(a+30,0),(L,0)))
     cx,cy=T((L/2,0),x,y,rot)
-    if rot==0 and below: text(cx,cy+14,ref,10,"middle",True); text(cx,cy+27,val,10,"middle")
-    elif rot==0: text(cx,cy-14,ref,10,"middle",True); text(cx,cy+16,val,10,"middle")
-    else: text(cx+12*side,cy-6,ref,10,"start" if side>0 else "end",True); text(cx+12*side,cy+8,val,10,"start" if side>0 else "end")
-    return T((0,0),x,y,rot),T((L,0),x,y,rot)
+    if rot==0: text(cx,cy-12,ref,9,"middle"); text(cx,cy+13,val,9,"middle")
+    else:
+        an="start" if side>0 else "end"; text(cx+11*side,cy-5,ref,9,an); text(cx+11*side,cy+7,val,9,an)
 def cap(x,y,rot,ref,val,pol=False,L=60,side=1):
     m=L/2
     line(tx(x,y,rot,(0,0),(m-3,0))); line(tx(x,y,rot,(m+3,0),(L,0)))
-    line(tx(x,y,rot,(m-3,-11),(m-3,11))); line(tx(x,y,rot,(m+3,-11),(m+3,11)))
+    line(tx(x,y,rot,(m-3,-10),(m-3,10))); line(tx(x,y,rot,(m+3,-10),(m+3,10)))
     cx,cy=T((m,0),x,y,rot)
-    if pol:
-        px,py=T((m-12,-12),x,y,rot); text(px,py,"+",11,"middle",True)
-    if rot==0: text(cx,cy-18,ref,10,"middle",True); text(cx,cy+22,val,10,"middle")
-    else: text(cx+16*side,cy-6,ref,10,"start" if side>0 else "end",True); text(cx+16*side,cy+8,val,10,"start" if side>0 else "end")
-    return T((0,0),x,y,rot),T((L,0),x,y,rot)
-def led(x,y,ref,val,color="#c00000"):  # horizontal, anode left, 60 long
-    line([(x,y),(x+20,y)]); tri(x+20,y-9,20,18,"east"); line([(x+40,y-9),(x+40,y+9)]); line([(x+40,y),(x+60,y)])
-    line([(x+26,y-12),(x+34,y-20)]); line([(x+34,y-12),(x+42,y-20)])
-    text(x+30,y+24,ref,10,"middle",True); 
-    return (x,y),(x+60,y)
-def ic(x,y,w,ref,title,left=[],right=[],pitch=30,top=30,stub=30,names=True):
-    n=max(len(left),len(right)); h=top+pitch*(n-1)+30 if n else 60
-    rect(x,y,w,h,"#fffbe8",SYM,1.8)
-    text(x,y-8,ref,11,"start",True); text(x+w/2,y+h+13,title,10,"middle",False,GREY)
-    out={}
-    for i,p in enumerate(left):
-        py=y+top+pitch*i; num,nm,key=p
-        line([(x-stub,py),(x,py)]); text(x+5,py,nm,10,"start"); text(x-stub+2,py-7,num,8,"start",False,GREY)
-        out[key]=(x-stub,py)
-    for i,p in enumerate(right):
-        py=y+top+pitch*i; num,nm,key=p
-        line([(x+w,py),(x+w+stub,py)]); text(x+w-5,py,nm,10,"end"); text(x+w+stub-2,py-7,num,8,"end",False,GREY)
-        out[key]=(x+w+stub,py)
-    return out
-def npn(x,y,ref,val):  # base (x,y); C (x+40,y-30); E (x+40,y+30)
+    if pol: px,py=T((m-11,-11),x,y,rot); text(px,py,"+",10,"middle")
+    an="start" if side>0 else "end"; text(cx+14*side,cy-5,ref,9,an); text(cx+14*side,cy+7,val,9,an)
+def led(x,y,ref):
+    line([(x,y),(x+20,y)]); poly([(x+20,y-8),(x+20,y+8),(x+40,y)]); line([(x+40,y-8),(x+40,y+8)]); line([(x+40,y),(x+60,y)])
+    line([(x+25,y-11),(x+32,y-18)]); line([(x+33,y-11),(x+40,y-18)])
+    text(x+30,y+20,ref,9,"middle")
+def npn(x,y,ref,val):
     line([(x,y),(x+20,y)]); line([(x+20,y-14),(x+20,y+14)])
-    line([(x+20,y-6),(x+40,y-18),(x+40,y-30)]); line([(x+20,y+6),(x+40,y+18),(x+40,y+30)])
-    line([(x+34,y+22),(x+40,y+18),(x+33,y+15)])
-    text(x+52,y-4,ref,10,"start",True); text(x+52,y+10,val,10,"start")
-    return (x,y),(x+40,y-30),(x+40,y+30)
-def pmos(x,y,ref,val): # gate (x,y); S (x+46,y-30) top; D (x+46,y+30)
+    line([(x+20,y-6),(x+40,y-18),(x+40,y-30)]); line([(x+20,y+6),(x+40,y+18),(x+40,y+30)]); line([(x+34,y+22),(x+40,y+18),(x+33,y+15)])
+    text(x+50,y-4,ref,9); text(x+50,y+8,val,9)
+def pmos(x,y,ref,val):
     line([(x,y),(x+18,y)]); line([(x+18,y-14),(x+18,y+14)])
     for a,b in ((-14,-8),(-4,4),(8,14)): line([(x+25,y+a),(x+25,y+b)])
     line([(x+25,y-11),(x+46,y-11),(x+46,y-30)]); line([(x+25,y+11),(x+46,y+11),(x+46,y+30)]); line([(x+25,y),(x+46,y),(x+46,y+11)])
     line([(x+35,y-4),(x+25,y),(x+35,y+4)])
-    text(x+58,y-4,ref,10,"start",True); text(x+58,y+10,val,10,"start")
-    return (x,y),(x+46,y-30),(x+46,y+30)
-def cell(x,y,ref=None): # vertical, 30 tall, + on top
-    line([(x,y),(x,y+11)]); line([(x-11,y+11),(x+11,y+11)]); line([(x-6,y+17),(x+6,y+17)],SYM,3.2); line([(x,y+17),(x,y+30)])
-    text(x-14,y+8,"+",10,"end",True)
-def buzzer(x,y,ref,val): # + at (x,y) top, - bottom; 60 tall
+    text(x+56,y-4,ref,9); text(x+56,y+8,val,9)
+def cell(x,y):
+    line([(x,y),(x,y+11)]); line([(x-10,y+11),(x+10,y+11)]); line([(x-6,y+17),(x+6,y+17)],SYM,2.6); line([(x,y+17),(x,y+30)])
+    text(x-13,y+8,"+",9,"end")
+def buzzer(x,y,ref,val):
     line([(x,y),(x,y+14)]); line([(x,y+46),(x,y+60)])
-    items.append(('circ',x,y+30,16,"none",SYM)); text(x,y+28,"+",11,"middle",True)
-    text(x+24,y+26,ref,10,"start",True); text(x+24,y+40,val,10,"start")
+    items.append(('circ',x,y+30,16,"none",SYM)); text(x,y+29,"+",10,"middle")
+    text(x+22,y+24,ref,9); text(x+22,y+36,val,9)
+def rail_up(x,y,name):
+    line([(x,y),(x,y-14)],WIRE,1.0); poly([(x-4,y-8),(x+4,y-8),(x,y-14)],WIRE,WIRE); text(x,y-23,name,9,"middle",False,TXT)
+def gnd_down(x,y,name="GND"):
+    line([(x,y),(x,y+14)],WIRE,1.0); poly([(x-4,y+8),(x+4,y+8),(x,y+14)],WIRE,WIRE); text(x,y+24,name,9,"middle",False,TXT)
+TAGX=1740
+def tag(y,name):
+    w=len(name)*5.6+20
+    poly([(TAGX,y-6),(TAGX+w-8,y-6),(TAGX+w,y),(TAGX+w-8,y+6),(TAGX,y+6)],TAGC,"#ffffff")
+    text(TAGX+6,y,name,8,"start",False,TXT)
+def mod(x,y,w,h,ref,title,top=[],bottom=[]):
+    rect(x,y,w,h,"#ffffff",SYM,1.1); text(x,y-8,ref,9); text(x+w/2,y+h/2,title,8,"middle",False,TXT)
+    o={}
+    for nm,k,dx in top:
+        line([(x+dx,y),(x+dx,y-14)]); text(x+dx,y+9,nm,8,"middle"); o[k]=(x+dx,y-14)
+    for nm,k,dx in bottom:
+        line([(x+dx,y+h),(x+dx,y+h+14)]); text(x+dx,y+h-9,nm,8,"middle"); o[k]=(x+dx,y+h+14)
+    return o
+def ic(x,y,w,ref,title,left=[],right=[],pitch=30,top=30,stub=30,fs=9):
+    n=max(len(left),len(right)); h=top+pitch*(n-1)+top
+    rect(x,y,w,h,"#ffffff",SYM,1.1); text(x,y-8,ref,9); text(x+w/2,y+h+11,title,8,"middle")
+    out={}
+    for i,(nm,key) in enumerate(left):
+        py=y+top+pitch*i; line([(x-stub,py),(x,py)]); text(x+4,py,nm,fs); out[key]=(x-stub,py)
+    for i,(nm,key) in enumerate(right):
+        py=y+top+pitch*i; line([(x+w,py),(x+w+stub,py)]); text(x+w-4,py,nm,fs,"end"); out[key]=(x+w+stub,py)
+    return out
+def bus(y,name,xs,tagname=None):
+    wire((min(xs),y),(TAGX,y)); tag(y,tagname or name)
+    for x in xs: dot(x,y)
+    text(min(xs)+4,y-5,name,8,"start",False,"#3a8a63") if False else None
 
-# ================= SECTIONS =================
-# ---- Power ----
-section(20,20,610,640,"Power: wall adapter → charger → 2S pack → 5 V")
-J=ic(40,70,70,"J1","DC barrel jack",right=[("1","DC+","p"),("2","DC−","m")])
-U5=ic(220,70,100,"U5","HW-370 charger",left=[("1","IN+","ip"),("2","IN−","im")],right=[("3","OUT+","op"),("4","OUT−","om")])
-U6=ic(420,70,100,"U6","2S BMS",left=[("1","P+","pp"),("2","P−","pm")],right=[("3","B+","bp"),("4","BM","bm"),("5","B−","bn")])
-wire(J['p'],U5['ip']); wire(J['m'],U5['im'])
-label(142,100,"DC_IN+","r"); dot(165,130); gnd(165,130)
-wire(U5['op'],U6['pp']); wire(U5['om'],U6['pm']); label(352,100,"PACK+","r"); dot(370,130); gnd(370,130)
-# fix: gnd symbols drawn at wire end
-wire(U6['bp'],(575,100)); wire(U6['bm'],(575,130)); wire(U6['bn'],(575,160))
-cell(575,100); cell(575,130); dot(575,130)
-gnd(575,160)
-text(575,196,"BT1: 2 × 18650 (2S)",10,"middle",True); text(575,210,"3.7 V 2200 mAh each",9,"middle",False,GREY)
-text(40,190,"5 V wall adapter",9,"start",False,GREY)
-U7=ic(180,250,130,"U7","LM2596 buck module",left=[("1","IN+","ip"),("2","IN−","im")],right=[("3","OUT+","op"),("4","OUT−","om")])
-label(150,280,"PACK+","l"); gnd(*U7['im'])
-pwr(*U7['op'],"+5V"); gnd(*U7['om'])
-text(340,330,"adjust output to 5.0 V before connecting loads",9,"start",False,GREY)
-# DC-in sense
-text(40,392,"DC-in / battery sense  (GPIO35, ADC1)",11,"start",True)
-label(100,430,"DC_IN+","r")
-a,b=res(100,430,90,"R1","10 kΩ",side=1)
-dot(100,490); wire((100,490),(200,490)); label(200,490,"BATT_SENSE","r")
-c,d=res(100,490,90,"R2","10 kΩ",side=1); gnd(*d)
-text(40,590,"BATTERY_DIVIDER_RATIO = 2.0 (R1 = R2)",9,"start",False,GREY)
-text(40,604,"GPIO35 is ADC1 / input-only; keep DC_IN+ ≤ 6.6 V",9,"start",False,GREY)
-text(340,350,"U7 OUT+ is the +5V rail",9,"start",False,GREY)
-text(340,364,"(ESP32 VIN, SIM800L, MQ-7 heater)",9,"start",False,GREY)
+# ---------- frame ----------
+rect(15,15,W-30,H-30,"none",FRAME,1.3); rect(55,50,W-110,H-100,"none",FRAME,1.0)
+cw=(W-110)/6
+for i in range(6):
+    cx=55+cw*(i+0.5); text(cx,32,str(i+1),11,"middle",False,FRAME); text(cx,H-32,str(i+1),11,"middle",False,FRAME)
+    if i: 
+        x=55+cw*i; line([(x,15),(x,50)],FRAME,1.0); line([(x,H-50),(x,H-15)],FRAME,1.0)
+rh=(H-100)/5
+for i in range(5):
+    cy=50+rh*(i+0.5); L="ABCDE"[i]; text(35,cy,L,11,"middle",False,FRAME); text(W-35,cy,L,11,"middle",False,FRAME)
+    if i: y=50+rh*i; line([(15,y),(55,y)],FRAME,1.0); line([(W-55,y),(W-15,y)],FRAME,1.0)
+# title block
+bx,by,bw,bh=1330,1002,520,48
+rect(bx,by,bw,bh,"#ffffff",FRAME,1.1); line([(bx,by+24),(bx+bw,by+24)],FRAME,1.0); line([(bx+360,by+24),(bx+360,by+bh)],FRAME,1.0)
+text(bx+10,by+12,"Title:   IoT Fire Detection Node (AgapSense)",11,"start",False,"#444"); 
+text(bx+10,by+36,"Date:   10/2/2026",10,"start",False,"#444"); text(bx+370,by+36,"Sheet:   1/1",10,"start",False,"#444")
+text(75,H-62,"Pin map from firmware/agapsense-firmware/src/config.example.h",10,"start",False,"#c05050")
 
-# ---- ESP32 ----
-section(640,20,460,640,"Microcontroller")
-L=[("","VIN","vin"),("","3V3","v33"),("","GND","gnd"),("","IO35  (ADC1_CH7)","io35")]
-R=[("","IO16  (RX2)","io16"),("","IO17  (TX2)","io17"),("","IO26  (RX1)","io26"),("","IO27  (TX1)","io27"),
-   ("","IO4","io4"),("","IO34  (ADC1_CH6)","io34"),("","IO25  (PWM)","io25"),("","IO14","io14"),("","IO12","io12"),("","IO13","io13"),("","IO32","io32")]
-E=ic(790,70,200,"U1","ESP32 DevKit V1",left=L,right=R,stub=30)
-pwr(*E['vin'],"+5V"); pwr(*E['v33'],"+3V3"); gnd(*E['gnd']); label(*E['io35'],"BATT_SENSE","l")
-nets={'io16':"GPS_TX",'io17':"GPS_RX",'io26':"SIM_TXD",'io27':"SIM_RXD",'io4':"ONEWIRE",'io34':"MQ7_AO",'io25':"MQ7_PWM",'io14':"LED_Y",'io12':"LED_R",'io13':"LED_B",'io32':"BUZZER"}
-for k,v in nets.items(): label(*E[k],v,"r")
-text(660,470,"Net labels with the same name are connected.",9,"start",False,GREY)
-text(660,484,"GPS_TX / SIM_TXD are module outputs into the ESP32 RX pins.",9,"start",False,GREY)
-text(660,498,"Sensor/ADC pins are all ADC1 (ADC2 conflicts with Wi-Fi).",9,"start",False,GREY)
+# ================= TOP BAND =================
+Y5,Y33=95,115
+wire((110,Y5),(TAGX,Y5)); tag(Y5,"+5V"); wire((110,Y33),(TAGX,Y33)); tag(Y33,"+3V3")
+rail_up(1180,Y5,"+5V"); rail_up(1300,Y33,"+3V3")
+TB={n:310+12*i for i,n in enumerate(["GPS_RX","GPS_TX","SIM_TXD","SIM_RXD","ONEWIRE","MQ7_PWM","MQ7_AO","LED_Y","LED_R","LED_B","BUZZER","GND"])}
+drops={n:[] for n in TB}
+def d(net,x,y0):  # vertical drop from y0 to bus
+    wire((x,y0),(x,TB[net])); drops[net].append(x)
+def up(x,y0,rail):
+    wire((x,y0),(x,rail)); dot(x,rail)
+G=mod(110,170,120,70,"U2","GY-GPS6MV2 (NEO-6M)",top=[("VCC","vcc",60)],bottom=[("RX","rx",20),("TX","tx",60),("GND","gnd",100)])
+up(*G['vcc'],Y33); d("GPS_RX",*G['rx']); d("GPS_TX",*G['tx']); d("GND",*G['gnd'])
+S=mod(270,170,120,70,"U3","SIM800L EVB",top=[("VCC","vcc",60)],bottom=[("GND","gnd",20),("TXD","txd",60),("RXD","rxd",100)])
+up(*S['vcc'],Y5); d("GND",*S['gnd']); d("SIM_TXD",*S['txd']); d("SIM_RXD",*S['rxd'])
+cap(430,150,90,"C1","1000µF",pol=True); up(430,150,Y5); d("GND",430,210)
+D=mod(560,170,100,70,"U4","DS18B20",top=[("VDD","vdd",50)],bottom=[("DQ","dq",30),("GND","gnd",70)])
+up(*D['vdd'],Y33); d("ONEWIRE",*D['dq']); d("GND",*D['gnd'])
+res(530,150,90,"R3","4.7k",side=-1); up(530,150,Y33); d("ONEWIRE",530,210)
+# MQ-7 driver
+M=mod(930,170,100,70,"U5","MQ-7 module",top=[("VCC","vcc",20)],bottom=[("AO","ao",30),("GND","gnd",70)])
+pmos(810,180,"Q1","P-MOSFET"); up(856,150,Y5)
+wire((856,210),(900,210),(900,156),M['vcc'][0:2] if False else (950,156))
+npn(750,260,"Q2","NPN"); wire((790,230),(790,180)); dot(790,180); wire((790,180),(810,180))
+res(790,120,90,"R4","10k",side=-1); up(790,120,Y5)
+res(690,260,0,"R5","1k"); wire((750,260),(750,260)); wire((750,260),(750,260))
+d("MQ7_PWM",690,260); d("GND",790,290)
+d("MQ7_AO",*M['ao']); d("GND",*M['gnd'])
+# indicators
+def chain(x0,net,ref,name):
+    yc=235; wire((x0,TB[net]),(x0,yc)); drops[net].append(x0)
+    res(x0,yc,0,"R"+ref,"220",L=50); wire((x0+50,yc),(x0+55,yc)); led(x0+55,yc,"D"+ref+" "+name)
+    d("GND",x0+125,yc); wire((x0+115,yc),(x0+125,yc))
+chain(1070,"LED_Y","6","Yellow"); chain(1220,"LED_R","7","Red"); chain(1370,"LED_B","8","Blue")
+buzzer(1570,235,"BZ1","Buzzer"); wire((1550,TB["BUZZER"]),(1550,235),(1570,235)); drops["BUZZER"].append(1550); d("GND",1570,295)
+for n,y in TB.items():
+    if n=="GND": continue
+    bus(y,n,drops[n])
+bus(TB["GND"],"GND",drops["GND"]+[1000]); gnd_down(1650,TB["GND"])
+text(1060,150,"Tags at the right edge with the same name are the same net.",9,"start",False,"#888")
+text(1060,164,"MQ-7: Q1/Q2 PWM-switch the 5 V heater supply (28 % duty ≈ 1.4 V measure).",9,"start",False,"#888")
 
-# ---- GPS ----
-section(1110,20,360,210,"GPS")
-G=ic(1290,50,100,"U2","GY-GPS6MV2 (NEO-6M)",left=[("1","VCC","vcc"),("2","RX","rx"),("3","TX","tx"),("4","GND","gnd")])
-pwr(*G['vcc'],"+3V3"); label(*G['rx'],"GPS_RX","l"); label(*G['tx'],"GPS_TX","l"); gnd(*G['gnd'])
-text(1130,224,"9600 baud, Serial2 (ESP32 RX2 = IO16, TX2 = IO17)",9,"start",False,GREY)
-# ---- SIM800L ----
-section(1110,240,360,240,"GSM / SMS fallback")
-S=ic(1290,290,100,"U3","SIM800L EVB",left=[("1","VCC","vcc"),("2","GND","gnd"),("3","TXD","txd"),("4","RXD","rxd")])
-pwr(*S['vcc'],"+5V"); gnd(*S['gnd']); label(*S['txd'],"SIM_TXD","l"); label(*S['rxd'],"SIM_RXD","l")
-cap(1415,360,90,"C1","1000µF",pol=True,side=1)
-pwr(1415,360,"+5V"); gnd(1415,420)
-text(1130,466,"9600 baud, Serial1. Needs ~2 A bursts: keep C1 close.",9,"start",False,GREY)
-# ---- DS18B20 ----
-section(1110,490,360,170,"Temperature")
-D=ic(1290,520,100,"U4","DS18B20 terminal module",left=[("1","VDD","vdd"),("2","DQ","dq"),("3","GND","gnd")])
-pwr(*D['vdd'],"+3V3"); gnd(*D['gnd'])
-x0,y0=D['dq']; wire((x0,y0),(x0-70,y0)); dot(x0-40,y0); label(x0-70,y0,"ONEWIRE","l")
-# vertical pull-up going UP from junction: draw by hand
-jx=x0-40; line([(jx,y0),(jx,y0-12)]); 
-zz=[(jx,y0-12)]+[(jx+(6 if i%2==0 else -6),y0-12-(i*5)) for i in range(1,6)]+[(jx,y0-42),(jx,y0-54)]
-line(zz); pwr(jx,y0-54,"+3V3"); text(jx+12,y0-26,"R3",10,"start",True); text(jx+12,y0-13,"4.7 kΩ",10)
-
-# ---- MQ-7 ----
-section(1480,20,400,320,"CO sensor + heater driver")
-M=ic(1780,150,80,"U5","MQ-7 module",left=[("1","VCC","vcc"),("2","AO","ao"),("3","GND","gnd")],stub=30,top=30)
-# Q1 p-mos high-side switch for MQ-7 supply
-g,s,d=pmos(1640,140,"Q1","P-MOSFET")
-pwr(s[0],s[1],"+5V"); wire(d,(d[0],M['vcc'][1])); wire((d[0],M['vcc'][1]),M['vcc']); 
-b,c,e=npn(1580,200,"Q2","NPN")
-dot(1620,140); wire((1620,140),g); wire(c,(1620,140))
-# gate pull-up R4 to +5V
-x=1620; line([(x,140),(x,128)]); zz=[(x,128)]+[(x+(6 if i%2==0 else -6),128-i*5) for i in range(1,6)]+[(x,98),(x,86)]; line(zz); pwr(x,86,"+5V")
-text(x+12,102,"R4",10,"start",True); text(x+12,115,"10 kΩ",10)
-gnd(*e)
-wire(b,(1560,200)); a1,a2=res(1500,200,0,"R5","1 kΩ",below=True); wire(a1,(1490,200)); label(1488,200,"MQ7_PWM","r",dy=16)
-label(*M['ao'],"MQ7_AO","l"); gnd(*M['gnd'])
-text(1500,300,"PWM on IO25: 100 % = 5 V heat, 28 % ≈ 1.4 V measure.",9,"start",False,GREY)
-text(1500,314,"AO swings ≤ 1.4 V → safe for ADC1 (IO34). DO not used.",9,"start",False,GREY)
-# ---- Indicators ----
-section(1480,350,400,310,"Indicators")
-def ledrow(y,net,ref,color,name):
-    wire((1500,y),(1530,y)); label(1500,y,net,"r")
-    p,q=res(1530,y,0,"R"+ref,"220 Ω")
-    wire(q,(1620,y)); a,k=led(1620,y,"D"+ref+"  "+name,"",color); wire(k,(1700,y)); gnd(1700,y)
-ledrow(410,"LED_Y","6","#e6c300","Tier 1 (yellow)")
-ledrow(465,"LED_R","7","#c00000","Tier 2 (red)")
-ledrow(525,"LED_B","8","#0066cc","Wi-Fi (blue)")
-label(1500,572,"BUZZER","r"); wire((1500,572),(1640,572))
-buzzer(1640,572,"BZ1","Active buzzer"); gnd(1640,632)
-text(1672,626,"HIGH = on (Tier 2)",9,"start",False,GREY)
-
-# ---- notes + title block ----
-rect(20,680,1080,240,"none",FRAME,1.4); text(30,696,"Notes",13,"start",True)
-notes=["1. Pin map follows firmware config.example.h: MQ7 AO=34, MQ7 heater PWM=25, DS18B20=4, GPS RX/TX=16/17, SIM800L RX/TX=26/27,",
-"    battery sense=35, LEDs Y/R/B=14/12/13, buzzer=32.",
-"2. UART crossover: ESP32 RX pin (IO16 / IO26) connects to the module TX; ESP32 TX pin (IO17 / IO27) connects to the module RX.",
-"3. GPS VCC on 3V3 (GY-GPS6MV2 accepts 3.3-5 V). DS18B20 needs the 4.7 kΩ pull-up to 3V3 on DQ.",
-"4. MQ-7 high-side driver (Q1/Q2/R4/R5) is a reference design: the firmware only says BJT/MOSFET. Heater Vc is the PWM output, not the 5 V rail.",
-"5. SIM800L chip wants 3.4-4.4 V and ~2 A bursts (firmware guide: dedicated 4.0 V rail). The EVB board is drawn on +5V; confirm its input range.",
-"6. DC-in sense is drawn on the adapter output; the firmware does not say which rail the divider reads. Confirm.",
-"7. Mains path: J1 → HW-370 charger → 2S BMS → 2×18650. PACK+ (6–8.4 V) feeds only the LM2596 buck; never the 5 V pins."]
-for i,n in enumerate(notes): text(30,718+i*20,n,10)
-rect(1110,680,770,240,"none",SYM,2); 
-line([(1110,740),(1880,740)]); line([(1110,800),(1880,800)]); line([(1500,800),(1500,920)]); line([(1700,800),(1700,920)]); line([(1500,860),(1880,860)])
-text(1125,720,"TITLE:  IoT Fire Detection Node (AgapSense)  ESP32",15,"start",True)
-text(1125,766,"Design after the SparkFun RedBoard-style sheet layout",10,"start",False,GREY)
-text(1125,784,"Pin assignments from firmware/agapsense-firmware/src/config.example.h",10,"start",False,GREY)
-text(1125,824,"Document Number:",10,"start",False,GREY); text(1125,845,"FD-NODE-01",12,"start",True)
-text(1510,824,"Rev:",10,"start",False,GREY); text(1510,845,"1.0",12,"start",True)
-text(1710,824,"Sheet:",10,"start",False,GREY); text(1710,845,"1/1",12,"start",True)
-text(1510,880,"Date: 2026-10-02",10); text(1710,880,"Net labels = same net",10)
+# ================= BOTTOM BAND =================
+Y5b,Y33b=500,520
+wire((110,Y5b),(TAGX,Y5b)); tag(Y5b,"+5V"); wire((95,Y33b),(TAGX,Y33b)); tag(Y33b,"+3V3")
+rail_up(1560,Y5b,"+5V"); rail_up(1620,Y33b,"+3V3")
+BB={n:830+12*i for i,n in enumerate(["GPS_TX","GPS_RX","SIM_TXD","SIM_RXD","ONEWIRE","MQ7_AO","MQ7_PWM","LED_Y","LED_R","LED_B","BUZZER","BATT_SENSE","GND"])}
+bd={n:[] for n in BB}
+R=[("IO16 (RX2)","GPS_TX"),("IO17 (TX2)","GPS_RX"),("IO26 (RX1)","SIM_TXD"),("IO27 (TX1)","SIM_RXD"),("IO4","ONEWIRE"),("IO34 (ADC1)","MQ7_AO"),("IO25 (PWM)","MQ7_PWM"),("IO14","LED_Y"),("IO12","LED_R"),("IO13","LED_B"),("IO32","BUZZER")]
+E=ic(140,560,170,"U1","ESP32 DevKit V1",left=[("VIN","vin"),("3V3","v33"),("GND","gnd"),("IO35 (ADC1)","io35")],right=[(a,k) for a,k in R],pitch=18,top=30)
+# right pins to buses (lane order: top pin = rightmost lane, no crossings)
+for k,(nm,net) in enumerate(R):
+    x1,y1=E[net] if False else (340,590+18*k); lane=360+12*(10-k); wire((x1,y1),(lane,y1),(lane,BB[net])); bd[net].append(lane)
+# left pins
+x,y=E['vin']; wire((x,y),(x,Y5b)); dot(x,Y5b)
+x,y=E['v33']; wire((x,y),(95,y),(95,Y33b)); dot(95,Y33b)
+x,y=E['gnd']; wire((x,y),(70,y)); gnd_down(70,y)
+x,y=E['io35']; wire((x,y),(x,BB["BATT_SENSE"])); bd["BATT_SENSE"].append(x)
+# power chain
+J=ic(560,545,60,"J1","DC jack",right=[("DC+","p"),("DC−","m")])
+U5=ic(740,545,100,"U5","HW-370 charger",left=[("IN+","ip"),("IN−","im")],right=[("OUT+","op"),("OUT−","om")])
+U6=ic(930,545,100,"U6","2S BMS",left=[("P+","pp"),("P−","pm")],right=[("B+","bp"),("BM","bm"),("B−","bn")])
+wire(J['p'],U5['ip']); wire(J['m'],U5['im']); wire(U5['op'],U6['pp']); wire(U5['om'],U6['pm'])
+text(655,566,"DC_IN+",8,"start",False,"#3a8a63"); text(885,566,"PACK+",8,"middle",False,"#3a8a63")
+# GND drop from − line
+dot(690,605); wire((690,605),(690,BB["GND"])); bd["GND"].append(690)
+# PACK+ to buck
+U7=ic(1280,545,120,"U7","LM2596 buck module",left=[("IN+","ip"),("IN−","im")],right=[("OUT+","op"),("OUT−","om")])
+dot(885,575); wire((885,575),(885,532),(1240,532),(1240,575),U7['ip'])
+text(1060,527,"PACK+ (6–8.4 V)",8,"middle",False,"#3a8a63")
+# cells
+for yy in (575,605,635): wire((1060,yy),(1110,yy)) if False else None
+wire(U6['bp'],(1110,575)); wire(U6['bm'],(1110,605)); wire(U6['bn'],(1110,635))
+cell(1110,575); cell(1110,605); dot(1110,605); text(1125,595,"BT1  2 × 18650 (2S)",9); text(1125,607,"3.7 V 2200 mAh each",8)
+wire((1110,635),(1110,BB["GND"])); bd["GND"].append(1110)
+# buck outputs
+x,y=U7['op']; wire((x,y),(x,Y5b)); dot(x,Y5b)
+x,y=U7['om']; wire((x,y),(x,BB["GND"])); bd["GND"].append(x)
+wire(U7['im'],(1250,605)) if False else None
+wire(U7['im'],(1240,605)); wire((1240,605),(1240,BB["GND"])); bd["GND"].append(1240)
+# divider
+dot(670,575); wire((670,575),(670,690)); res(670,690,90,"R1","10k",side=-1)
+res(670,750,90,"R2","10k",side=-1); wire((670,810),(690,810)); dot(690,810)
+wire((670,750),(712,750),(712,BB["BATT_SENSE"])); dot(670,750); bd["BATT_SENSE"].append(712)
+for n,y in BB.items(): bus(y,n,bd[n])
+text(735,730,"R1 = R2 (ratio 2.0) → GPIO35, ADC1.",8,"start",False,"#888"); text(735,742,"Sensed rail must stay ≤ 6.6 V.",8,"start",False,"#888")
+text(1455,660,"DC_IN+ = wall adapter output, PACK+ = 2S pack, +5V = buck output.",8,"start",False,"#888")
+text(1455,676,"UART: ESP32 RX pin ← module TX; ESP32 TX pin → module RX.",8,"start",False,"#888")
+text(1455,692,"Sensor/ADC pins on ADC1 only (ADC2 conflicts with Wi-Fi).",8,"start",False,"#888")
 
 # ================= EMITTERS =================
 def svg():
@@ -203,38 +193,37 @@ def svg():
     for it in items:
         k=it[0]
         if k=='line':
-            _,p,c,w=it; o.append(f'<polyline points="{" ".join(f"{a:.1f},{b:.1f}" for a,b in p)}" fill="none" stroke="{c}" stroke-width="{w}" stroke-linejoin="round" stroke-linecap="round"/>')
+            _,p,c,w=it; o.append(f'<polyline points="{" ".join(f"{a:.1f},{b:.1f}" for a,b in p)}" fill="none" stroke="{c}" stroke-width="{w}" stroke-linejoin="round"/>')
+        elif k=='poly':
+            _,p,c,f=it; o.append(f'<polygon points="{" ".join(f"{a:.1f},{b:.1f}" for a,b in p)}" fill="{f}" stroke="{c}" stroke-width="1.1"/>')
         elif k=='rect':
             _,x,y,w,h,f,s_,sw=it; o.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{f}" stroke="{s_}" stroke-width="{sw}"/>')
         elif k=='text':
-            _,x,y,t,sz,an,b,c=it; o.append(f'<text x="{x}" y="{y}" font-size="{sz}" text-anchor="{an}" dominant-baseline="central" font-weight="{"bold" if b else "normal"}" fill="{c}">{html.escape(t)}</text>')
+            _,x,y,t,sz,an,b,c=it; o.append(f'<text x="{x}" y="{y}" font-size="{sz}" text-anchor="{an}" dominant-baseline="central" fill="{c}">{html.escape(t)}</text>')
         elif k=='circ':
-            _,x,y,r,f,s_=it; o.append(f'<circle cx="{x}" cy="{y}" r="{r}" fill="{f}" stroke="{s_}" stroke-width="1.6"/>')
-        elif k=='tri':
-            _,x,y,w,h,d,f,s_=it; o.append(f'<polygon points="{x},{y} {x},{y+h} {x+w},{y+h/2}" fill="{f}" stroke="{s_}" stroke-width="1.6"/>')
+            _,x,y,r,f,s_=it; o.append(f'<circle cx="{x}" cy="{y}" r="{r}" fill="{f}" stroke="{s_}" stroke-width="1"/>')
     o.append('</svg>'); return "\n".join(o)
 def drawio():
     cells=[]; n=[2]
     def nid(): n[0]+=1; return f"n{n[0]}"
-    def esc(t): return html.escape(t,quote=True)
+    esc=lambda t: html.escape(t,quote=True)
     for it in items:
         k=it[0]; i=nid()
-        if k=='line':
-            _,p,c,w=it; a,b=p[0],p[-1]; mid="".join(f'<mxPoint x="{x:.1f}" y="{y:.1f}"/>' for x,y in p[1:-1])
-            arr=f'<Array as="points">{mid}</Array>' if mid else ''
-            cells.append(f'<mxCell id="{i}" value="" style="endArrow=none;html=1;rounded=0;strokeColor={c};strokeWidth={w};edgeStyle=none;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="{a[0]:.1f}" y="{a[1]:.1f}" as="sourcePoint"/><mxPoint x="{b[0]:.1f}" y="{b[1]:.1f}" as="targetPoint"/>{arr}</mxGeometry></mxCell>')
+        if k=='line' or k=='poly':
+            if k=='line': _,p,c,w=it; closed=False
+            else: _,p,c,f=it; w=1.1; closed=True
+            p=list(p)+([p[0]] if closed else [])
+            if p[0]==p[-1] and len(p)==2: continue
+            mid="".join(f'<mxPoint x="{x:.1f}" y="{y:.1f}"/>' for x,y in p[1:-1]); arr=f'<Array as="points">{mid}</Array>' if mid else ''
+            cells.append(f'<mxCell id="{i}" value="" style="endArrow=none;html=1;rounded=0;strokeColor={c};strokeWidth={w};edgeStyle=none;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="{p[0][0]:.1f}" y="{p[0][1]:.1f}" as="sourcePoint"/><mxPoint x="{p[-1][0]:.1f}" y="{p[-1][1]:.1f}" as="targetPoint"/>{arr}</mxGeometry></mxCell>')
         elif k=='rect':
-            _,x,y,w,h,f,s_,sw=it; fill=f if f!="none" else "none"
-            cells.append(f'<mxCell id="{i}" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor={fill};strokeColor={s_};strokeWidth={sw};" vertex="1" parent="1"><mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
+            _,x,y,w,h,f,s_,sw=it
+            cells.append(f'<mxCell id="{i}" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor={f};strokeColor={s_};strokeWidth={sw};" vertex="1" parent="1"><mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
         elif k=='text':
-            _,x,y,t,sz,an,b,c=it; wd=max(20,len(t)*sz*0.62+6); hh=sz+8
+            _,x,y,t,sz,an,b,c=it; wd=max(16,len(t)*sz*0.58+4); hh=sz+6
             al={"start":"left","middle":"center","end":"right"}[an]; px=x if an=="start" else (x-wd/2 if an=="middle" else x-wd)
-            cells.append(f'<mxCell id="{i}" value="{esc(t)}" style="text;html=1;strokeColor=none;fillColor=none;align={al};verticalAlign=middle;whiteSpace=nowrap;spacing=0;spacingLeft=0;spacingRight=0;fontSize={sz};fontFamily=Arial;fontStyle={1 if b else 0};fontColor={c};" vertex="1" parent="1"><mxGeometry x="{px:.1f}" y="{y-hh/2:.1f}" width="{wd:.1f}" height="{hh}" as="geometry"/></mxCell>')
+            cells.append(f'<mxCell id="{i}" value="{esc(t)}" style="text;html=1;strokeColor=none;fillColor=none;align={al};verticalAlign=middle;whiteSpace=nowrap;spacing=0;fontSize={sz};fontFamily=Arial;fontColor={c};" vertex="1" parent="1"><mxGeometry x="{px:.1f}" y="{y-hh/2:.1f}" width="{wd:.1f}" height="{hh}" as="geometry"/></mxCell>')
         elif k=='circ':
-            _,x,y,r,f,s_=it; cells.append(f'<mxCell id="{i}" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor={f};strokeColor={s_};strokeWidth=1.6;" vertex="1" parent="1"><mxGeometry x="{x-r}" y="{y-r}" width="{2*r}" height="{2*r}" as="geometry"/></mxCell>')
-        elif k=='tri':
-            _,x,y,w,h,d,f,s_=it; cells.append(f'<mxCell id="{i}" value="" style="triangle;whiteSpace=wrap;html=1;direction={d};fillColor={f};strokeColor={s_};strokeWidth=1.6;" vertex="1" parent="1"><mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
+            _,x,y,r,f,s_=it; cells.append(f'<mxCell id="{i}" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor={f};strokeColor={s_};" vertex="1" parent="1"><mxGeometry x="{x-r}" y="{y-r}" width="{2*r}" height="{2*r}" as="geometry"/></mxCell>')
     return ('<mxfile host="app.diagrams.net"><diagram name="Schematic" id="s1"><mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" page="0" pageWidth="%d" pageHeight="%d"><root><mxCell id="0"/><mxCell id="1" parent="0"/>'%(W,H)+"".join(cells)+'</root></mxGraphModel></diagram></mxfile>')
-import sys
-open("sch.svg","w",encoding="utf-8").write(svg()); open("sch.drawio","w",encoding="utf-8").write(drawio())
-print(len(items))
+open("sch.svg","w",encoding="utf-8").write(svg()); open("sch.drawio","w",encoding="utf-8").write(drawio()); print(len(items))
