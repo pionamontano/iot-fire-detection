@@ -102,8 +102,8 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 #define DS18B20_PIN         4
 
 // NEO-6M GPS (Serial2)
-#define GPS_RX_PIN          16
-#define GPS_TX_PIN          17
+#define GPS_RX_PIN          17
+#define GPS_TX_PIN          16
 #define GPS_BAUD            9600
 #define GPS_SERIAL          Serial2
 
