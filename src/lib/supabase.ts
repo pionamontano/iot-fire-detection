@@ -23,6 +23,7 @@ export interface Profile {
   status: ProfileStatus;
   setup_complete: boolean;
   is_active: boolean;
+  telegram_chat_id: string | null;
   created_at: string;
 }
 
@@ -37,6 +38,7 @@ export interface RegistrationRequest {
   verification_info: string | null;
   admin_notes: string | null;
   reviewed_by: string | null;
+  telegram_chat_id: string | null;
   created_at: string;
   reviewed_at: string | null;
   // Merged from profiles join
@@ -55,6 +57,7 @@ export interface Device {
   temp_threshold: number;
   bfp_contact: string | null;
   is_active: boolean;
+  telegram_chat_id: string | null;
   created_at: string;
   last_seen_at: string | null;
   latitude: number | null;
