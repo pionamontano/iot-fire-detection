@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import type { StationSettings } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { ProfileSkeleton } from '../components/SkeletonLoaders';
-import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Plus, Trash2 } from 'lucide-react';
+import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Plus, Trash2, Send } from 'lucide-react';
 
 export const ResponderSettings = () => {
   const { profile } = useAuth();
