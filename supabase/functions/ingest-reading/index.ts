@@ -59,6 +59,7 @@ serve(async (req: Request) => {
       gps_valid = false,
       on_battery = false,
       sensor_ready = true,
+      local_ip,
     } = body;
 
     // 3. Validate required numeric fields before any DB writes
@@ -97,8 +98,11 @@ serve(async (req: Request) => {
         on_battery,
         sensor_ready,
       }),
-      // Touch last_seen_at
-      supabaseAdmin.from('devices').update({ last_seen_at: nowIso }).eq('id', device.id),
+      // Touch last_seen_at and local_ip
+      supabaseAdmin.from('devices').update({
+        last_seen_at: nowIso,
+        ...(local_ip && { local_ip })
+      }).eq('id', device.id),
     ];
 
     // 5. Auto-resolution check (strictly below threshold to avoid boundary flapping)

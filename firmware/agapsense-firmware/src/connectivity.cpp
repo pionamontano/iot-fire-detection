@@ -51,9 +51,13 @@
 #include <WiFiManager.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <TelnetStream.h>
 
 #if DEBUG_MODE
-  #define CLOG(fmt, ...) Serial.printf("[CONN] " fmt "\n", ##__VA_ARGS__)
+  #define CLOG(fmt, ...) { \
+      Serial.printf("[CONN] " fmt "\n", ##__VA_ARGS__); \
+      TelnetStream.printf("[CONN] " fmt "\n", ##__VA_ARGS__); \
+  }
 #else
   #define CLOG(fmt, ...)
 #endif
@@ -187,7 +191,8 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
           "\"rssi\":%d,"
           "\"on_battery\":%s,"
           "\"sensor_ready\":%s,"
-          "\"mq7_phase\":\"%s\""
+          "\"mq7_phase\":\"%s\","
+          "\"local_ip\":\"%s\""
         "}",
         DEVICE_ID,
         sd.co_ppm, sd.temperature_c,
@@ -196,7 +201,8 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
         batteryMv, rssi,
         on_battery      ? "true" : "false",
         sd.sensor_ready ? "true" : "false",
-        mq7Phase
+        mq7Phase,
+        WiFi.localIP().toString().c_str()
     );
     return httpsPost(ENDPOINT_INGEST, payload);
 }
