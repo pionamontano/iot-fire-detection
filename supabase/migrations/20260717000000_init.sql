@@ -19,7 +19,8 @@ CREATE TABLE devices (
     bfp_contact TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT now(),
-    last_seen_at TIMESTAMPTZ
+    last_seen_at TIMESTAMPTZ,
+    local_ip TEXT
 );
 
 -- Profiles table (extends auth.users)
@@ -86,15 +87,17 @@ CREATE TABLE settings (
     value TEXT NOT NULL
 );
 
--- Station settings table (singleton — only 1 row allowed)
+-- Station settings table (Singleton)
 CREATE TABLE station_settings (
-    id INT PRIMARY KEY DEFAULT 1,
-    station_name TEXT NOT NULL,
-    address TEXT NOT NULL,
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    team_name TEXT NOT NULL,
+    commander_name TEXT NOT NULL,
     contact_number TEXT NOT NULL,
-    email TEXT NOT NULL,
-    key_personnel JSONB NOT NULL DEFAULT '[]'::jsonb,
-    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+    address TEXT NOT NULL,
+    latitude FLOAT NOT NULL,
+    longitude FLOAT NOT NULL,
+    alert_radius_km FLOAT NOT NULL DEFAULT 5.0,
+    updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 ALTER TABLE station_settings
@@ -118,62 +121,137 @@ CREATE TABLE registration_requests (
 
 
 -- =====================
--- 2. DEFAULT DATA
+-- 2. VIEWS
 -- =====================
 
-INSERT INTO settings (key, value) VALUES
-    ('timeout_admin', '15'),
-    ('timeout_bfp', '15'),
-    ('timeout_resident', '60');
-
-INSERT INTO station_settings (id, station_name, address, contact_number, email, key_personnel)
-VALUES (
-    1,
-    'Bureau of Fire Protection — Quezon City Station 7',
-    '123 Commonwealth Ave, Barangay Holy Spirit, Quezon City, Metro Manila 1127',
-    '+63 2 8555 1234',
-    'station7@bfp.gov.ph',
-    '[
-        {"title": "Station Commander / Fire Chief", "name": "SFO4 Juan Dela Cruz", "contact": "+63 917 123 4567"},
-        {"title": "Deputy Fire Chief", "name": "FO3 Maria Santos", "contact": "+63 918 234 5678"},
-        {"title": "Operations Officer", "name": "FO2 Pedro Reyes", "contact": "+63 919 345 6789"},
-        {"title": "Fire Marshal", "name": "SFO1 Ana Bautista", "contact": "+63 920 456 7890"}
-    ]'::jsonb
-) ON CONFLICT (id) DO NOTHING;
+-- devices_safe: Exposes devices without the raw api_key
+CREATE VIEW devices_safe AS
+SELECT
+    id, device_code, label, location_desc,
+    co_threshold, temp_threshold, bfp_contact,
+    is_active, created_at, last_seen_at, local_ip
+FROM devices;
 
 
 -- =====================
 -- 3. FUNCTIONS & TRIGGERS
 -- =====================
 
--- Role-check function (SECURITY DEFINER bypasses RLS to avoid infinite recursion)
--- Returns NULL for non-approved users, which denies all role-gated policies.
-CREATE OR REPLACE FUNCTION public.get_auth_role()
-RETURNS TEXT
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT role FROM profiles WHERE id = auth.uid() AND status = 'approved';
-$$;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- NOTE: No handle_new_user trigger here. Profile creation is handled by
--- the edge functions (register, create-user) which insert richer data
--- (role, address, status, contact_number). A trigger would conflict
--- and cause duplicate key errors on profiles.id.
+-- ── Device API Key Generation ──
+CREATE OR REPLACE FUNCTION generate_device_api_key()
+RETURNS TEXT AS $$
+BEGIN
+  RETURN encode(gen_random_bytes(24), 'base64');
+END;
+$$ LANGUAGE plpgsql VOLATILE;
 
--- Prevent users from self-promoting (changing their own role/status via direct API)
-CREATE OR REPLACE FUNCTION protect_profile_fields()
+-- Auto-generate API key for new devices
+CREATE OR REPLACE FUNCTION set_device_api_key()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF auth.uid() IS NOT NULL AND auth.uid() = NEW.id THEN
-    IF OLD.status IS DISTINCT FROM NEW.status THEN
-      NEW.status := OLD.status;
-    END IF;
-    IF OLD.role IS DISTINCT FROM NEW.role THEN
-      NEW.role := OLD.role;
-    END IF;
+  IF NEW.api_key IS NULL THEN
+    NEW.api_key := generate_device_api_key();
   END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER ensure_device_api_key
+  BEFORE INSERT ON devices
+  FOR EACH ROW EXECUTE FUNCTION set_device_api_key();
+
+-- ── RPC: Regenerate API Key (Admin Only) ──
+CREATE OR REPLACE FUNCTION regenerate_device_api_key(p_device_id UUID)
+RETURNS TEXT AS $$
+DECLARE
+  new_key TEXT;
+  v_role TEXT;
+BEGIN
+  -- Verify caller is admin
+  SELECT role INTO v_role FROM profiles WHERE id = auth.uid();
+  IF v_role != 'admin' THEN
+    RAISE EXCEPTION 'Unauthorized: Only admins can regenerate API keys';
+  END IF;
+
+  new_key := generate_device_api_key();
+
+  UPDATE devices SET api_key = new_key WHERE id = p_device_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Device not found';
+  END IF;
+
+  RETURN new_key;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+-- ── Get User Role (Helper for RLS) ──
+CREATE OR REPLACE FUNCTION get_auth_role()
+RETURNS TEXT AS $$
+  SELECT role FROM profiles WHERE id = auth.uid();
+$$ LANGUAGE sql STABLE;
+
+-- ── Get Dashboard Stats (RPC) ──
+CREATE OR REPLACE FUNCTION get_dashboard_stats()
+RETURNS JSON AS $$
+DECLARE
+  total_devices INT;
+  active_alerts INT;
+  resolved_alerts INT;
+  total_users INT;
+BEGIN
+  SELECT count(*) INTO total_devices FROM devices;
+  SELECT count(*) INTO active_alerts FROM alert_events WHERE resolved_at IS NULL;
+  SELECT count(*) INTO resolved_alerts FROM alert_events WHERE resolved_at IS NOT NULL;
+  SELECT count(*) INTO total_users FROM profiles;
+
+  RETURN json_build_object(
+    'total_devices', total_devices,
+    'active_alerts', active_alerts,
+    'resolved_alerts', resolved_alerts,
+    'total_users', total_users
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ── Handle New User Registration (Trigger) ──
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  -- For resident/bfp_responder, initial creation happens normally,
+  -- but admin can create users directly. We rely on the app to insert
+  -- into profiles manually after auth sign up, or we can use this trigger
+  -- for fallback/default profile creation if needed.
+  --
+  -- In this project, the frontend explicitly calls profile creation
+  -- so this trigger is kept minimal to avoid race conditions.
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ── Protect Critical Profile Fields (Trigger) ──
+CREATE OR REPLACE FUNCTION protect_profile_fields()
+RETURNS trigger AS $$
+DECLARE
+  v_role TEXT;
+BEGIN
+  -- Let superuser/service_role bypass
+  IF current_setting('role') = 'service_role' THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT role INTO v_role FROM profiles WHERE id = auth.uid();
+
+  -- If not an admin, prevent changing own role, status, or device assignment
+  IF v_role != 'admin' THEN
+    NEW.role = OLD.role;
+    NEW.status = OLD.status;
+    NEW.device_id = OLD.device_id;
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -248,29 +326,53 @@ CREATE POLICY "Allow system to update alerts"
 -- ── Login Attempts ──
 CREATE POLICY "Admin can read login attempts"
   ON login_attempts FOR SELECT USING (get_auth_role() = 'admin');
-CREATE POLICY "Allow inserting login attempts"
+CREATE POLICY "Anyone can insert login attempts"
   ON login_attempts FOR INSERT WITH CHECK (true);
 
 -- ── Settings ──
 CREATE POLICY "Admin full access on settings"
   ON settings FOR ALL USING (get_auth_role() = 'admin');
-CREATE POLICY "Anyone authenticated can read settings"
+CREATE POLICY "Authenticated users can read settings"
   ON settings FOR SELECT USING (auth.role() = 'authenticated');
 
 -- ── Station Settings ──
-CREATE POLICY "Station settings are viewable by everyone."
-  ON station_settings FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "Station settings are updatable by admins and responders."
-  ON station_settings FOR UPDATE USING (
-    get_auth_role() = 'admin' OR get_auth_role() = 'bfp_responder'
-  );
-CREATE POLICY "Station settings are insertable by admins and responders."
-  ON station_settings FOR INSERT WITH CHECK (
-    get_auth_role() = 'admin' OR get_auth_role() = 'bfp_responder'
-  );
+CREATE POLICY "Admin full access on station settings"
+  ON station_settings FOR ALL USING (get_auth_role() = 'admin');
+CREATE POLICY "BFP Responder full access on station settings"
+  ON station_settings FOR ALL USING (get_auth_role() = 'bfp_responder');
+CREATE POLICY "Residents can read station settings"
+  ON station_settings FOR SELECT USING (get_auth_role() = 'resident');
 
 -- ── Registration Requests ──
-CREATE POLICY "Admin full access on registration_requests"
+CREATE POLICY "Admin full access on registration requests"
   ON registration_requests FOR ALL USING (get_auth_role() = 'admin');
-CREATE POLICY "Users can read own registration"
+CREATE POLICY "Users can create registration requests"
+  ON registration_requests FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Users can read own requests"
   ON registration_requests FOR SELECT USING (user_id = auth.uid());
+
+
+-- =====================
+-- 5. INITIAL DATA
+-- =====================
+
+INSERT INTO station_settings (
+    id, team_name, commander_name, contact_number, address, latitude, longitude, alert_radius_km
+) VALUES (
+    1,
+    'Central Fire Station',
+    'F/INSP Juan Dela Cruz',
+    '+639000000000',
+    'City Hall Compound',
+    14.5995,
+    120.9842,
+    5.0
+) ON CONFLICT (id) DO NOTHING;
+
+-- Initial Admin Setup (Password: Admin@123)
+-- (Run this block manually in Supabase SQL editor after creating the Auth user,
+-- replacing the UUID with the generated Auth UID)
+/*
+INSERT INTO profiles (id, full_name, role, status, setup_complete)
+VALUES ('YOUR_AUTH_UID_HERE', 'System Administrator', 'admin', 'approved', true);
+*/

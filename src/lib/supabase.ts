@@ -57,6 +57,7 @@ export interface Device {
   is_active: boolean;
   created_at: string;
   last_seen_at: string | null;
+  local_ip: string | null;
   latitude: number | null;
   longitude: number | null;
 }

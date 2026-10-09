@@ -351,6 +351,11 @@ export const Devices = () => {
                             <BatteryWarning className="w-3 h-3" /> Battery
                           </span>
                         )}
+                        {device.local_ip && (
+                          <span title="Device local IP" className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#E0F2FE] text-[#0369A1] text-[9px] font-mono tracking-wide shrink-0 ml-auto">
+                            {device.local_ip}
+                          </span>
+                        )}
                       </div>
                     </div>
 
