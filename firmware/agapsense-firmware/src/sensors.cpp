@@ -9,9 +9,13 @@
 
 #include "sensors.h"
 #include <math.h>
+#include <TelnetStream.h>
 
 #if DEBUG_MODE
-  #define SLOG(fmt, ...) Serial.printf("[SENSOR] " fmt "\n", ##__VA_ARGS__)
+  #define SLOG(fmt, ...) { \
+      Serial.printf("[SENSOR] " fmt "\n", ##__VA_ARGS__); \
+      TelnetStream.printf("[SENSOR] " fmt "\n", ##__VA_ARGS__); \
+  }
 #else
   #define SLOG(fmt, ...)
 #endif

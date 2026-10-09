@@ -3,9 +3,13 @@
 // ============================================================
 
 #include "gps.h"
+#include <TelnetStream.h>
 
 #if DEBUG_MODE
-  #define GLOG(fmt, ...) Serial.printf("[GPS] " fmt "\n", ##__VA_ARGS__)
+  #define GLOG(fmt, ...) { \
+      Serial.printf("[GPS] " fmt "\n", ##__VA_ARGS__); \
+      TelnetStream.printf("[GPS] " fmt "\n", ##__VA_ARGS__); \
+  }
 #else
   #define GLOG(fmt, ...)
 #endif
