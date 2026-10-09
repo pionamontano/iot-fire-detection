@@ -60,6 +60,7 @@ export interface Device {
   telegram_chat_id: string | null;
   created_at: string;
   last_seen_at: string | null;
+  local_ip: string | null;
   latitude: number | null;
   longitude: number | null;
 }
