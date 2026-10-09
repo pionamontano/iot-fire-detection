@@ -45,7 +45,7 @@ export const ResidentAlertSettings = () => {
 
   const handleConnectTelegram = () => {
     if (!profile) return;
-    const botUsername = "Bantay_Apoybot";
+    const botUsername = "AgapSenseAlertBot";
     const telegramUrl = `https://t.me/${botUsername}?start=${profile.id}`;
     window.open(telegramUrl, '_blank');
   };
