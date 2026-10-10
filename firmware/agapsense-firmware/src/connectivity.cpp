@@ -191,7 +191,8 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
           "\"rssi\":%d,"
           "\"on_battery\":%s,"
           "\"sensor_ready\":%s,"
-          "\"mq7_phase\":\"%s\""
+          "\"mq7_phase\":\"%s\","
+          "\"local_ip\":\"%s\""
         "}",
         DEVICE_ID,
         sd.co_ppm, sd.temperature_c,
@@ -200,7 +201,8 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
         batteryMv, rssi,
         on_battery      ? "true" : "false",
         sd.sensor_ready ? "true" : "false",
-        mq7Phase
+        mq7Phase,
+        WiFi.localIP().toString().c_str()
     );
     return httpsPost(ENDPOINT_INGEST, payload);
 }
