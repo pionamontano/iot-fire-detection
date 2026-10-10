@@ -98,11 +98,8 @@ serve(async (req: Request) => {
         on_battery,
         sensor_ready,
       }),
-      // Touch last_seen_at and local_ip
-      supabaseAdmin.from('devices').update({
-        last_seen_at: nowIso,
-        ...(local_ip && { local_ip })
-      }).eq('id', device.id),
+      // Touch last_seen_at
+      supabaseAdmin.from('devices').update({ last_seen_at: nowIso, local_ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') }).eq('id', device.id),
     ];
 
     // 5. Auto-resolution check (strictly below threshold to avoid boundary flapping)
