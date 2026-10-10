@@ -38,8 +38,8 @@ The application relies on a centralized `AuthContext` to manage user sessions an
 - Handles the connection to Supabase Auth.
 - Exposes user data and roles to the rest of the application so the UI can adapt dynamically.
 
-### 3. Layouts (`src/components/Layout.tsx`)
-To keep the code DRY (Don't Repeat Yourself), each role has a dedicated layout component (`AdminLayout`, `ResponderLayout`, `ResidentLayout`). These layouts contain the navigation sidebars or headers specific to that role, wrapping the page content (`Outlet`).
+### 3. Layouts
+To keep the code DRY (Don't Repeat Yourself), each role has a dedicated layout component (`src/components/AdminLayout.tsx`, `src/components/ResponderLayout.tsx`, `src/components/ResidentLayout.tsx`). These layouts contain the navigation sidebars or headers specific to that role, wrapping the page content (`Outlet`).
 
 ---
 
@@ -73,6 +73,15 @@ The Resident routes are mounted under `/home` or `/account`.
 - `src/lib/supabase.ts`: Initializes the Supabase client using environment variables (`.env`).
 - Authentication: Email/Password login flows are handled directly through Supabase Auth.
 - Database (PostgreSQL): The frontend interacts with Supabase tables via the Javascript client. Security is enforced at the database level using Row Level Security (RLS), ensuring a Resident cannot fetch another Resident's data, even if they manipulate the frontend code.
+
+---
+
+## Documentation
+
+Detailed documentation has been moved to the `docs/` folder:
+- [Features & Edge Functions](docs/FEATURES.md)
+- [Firmware Guide](docs/FIRMWARE_GUIDE.md)
+- [Migration & Setup Guide](docs/MIGRATION_GUIDE.md)
 
 ---
 

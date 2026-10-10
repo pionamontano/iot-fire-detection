@@ -33,23 +33,27 @@ A step-by-step guide to set up this project on a **brand-new Supabase project** 
 ## Step 2 — Run the Database Schema
 
 > [!IMPORTANT]
-> You only need to run **ONE** SQL file. All migrations have been consolidated into a single file.
+> There are multiple migration files that need to be run in sequential order, or you can use the Supabase CLI to apply them all automatically.
 
+**Method A: Using Supabase CLI (Recommended)**
+```bash
+supabase db push
+```
+
+**Method B: Manual execution via SQL Editor**
 1. In your Supabase dashboard, go to **SQL Editor** (left sidebar).
 2. Click **+ New query**.
-3. Open the file `supabase/migrations/20260717000000_init.sql` from this project.
-4. **Copy the entire contents** of that file and paste it into the SQL Editor.
-5. Click **Run** (or press `Ctrl+Enter`).
+3. Open the files in `supabase/migrations/` sequentially by their timestamp prefix, starting with `20260717000000_init.sql` and ending with the latest one.
+4. **Copy the entire contents** of each file and paste it into the SQL Editor.
+5. Click **Run** (or press `Ctrl+Enter`) for each one in order.
 
-This single file creates:
+These files create:
 - ✅ All 8 tables (`devices`, `profiles`, `sensor_readings`, `alert_events`, `login_attempts`, `settings`, `station_settings`, `registration_requests`)
-- ✅ All functions (`get_auth_role`, `protect_profile_fields`)
+- ✅ All functions (`get_auth_role`, `protect_profile_fields`, etc.)
 - ✅ All triggers (self-promotion protection)
 - ✅ All RLS policies
 - ✅ Default data (settings + station info)
-
-> [!TIP]
-> The other migration files (`20260717000001_fix_rls.sql`, `20260717000002_fix_profiles_rls.sql`, `20260717000003_station_settings.sql`, `20260811000000_registration_approval.sql`) are **old incremental patches** that are now baked into the init file. **Do NOT run them separately** — it will cause duplicate errors.
+- ✅ Fixes, enhancements, and new fields (like `telegram_chat_id` and `local_ip`)
 
 ---
 
@@ -99,7 +103,7 @@ VITE_SUPABASE_ANON_KEY=your_anon_public_key_here
 
 ## Step 5 — Deploy Edge Functions
 
-The project has 9 Supabase Edge Functions in `supabase/functions/`. These handle server-side logic (creating users, ingesting sensor data, triggering alerts, etc.).
+The project has multiple Supabase Edge Functions in `supabase/functions/`. These handle server-side logic (creating users, ingesting sensor data, triggering alerts, custom login, etc.).
 
 ### 5a. Link your project
 
@@ -125,22 +129,10 @@ supabase secrets set TELEGRAM_CHAT_ID=your_telegram_chat_id
 ### 5c. Deploy all functions
 
 ```bash
-supabase functions deploy assign-device
-supabase functions deploy confirm-sms-status
-supabase functions deploy create-user
-supabase functions deploy get-device-config
-supabase functions deploy ingest-reading
-supabase functions deploy link-device
-supabase functions deploy manage-registration
-supabase functions deploy register
-supabase functions deploy trigger-alert
-```
-
-Or deploy all at once:
-
-```bash
 supabase functions deploy
 ```
+
+*(Alternatively, you can deploy them individually by name if you prefer).*
 
 ### Edge Functions Reference
 
@@ -152,8 +144,10 @@ supabase functions deploy
 | `get-device-config` | IoT device fetches its current thresholds + SMS numbers |
 | `ingest-reading` | IoT device sends sensor data |
 | `link-device` | Links a device to a resident profile |
+| `login` | Gatekeeper for authentication, enforcing lockout logic |
 | `manage-registration` | Admin approves/rejects user registrations |
 | `register` | Self-registration for new users |
+| `telegram-webhook` | Handles linking user's Telegram ID for notifications |
 | `trigger-alert` | Fires alerts + sends Telegram notifications |
 
 ---

@@ -268,8 +268,9 @@ pio device monitor      # serial monitor at 115200 baud
   `pio run -t upload --upload-port COM3`.
 - To see `[MAIN]`/`[SENSOR]`/`[CONN]`/`[GPS]`/`[GSM]` debug logs over serial,
   uncomment `-DDEBUG_MODE=1` in `platformio.ini`'s `build_flags` and reflash.
-  Leave it at `0` (default) for production — it disables all `Serial.printf`
-  logging calls at compile time.
+  Leave it at `0` (default) for production — it disables all logging calls at compile time.
+  When `DEBUG_MODE=1` is enabled, logging is broadcast via **TelnetStream** locally on port 23
+  and also sent over standard Serial if USB is connected.
 - Library dependencies (`OneWire`, `DallasTemperature`, `TinyGPSPlus`,
   `WiFiManager`, `ArduinoJson`) are pinned in `lib_deps` and fetched
   automatically by PlatformIO on first build.

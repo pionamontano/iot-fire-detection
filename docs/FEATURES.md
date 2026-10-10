@@ -48,6 +48,8 @@ The backend logic is heavily decoupled into serverless Supabase Edge Functions (
 | **`assign-device`** / **`link-device`** | Admin Action | Links an IoT device's UUID to a specific resident in the `profiles` table so the resident gains RLS access to its telemetry. |
 | **`get-device-config`** | Called by IoT Device | Returns the device's current `co_threshold`/`temp_threshold`/`bfp_contact` and the linked resident's `contact_number`, so an admin can retune a device from the dashboard without re-flashing it. |
 | **`confirm-sms-status`** | Called by IoT Device | Reports the real SIM800L `+CMGS` delivery outcome for a Tier 2 SMS back to the originating `alert_events` row (`sms_sent_owner`/`sms_sent_bfp`), once per message. |
+| **`login`** | Frontend App | Gatekeeper for authentication. Validates credentials and enforces login attempt limit rate locking logic via `check_login_lockout` RPC before allowing connection to GoTrue `/auth/v1/token`. |
+| **`telegram-webhook`** | Telegram API | Handles linking a user's Telegram ID to their profile by updating `telegram_chat_id` based on the provided `/start <id>` payload. |
 
 ---
 
