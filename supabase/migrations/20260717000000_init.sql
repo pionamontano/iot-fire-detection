@@ -19,8 +19,7 @@ CREATE TABLE devices (
     bfp_contact TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT now(),
-    last_seen_at TIMESTAMPTZ,
-    local_ip TEXT
+    last_seen_at TIMESTAMPTZ
 );
 
 -- Profiles table (extends auth.users)
@@ -128,8 +127,9 @@ CREATE TABLE registration_requests (
 CREATE VIEW devices_safe AS
 SELECT
     id, device_code, label, location_desc,
+    NULL::text as api_key,
     co_threshold, temp_threshold, bfp_contact,
-    is_active, created_at, last_seen_at, local_ip
+    is_active, created_at, last_seen_at
 FROM devices;
 
 
