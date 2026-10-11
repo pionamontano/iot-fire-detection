@@ -89,21 +89,6 @@ export const ResponderAlertLogs = () => {
         });
       });
 
-      // Add device entries for devices without alerts (show them as OPTIMAL or OFFLINE)
-      allDevices.forEach(device => {
-        const hasAlert = (alertsRes.data || []).some((a: any) => a.device_id === device.id);
-        if (!hasAlert) {
-          allLogs.push({
-            id: `device-${device.id}`,
-            timestamp: device.last_seen_at || device.created_at,
-            deviceName: device.device_code,
-            location: device.location_desc,
-            status: device.is_active ? 'OPTIMAL' : 'OFFLINE / MAINT',
-            isCritical: false,
-          });
-        }
-      });
-
       // Sort by timestamp desc
       allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setLogs(allLogs);
@@ -163,7 +148,7 @@ export const ResponderAlertLogs = () => {
             Fire Responder Alert Logs
           </h2>
           <p className="text-[#5B403D] text-base leading-6 mt-2 max-w-[600px]">
-            Monitoring real-time telemetry from {devices.length.toLocaleString()} distributed thermal nodes.
+            Incident history logs and historical telemetry from {devices.length.toLocaleString()} distributed thermal nodes.
           </p>
         </div>
         <button
@@ -171,7 +156,7 @@ export const ResponderAlertLogs = () => {
           className="bg-[#DC2626] px-5 py-2.5 rounded flex items-center gap-2 hover:bg-[#B91C1C] transition-colors shrink-0"
         >
           <Download className="w-4 h-4 text-white" />
-          <span className="text-white font-bold text-xs tracking-[0.02em]">Export Alert History</span>
+          <span className="text-white font-bold text-xs tracking-[0.02em]">Export Incident History</span>
         </button>
       </div>
 

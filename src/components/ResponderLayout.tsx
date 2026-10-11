@@ -18,8 +18,6 @@ export const ResponderLayout: React.FC = () => {
   const mainNavItems = [
     { name: 'Dashboard', path: '/responder', icon: LayoutDashboard },
     { name: 'Alert Logs', path: '/responder/alerts', icon: FileText },
-    { name: 'Team Management', path: '/responder/team', icon: Users },
-    { name: 'Device Registry', path: '/responder/devices', icon: Cpu },
   ];
 
   const secondaryNavItems = [

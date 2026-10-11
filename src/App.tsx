@@ -18,8 +18,6 @@ import { Settings } from './pages/Settings';
 import { InteractiveMap } from './pages/InteractiveMap';
 import { ResponderDashboard } from './pages/ResponderDashboard';
 import { ResponderAlertLogs } from './pages/ResponderAlertLogs';
-import { ResponderTeam } from './pages/ResponderTeam';
-import { ResponderDevices } from './pages/ResponderDevices';
 import { ResponderSettings } from './pages/ResponderSettings';
 import { ResidentHome } from './pages/ResidentHome';
 import { ResidentSetup } from './pages/ResidentSetup';
@@ -71,8 +69,6 @@ function App() {
             <Route element={<ResponderLayout />}>
               <Route path="/responder" element={<ResponderDashboard />} />
               <Route path="/responder/alerts" element={<ResponderAlertLogs />} />
-              <Route path="/responder/team" element={<ResponderTeam />} />
-              <Route path="/responder/devices" element={<ResponderDevices />} />
               <Route path="/responder/settings" element={<ResponderSettings />} />
             </Route>
           </Route>

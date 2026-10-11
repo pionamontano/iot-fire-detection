@@ -10,7 +10,8 @@ import {
   Clock,
   Search,
   MapPin,
-    Filter,
+  Filter,
+  Loader2,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -49,20 +50,56 @@ export const ResponderDashboard = () => {
     const [devices, setDevices] = useState<DeviceWithStatus[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [unitSearch, setUnitSearch] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState<[number, number] | null>(null);
+  const [acknowledging, setAcknowledging] = useState<string | null>(null);
+
+  const handleAcknowledge = async (alertId: string) => {
+    setAcknowledging(alertId);
+    try {
+      await supabase
+        .from('alert_events')
+        .update({
+          incident_status: 'acknowledged',
+          acknowledged_by: profile?.id,
+          acknowledged_at: new Date().toISOString()
+        })
+        .eq('id', alertId);
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to acknowledge:", err);
+    }
+    setAcknowledging(null);
+  };
+
+  const handleUpdateStatus = async (alertId: string, newStatus: string) => {
+    setAcknowledging(alertId);
+    try {
+      await supabase
+        .from('alert_events')
+        .update({
+          incident_status: newStatus
+        })
+        .eq('id', alertId);
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to update status:", err);
+    }
+    setAcknowledging(null);
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [devicesRes, alertsRes] = await Promise.all([
-      supabase.from('devices_safe').select('*').order('created_at', { ascending: false }),
+      supabase.from('devices_safe').select('*, sensor_readings(latitude, longitude, recorded_at)')
+        .order('recorded_at', { foreignTable: 'sensor_readings', ascending: false })
+        .limit(1, { foreignTable: 'sensor_readings' })
+        .order('created_at', { ascending: false }),
       supabase.from('alert_events').select('*, devices(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
     ]);
 
     const allAlerts = (alertsRes.data || []) as unknown as AlertEvent[];
     const unresolvedAlerts = allAlerts.filter(a => !a.resolved_at);
 
-    const enriched: DeviceWithStatus[] = (devicesRes.data || []).map(d => {
+    const enriched: DeviceWithStatus[] = (devicesRes.data || []).map((d: any) => {
       const alert = unresolvedAlerts.find(a => a.device_id === d.id);
       let status: DeviceWithStatus['status'] = 'normal';
       if (alert) {
@@ -78,6 +115,16 @@ export const ResponderDashboard = () => {
       
       let lat = d.latitude;
       let lng = d.longitude;
+
+      const readings = d.sensor_readings as any[] || [];
+      if (readings.length > 0) {
+        const latest = readings[0];
+        if (latest.latitude != null && latest.longitude != null) {
+          lat = latest.latitude;
+          lng = latest.longitude;
+        }
+      }
+
       if (!lat || !lng) {
         let hash = 0;
         for (let j = 0; j < d.id.length; j++) {
@@ -90,7 +137,10 @@ export const ResponderDashboard = () => {
 
       // Simulate connectivity % based on status
       const connectivity = status === 'offline' ? 0 : status === 'fire' ? 98 : status === 'fault' ? 92 : 100;
-      return { ...d, status, activeAlert: alert, connectivity, latitude: lat, longitude: lng };
+
+      const { sensor_readings, ...deviceWithoutReadings } = d;
+
+      return { ...deviceWithoutReadings, status, activeAlert: alert, connectivity, latitude: lat, longitude: lng };
     });
 
     setDevices(enriched);
@@ -117,12 +167,6 @@ export const ResponderDashboard = () => {
   const devicesOnline = devices.filter(d => d.status !== 'offline').length;
   const devicesOffline = devices.filter(d => d.status === 'offline').length;
   const alertsToday = activeAlerts.length;
-
-  // Filtered units for the bottom table
-  const filteredUnits = devices.filter(d =>
-    d.device_code.toLowerCase().includes(unitSearch.toLowerCase()) ||
-    d.location_desc.toLowerCase().includes(unitSearch.toLowerCase())
-  );
 
   // Live feed alerts (top 5 unresolvedAlerts with device join data)
   const feedAlerts = activeAlerts.slice(0, 5);
@@ -151,7 +195,7 @@ export const ResponderDashboard = () => {
             style={{ height: '100%', width: '100%', minHeight: 420 }}
             className="z-0"
           >
-            <MapUpdater center={selectedLocation} />
+            <MapUpdater center={null} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -238,115 +282,64 @@ export const ResponderDashboard = () => {
                         {alert.latitude.toFixed(4)}° N, {alert.longitude.toFixed(4)}° E
                       </p>
                     )}
+
+                    {/* Incident Status / Acknowledge */}
+                    <div className="mt-3 pt-3 border-t border-[#E5E2E1] flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-[#5B403D] uppercase tracking-[0.05em]">Status</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-[0.05em] ${
+                          alert.incident_status === 'active' ? 'text-[#DC2626]' :
+                          alert.incident_status === 'acknowledged' ? 'text-[#F59E0B]' :
+                          alert.incident_status === 'responding' ? 'text-[#3B82F6]' : 'text-[#10B981]'
+                        }`}>
+                          {alert.incident_status || 'active'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        {(!alert.incident_status || alert.incident_status === 'active') && (
+                          <button
+                            onClick={() => handleAcknowledge(alert.id)}
+                            disabled={acknowledging === alert.id}
+                            className="bg-[#DC2626] hover:bg-[#B91C1C] text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                          >
+                            {acknowledging === alert.id ? 'Updating...' : 'Acknowledge'}
+                          </button>
+                        )}
+                        {alert.incident_status === 'acknowledged' && (
+                          <button
+                            onClick={() => handleUpdateStatus(alert.id, 'responding')}
+                            disabled={acknowledging === alert.id}
+                            className="bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                          >
+                            {acknowledging === alert.id ? 'Updating...' : 'Mark Responding'}
+                          </button>
+                        )}
+                        {(alert.incident_status === 'acknowledged' || alert.incident_status === 'responding') && (
+                          <>
+                            <button
+                              onClick={() => handleUpdateStatus(alert.id, 'resolved')}
+                              disabled={acknowledging === alert.id}
+                              className="bg-[#10B981] hover:bg-[#059669] text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                            >
+                              Resolve
+                            </button>
+                            <button
+                              onClick={() => handleUpdateStatus(alert.id, 'false_alarm')}
+                              disabled={acknowledging === alert.id}
+                              className="bg-[#6B7280] hover:bg-[#4B5563] text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                            >
+                              False Alarm
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 );
               })
             )}
           </div>
 
-          {/* Dispatch CTA */}
-          <div className="p-4 border-t border-[#E5E2E1]">
-            <button className="w-full py-3 rounded text-white font-bold text-xs tracking-[0.05em] uppercase flex items-center justify-center gap-2 transition-all hover:shadow-md"
-              style={{ background: 'linear-gradient(90deg, #AF101A 0%, #D32F2F 100%)' }}
-            >
-              Dispatch Response Team
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── All Connected Units Table ─── */}
-      <div className="bg-white border border-[#E5E2E1] rounded-lg overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-        {/* Table Header */}
-        <div className="px-6 py-4 border-b border-[#E5E2E1] flex items-center justify-between">
-          <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.02em] uppercase">All Connected Units</h3>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search Device ID or Barangay..."
-                value={unitSearch}
-                onChange={e => setUnitSearch(e.target.value)}
-                className="bg-[#F6F3F2] border border-[#E5E2E1] rounded pl-8 pr-3 py-1.5 text-xs w-56 focus:outline-none focus:border-[#DC2626]/40"
-              />
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-[#A1A1AA]" />
-            </div>
-            <button className="p-1.5 border border-[#E5E2E1] rounded hover:bg-gray-50 transition-colors">
-              <Filter className="w-3.5 h-3.5 text-[#5B403D]" />
-            </button>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[#F6F3F2] border-b border-[#E5E2E1]">
-                <th className="text-left px-6 py-3 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Device ID</th>
-                <th className="text-left px-6 py-3 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Location</th>
-                <th className="text-left px-6 py-3 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Status</th>
-                <th className="text-left px-6 py-3 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Connectivity</th>
-                <th className="text-left px-6 py-3 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Internal Temp</th>
-                <th className="text-left px-6 py-3 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Last Signal</th>
-                <th className="text-left px-6 py-3 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUnits.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12 text-[#A1A1AA] text-sm">No devices found.</td>
-                </tr>
-              ) : (
-                filteredUnits.slice(0, 10).map(device => {
-                  const statusLabel = device.status === 'fire' ? 'FIRE DETECTED' : device.status === 'fault' ? 'HIGH TEMP' : device.status === 'offline' ? 'OFFLINE' : 'HEALTHY';
-                  const statusColor = device.status === 'fire' ? '#DC2626' : device.status === 'fault' ? '#F59E0B' : device.status === 'offline' ? '#A1A1AA' : '#10B981';
-                  const statusBg = device.status === 'fire' ? 'bg-[#FEE2E2]' : device.status === 'fault' ? 'bg-[#FFEDD5]' : device.status === 'offline' ? 'bg-[#F3F4F6]' : 'bg-[#ECFDF5]';
-
-                  return (
-                    <tr 
-                      key={device.id} 
-                      className="border-b border-[#E5E2E1] last:border-0 hover:bg-[#FCF9F8] transition-colors cursor-pointer"
-                      onClick={() => {
-                        if (device.latitude && device.longitude) {
-                          setSelectedLocation([device.latitude as number, device.longitude as number]);
-                        }
-                      }}
-                    >
-                      <td className="px-6 py-3.5">
-                        <span className="font-bold text-xs text-[#1C1B1B]">{device.device_code}</span>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span className="text-[#5B403D] text-xs">{device.location_desc}</span>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold tracking-[0.03em] uppercase ${statusBg}`} style={{ color: statusColor }}>
-                          {statusLabel}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span className="text-xs font-bold" style={{ color: statusColor }}>
-                          ▲ {device.connectivity}%
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span className="text-xs font-mono text-[#1C1B1B]">
-                          {device.activeAlert?.temp_celsius ? `${device.activeAlert.temp_celsius}°C` : `${device.temp_threshold}°C`}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span className="text-xs text-[#5B403D]">
-                          {device.last_seen_at ? timeAgo(device.last_seen_at) : 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <button className="text-[#DC2626] font-bold text-xs hover:underline">Details</button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
     </div>
