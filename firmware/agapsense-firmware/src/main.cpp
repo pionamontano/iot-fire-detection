@@ -12,6 +12,8 @@
 
 #include <Arduino.h>
 #include <esp_task_wdt.h>
+#include <WiFi.h>
+#include <WiFiManager.h>
 
 #include "config.h"
 #include "sensors.h"
@@ -219,8 +221,37 @@ void setup() {
 }
 
 // ============================================================
-// loop() — unused; all logic is in FreeRTOS tasks
+// loop() — Handles non-blocking Wi-Fi reconnection / captive portal
 // ============================================================
 void loop() {
-    vTaskDelay(pdMS_TO_TICKS(10000));
+    static bool isDisconnected = false;
+    static unsigned long disconnectStartTime = 0;
+
+    if (WiFi.status() != WL_CONNECTED) {
+        if (!isDisconnected) {
+            isDisconnected = true;
+            disconnectStartTime = millis();
+            LOG("Wi-Fi disconnected. Starting 30s grace period before portal.");
+        } else if (millis() - disconnectStartTime >= 30000) {
+            LOG("Grace period expired. Launching Config Portal...");
+            WiFiManager wm;
+            wm.setConfigPortalTimeout(180);
+            if (!wm.startConfigPortal("ESP-Config-AP")) {
+                LOG("Portal failed or timed out. Restarting...");
+                delay(3000);
+                ESP.restart();
+            } else {
+                LOG("Config Portal successfully configured Wi-Fi.");
+                // Successful config exits loop automatically, will be caught by WL_CONNECTED next iteration
+            }
+        }
+    } else {
+        if (isDisconnected) {
+            isDisconnected = false;
+            disconnectStartTime = 0;
+            LOG("Wi-Fi connected. Clearing disconnect state.");
+        }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
 }
