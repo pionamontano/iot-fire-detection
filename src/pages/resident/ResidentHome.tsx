@@ -22,7 +22,7 @@ const markerIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-const DEFAULT_CENTER: [number, number] = [14.634, 121.045];
+const DEFAULT_CENTER: [number, number] = [14.8527, 120.8160];
 
 // Components
 const StatCard = ({ title, value, subtitle, icon: Icon, active = false }: any) => (
