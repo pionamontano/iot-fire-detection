@@ -32,7 +32,7 @@ export const ResidentAlerts = () => {
     } else {
       setLoading(false);
     }
-  }, [profile?.device_id, fromDate, toDate, tierFilter]);
+  }, [profile?.device_id, fromDate, toDate, tierFilter, fetchLogs]);
 
   const fetchLogs = async () => {
     if (!profile?.device_id) return;

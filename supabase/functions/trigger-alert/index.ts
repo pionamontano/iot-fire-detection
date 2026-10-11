@@ -276,6 +276,37 @@ serve(async (req: Request) => {
       alertEventId = newAlert.id;
     }
 
+
+    // 6.5 Send Push Notifications
+    try {
+      // Find relevant users to notify
+      const { data: usersToNotify } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .or(`role.eq.admin,role.eq.bfp_responder,${tier === 2 ? `and(device_id.eq.${device.id},role.eq.resident)` : 'id.eq.00000000-0000-0000-0000-000000000000'}`);
+
+      if (usersToNotify && usersToNotify.length > 0) {
+        const userIds = usersToNotify.map(u => u.id);
+        const pushTitle = tier === 1 ? 'WARNING - Tier 1 Alert' : 'FIRE ALERT - Tier 2';
+        const pushBody = `Device: ${device.device_code}\nLocation: ${locationString}`;
+
+        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-push-notification`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+          },
+          body: JSON.stringify({
+            userIds,
+            title: pushTitle,
+            body: pushBody
+          })
+        }).catch(e => console.error("Error triggering push notification func:", e));
+      }
+    } catch (pushErr) {
+      console.error('Failed to prepare push notifications:', pushErr);
+    }
+
     // 7. [FIX #5] Return response containing alert_event_id
     // address_resolved and triggered_at are threaded back to the firmware
     // so the SMS bodies can include them (spec SW-2.2.2) — the device has

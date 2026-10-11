@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { Link } from 'react-router-dom';
-import { Download, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Zap, History, Filter, FileText, Info, CheckCircle2, ShieldAlert, Cpu } from 'lucide-react';
+import { Download, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Zap, History, Filter,  } from 'lucide-react';
 import { TableBodySkeleton } from '../components/SkeletonLoaders';
 
 type LogEvent = {

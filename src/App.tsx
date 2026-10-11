@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { registerServiceWorker } from './lib/pushNotifications';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { AuthGuard } from './components/AuthGuard';
@@ -35,7 +36,11 @@ import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 
 function App() {
-  return (
+
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+    return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>

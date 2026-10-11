@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import type { StationSettings } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { ProfileSkeleton } from '../components/SkeletonLoaders';
 import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Plus, Trash2, Send } from 'lucide-react';
@@ -12,6 +11,10 @@ export const ResponderSettings = () => {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(true);
+
   const [hasChanges, setHasChanges] = useState(false);
   const [profileContactError, setProfileContactError] = useState('');
 
@@ -44,7 +47,7 @@ export const ResponderSettings = () => {
 
   const fetchStationSettings = async () => {
     try {
-      const { data, error } = await supabase.from('station_settings').select('*').eq('id', 1).single();
+      const { data } = await supabase.from('station_settings').select('*').eq('id', 1).single();
       if (data) {
         setStationName(data.station_name);
         setAddress(data.address);

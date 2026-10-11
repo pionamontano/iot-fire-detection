@@ -10,8 +10,7 @@ import {
   Clock,
   Search,
   MapPin,
-  Loader2,
-  Filter,
+    Filter,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -47,8 +46,7 @@ const timeAgo = (dateStr: string) => {
 };
 
 export const ResponderDashboard = () => {
-  const { profile } = useAuth();
-  const [devices, setDevices] = useState<DeviceWithStatus[]>([]);
+    const [devices, setDevices] = useState<DeviceWithStatus[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [unitSearch, setUnitSearch] = useState('');

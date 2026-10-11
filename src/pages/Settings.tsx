@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Save, Clock, ShieldCheck, Activity, UserCheck, BellRing, Settings as SettingsIcon, Unlock } from 'lucide-react';
+import { Save, Clock, ShieldCheck, Activity, Unlock } from 'lucide-react';
 import { SettingsFormSkeleton } from '../components/SkeletonLoaders';
+
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription } from '../lib/pushNotifications';
+import { Bell, BellOff } from 'lucide-react';
+
 
 export const Settings = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});

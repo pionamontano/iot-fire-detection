@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Device, AlertEvent, Profile } from '../lib/supabase';
+import type { Device, AlertEvent } from '../lib/supabase';
 import {
   Users,
   Cpu,
   Activity,
   AlertTriangle,
   Settings,
-  Loader2,
-  BatteryWarning
+    BatteryWarning
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DashboardSkeleton } from '../components/SkeletonLoaders';

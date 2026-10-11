@@ -4,6 +4,9 @@ import { useAuth } from '../contexts/AuthContext';
 import type { Device } from '../lib/supabase';
 import { Thermometer, Wind, MessageSquare, CheckCircle2, ShieldAlert, HelpCircle, AlertTriangle, Save, Send } from 'lucide-react';
 import { AlertSettingsSkeleton } from '../components/SkeletonLoaders';
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription } from '../lib/pushNotifications';
+import { Bell, BellOff } from 'lucide-react';
+
 
 export const ResidentAlertSettings = () => {
   const { profile } = useAuth();
@@ -14,6 +17,10 @@ export const ResidentAlertSettings = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [contactError, setContactError] = useState('');
+
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(true);
+
 
   // Form State
   const [tempThreshold, setTempThreshold] = useState(55);
@@ -28,6 +35,11 @@ export const ResidentAlertSettings = () => {
   useEffect(() => {
     if (profile?.device_id) {
       fetchDevice(profile.device_id);
+      getPushSubscription().then(sub => {
+        setIsPushSubscribed(!!sub);
+        setPushLoading(false);
+      });
+
     } else if (profile) {
       setLoading(false);
     }
@@ -43,7 +55,33 @@ export const ResidentAlertSettings = () => {
   }, [tempThreshold, smokeThreshold, contactNumber, origTemp, origSmoke, origContact]);
 
 
-  const handleConnectTelegram = () => {
+
+  const handleTogglePush = async () => {
+    setPushLoading(true);
+    try {
+      if (isPushSubscribed) {
+        await unsubscribeUserFromPush();
+        setIsPushSubscribed(false);
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          await subscribeUserToPush();
+          setIsPushSubscribed(true);
+        } else {
+          setErrorMsg('Notification permission denied by browser.');
+          setTimeout(() => setErrorMsg(''), 5000);
+        }
+      }
+    } catch (e: any) {
+      console.error(e);
+      setErrorMsg('Push error: ' + (e.message || 'Unknown error'));
+      setTimeout(() => setErrorMsg(''), 5000);
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+const handleConnectTelegram = () => {
     if (!profile) return;
     const botUsername = "AgapSenseAlertBot";
     const telegramUrl = `https://t.me/${botUsername}?start=${profile.id}`;
@@ -269,6 +307,44 @@ export const ResidentAlertSettings = () => {
                 {successMsg}
               </div>
             )}
+
+
+          {/* Web Push Linking */}
+          <div className="bg-white border border-[#E4E4E7] rounded-xl overflow-hidden shadow-sm mb-6">
+            <div className="bg-[#F4F4F5] px-4 py-3 border-b border-[#E4E4E7] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-[#71717A]" />
+                <h3 className="font-bold text-[13px] tracking-wide text-[#27272A] uppercase">WEB PUSH ALERTS</h3>
+              </div>
+              {isPushSubscribed ? (
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#10B981] bg-[#10B981]/10 px-2.5 py-1 rounded-full">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  ENABLED
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#F59E0B] bg-[#F59E0B]/10 px-2.5 py-1 rounded-full">
+                  <BellOff className="w-3.5 h-3.5" />
+                  DISABLED
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 sm:p-5">
+              <p className="text-[13px] text-[#52525B] leading-relaxed mb-4">
+                Receive notifications directly in your browser even when you are not actively looking at the dashboard.
+              </p>
+
+              <button
+                type="button"
+                onClick={handleTogglePush}
+                disabled={pushLoading}
+                className="w-full sm:w-auto px-5 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-[13px] font-bold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isPushSubscribed ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+                {pushLoading ? 'Processing...' : (isPushSubscribed ? 'Disable Push Notifications' : 'Enable Push Notifications')}
+              </button>
+            </div>
+          </div>
 
           {/* Telegram Linking */}
           <div className="bg-white border border-[#E4E4E7] rounded-xl overflow-hidden shadow-sm">
