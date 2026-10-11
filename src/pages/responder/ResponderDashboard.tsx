@@ -37,7 +37,7 @@ const createCustomIcon = (type: 'online' | 'alert' | 'fault' | 'offline') => {
   } else if (type === 'offline') {
     color = '#71717A'; // Gray (Offline)
     glow = 'transparent';
-    size = 10;
+    size = 12;
   }
 
   const html = `
@@ -65,6 +65,32 @@ type DeviceWithStatus = Device & {
   status: 'fire' | 'fault' | 'normal' | 'offline';
   activeAlert?: AlertEvent;
   connectivity: number;
+};
+
+const TickingTimer = ({ triggeredAt }: { triggeredAt: string }) => {
+  const [timeText, setTimeText] = React.useState(() => {
+    const seconds = Math.floor((Date.now() - new Date(triggeredAt).getTime()) / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}m ${s}s ago`;
+  });
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      const seconds = Math.floor((Date.now() - new Date(triggeredAt).getTime()) / 1000);
+      if (seconds < 60) {
+        setTimeText(`${seconds}s ago`);
+      } else {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        setTimeText(`${m}m ${s}s ago`);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [triggeredAt]);
+
+  return <span>Triggered {timeText}</span>;
 };
 
 const timeAgo = (dateStr: string) => {
@@ -233,7 +259,7 @@ export const ResponderDashboard = () => {
     ]);
 
     const allAlerts = (alertsRes.data || []) as unknown as AlertEvent[];
-    const unresolvedAlerts = allAlerts.filter(a => !a.resolved_at);
+    const unresolvedAlerts = allAlerts.filter(a => !a.resolved_at && a.incident_status !== 'resolved' && a.incident_status !== 'false_alarm');
 
     const enriched: DeviceWithStatus[] = (devicesRes.data || []).map((d: any) => {
       const alert = unresolvedAlerts.find(a => a.device_id === d.id);
@@ -398,7 +424,7 @@ export const ResponderDashboard = () => {
                       <strong className="block text-sm font-bold">{device.device_code}</strong>
                       <span className="text-xs text-gray-600 block mt-1">{device.location_desc}</span>
                       <span className="text-xs font-bold mt-1 block capitalize" style={{ color: device.status === 'fire' ? '#DC2626' : device.status === 'fault' ? '#F59E0B' : device.status === 'offline' ? '#A1A1AA' : '#10B981' }}>
-                        {device.status === 'fire' ? 'FIRE DETECTED' : device.status === 'fault' ? 'HIGH TEMP' : device.status === 'offline' ? 'OFFLINE' : 'HEALTHY'}
+                        {device.status === 'fire' ? 'FIRE DETECTED' : device.status === 'fault' ? 'HIGH TEMP' : device.status === 'offline' ? 'OFFLINE' : 'HEALTHY'} - {device.last_seen_at ? timeAgo(device.last_seen_at) : 'NO TELEMETRY'}
                       </span>
                     </div>
                   </Popup>
@@ -460,7 +486,7 @@ export const ResponderDashboard = () => {
                         <p className="text-[#5B403D] text-xs font-medium">{loc}</p>
                       </div>
                       <span className="text-[10px] font-bold tracking-wider uppercase text-gray-500 whitespace-nowrap">
-                        Triggered {timeAgo(alert.triggered_at).toLowerCase()}
+                        <TickingTimer triggeredAt={alert.triggered_at} />
                       </span>
                     </div>
                     {/* Sensor Readings */}
@@ -523,13 +549,13 @@ export const ResponderDashboard = () => {
                           rel="noreferrer"
                           className={`flex items-center justify-center gap-1.5 w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors ${!(alert.latitude && alert.longitude) && 'opacity-50 pointer-events-none'}`}
                         >
-                          <Navigation className="w-3 h-3" /> Navigation
+                          <Navigation className="w-3 h-3" /> Open Navigation
                         </a>
                         <a
                           href={bfpContact ? `tel:${bfpContact}` : '#'}
                           className={`flex items-center justify-center gap-1.5 w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors ${!bfpContact && 'opacity-50 pointer-events-none'}`}
                         >
-                          <PhoneCall className="w-3 h-3" /> Call Contact
+                          <PhoneCall className="w-3 h-3" /> Call Site Guard / Admin
                         </a>
                       </div>
                     </div>
@@ -580,9 +606,9 @@ const MapUpdater = ({ devices }: { devices: DeviceWithStatus[] }) => {
     const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);
     if (validDevices.length > 0) {
       const bounds = L.latLngBounds(validDevices.map(d => [d.latitude as number, d.longitude as number]));
-      map.fitBounds(bounds, { maxZoom: 16, padding: [20, 20] });
+      map.fitBounds(bounds, { maxZoom: 15, padding: [20, 20] });
     } else {
-      map.flyTo([14.8527, 120.8160], 13, { duration: 1.5 });
+      map.flyTo([14.8527, 120.8160], 14, { duration: 1.5 });
     }
   }, [devices, map]);
   return null;
