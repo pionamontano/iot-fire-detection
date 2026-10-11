@@ -16,13 +16,9 @@
 // ============================================================
 
 #include "gsm.h"
-#include <TelnetStream.h>
 
 #if DEBUG_MODE
-  #define GSMLOG(fmt, ...) { \
-      Serial.printf("[GSM] " fmt "\n", ##__VA_ARGS__); \
-      TelnetStream.printf("[GSM] " fmt "\n", ##__VA_ARGS__); \
-  }
+  #define GSMLOG(fmt, ...) Serial.printf("[GSM] " fmt "\n", ##__VA_ARGS__)
 #else
   #define GSMLOG(fmt, ...)
 #endif

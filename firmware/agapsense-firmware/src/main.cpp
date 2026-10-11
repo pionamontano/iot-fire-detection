@@ -20,13 +20,9 @@
 #include "gps.h"
 #include "connectivity.h"
 #include "gsm.h"
-#include <TelnetStream.h>
 
 #if DEBUG_MODE
-  #define LOG(fmt, ...) { \
-      Serial.printf("[MAIN] " fmt "\n", ##__VA_ARGS__); \
-      TelnetStream.printf("[MAIN] " fmt "\n", ##__VA_ARGS__); \
-  }
+  #define LOG(fmt, ...) Serial.printf("[MAIN] " fmt "\n", ##__VA_ARGS__)
 #else
   #define LOG(fmt, ...)
 #endif
