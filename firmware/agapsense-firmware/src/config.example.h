@@ -75,7 +75,7 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 #define ENDPOINT_ALERT           "/functions/v1/trigger-alert"
 #define ENDPOINT_GET_CONFIG      "/functions/v1/get-device-config"
 
-#define HTTP_TIMEOUT_MS          10000
+#define HTTP_TIMEOUT_MS          3000
 
 // ── Device Identity ────────────────────────────────────────
 #define DEVICE_ID                "bantay-apoy-node-001"
