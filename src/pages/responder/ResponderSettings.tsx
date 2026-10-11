@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
-import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Plus, Trash2, Send } from 'lucide-react';
+import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Send, Bell } from 'lucide-react';
 
 export const ResponderSettings = () => {
   const { profile } = useAuth();
@@ -13,7 +13,6 @@ export const ResponderSettings = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
-  const [pushLoading, setPushLoading] = useState(true);
 
   const [hasChanges, setHasChanges] = useState(false);
   const [profileContactError, setProfileContactError] = useState('');
@@ -27,13 +26,11 @@ export const ResponderSettings = () => {
   const [stationSuccess, setStationSuccess] = useState('');
   const [stationError, setStationError] = useState('');
   const [stationContactError, setStationContactError] = useState('');
-  const [personnelContactErrors, setPersonnelContactErrors] = useState<Record<number, string>>({});
   
   const [stationName, setStationName] = useState('');
   const [address, setAddress] = useState('');
   const [stationContact, setStationContact] = useState('');
   const [email, setEmail] = useState('');
-  const [keyPersonnel, setKeyPersonnel] = useState<{title: string, name: string, contact: string}[]>([]);
 
   useEffect(() => {
     if (profile) {
@@ -53,7 +50,6 @@ export const ResponderSettings = () => {
         setAddress(data.address);
         setStationContact(data.contact_number);
         setEmail(data.email);
-        setKeyPersonnel(data.key_personnel || []);
       }
     } catch (e) {
       console.error('Error fetching station settings:', e);
@@ -113,19 +109,6 @@ export const ResponderSettings = () => {
     }
     setStationContactError('');
     
-    // Validate personnel contacts
-    const pErrors: Record<number, string> = {};
-    keyPersonnel.forEach((person, index) => {
-      if (person.contact && !phoneRegex.test(person.contact)) {
-        pErrors[index] = 'Invalid format (e.g. 09171234567)';
-      }
-    });
-    if (Object.keys(pErrors).length > 0) {
-      setPersonnelContactErrors(pErrors);
-      return;
-    }
-    setPersonnelContactErrors({});
-    
     setStationSaving(true);
     setStationSuccess('');
     setStationError('');
@@ -136,8 +119,7 @@ export const ResponderSettings = () => {
           station_name: stationName.trim(),
           address: address.trim(),
           contact_number: stationContact.trim(),
-          email: email.trim(),
-          key_personnel: keyPersonnel
+          email: email.trim()
         })
         .eq('id', 1);
 
@@ -152,31 +134,6 @@ export const ResponderSettings = () => {
     } finally {
       setStationSaving(false);
     }
-  };
-
-  const addPersonnel = () => {
-    setKeyPersonnel([...keyPersonnel, { title: '', name: '', contact: '' }]);
-  };
-
-  const removePersonnel = (index: number) => {
-    const updated = [...keyPersonnel];
-    updated.splice(index, 1);
-    setKeyPersonnel(updated);
-  };
-
-  const updatePersonnel = (index: number, field: 'title' | 'name' | 'contact', value: string) => {
-    const updated = [...keyPersonnel];
-    if (field === 'contact') {
-      updated[index][field] = value.replace(/\D/g, '');
-      if (personnelContactErrors[index]) {
-        const newErrors = { ...personnelContactErrors };
-        delete newErrors[index];
-        setPersonnelContactErrors(newErrors);
-      }
-    } else {
-      updated[index][field] = value;
-    }
-    setKeyPersonnel(updated);
   };
 
   const handleConnectTelegram = () => {
@@ -294,6 +251,44 @@ export const ResponderSettings = () => {
             </div>
           </div>
 
+          {/* Browser Push Notifications */}
+          <div className="bg-white border border-[#E4E4E7] rounded-xl overflow-hidden shadow-sm mt-6">
+            <div className="bg-[#F4F4F5] px-4 py-3 border-b border-[#E4E4E7] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-[#71717A]" />
+                <h3 className="font-bold text-[13px] tracking-wide text-[#27272A] uppercase">BROWSER PUSH NOTIFICATIONS</h3>
+              </div>
+              {isPushSubscribed ? (
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#10B981] bg-[#10B981]/10 px-2.5 py-1 rounded-full">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  ACTIVE
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#F59E0B] bg-[#F59E0B]/10 px-2.5 py-1 rounded-full">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  DISABLED
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
+              <p className="text-[13px] text-[#52525B] leading-relaxed flex-1">
+                Receive real-time sound and banner alerts on this device for high-priority incidents.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setIsPushSubscribed(!isPushSubscribed)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${isPushSubscribed ? 'bg-primary' : 'bg-[#E4E4E7]'}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPushSubscribed ? 'translate-x-5' : 'translate-x-0'}`}
+                />
+              </button>
+            </div>
+          </div>
+
             {errorMsg && (
                 <div className="flex items-center gap-2 text-sm font-bold text-[#DC2626]">
                   <AlertTriangle className="w-4 h-4" /> {errorMsg}
@@ -371,66 +366,6 @@ export const ResponderSettings = () => {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border mt-2">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-bold text-text-heading">Key Personnel</h3>
-                    <button 
-                      onClick={addPersonnel}
-                      className="text-xs font-bold text-[#B91C1C] flex items-center gap-1 hover:text-[#DC2626]"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> ADD PERSONNEL
-                    </button>
-                  </div>
-                  
-                  <div className="flex flex-col gap-3">
-                    {keyPersonnel.map((person, index) => (
-                      <div key={index} className="flex flex-col sm:flex-row gap-3 bg-surface-alt p-3 rounded-lg border border-border items-start sm:items-center">
-                        <div className="flex-1 w-full sm:w-auto">
-                          <input
-                            type="text"
-                            placeholder="Title / Position (e.g. Fire Chief)"
-                            value={person.title}
-                            onChange={e => updatePersonnel(index, 'title', e.target.value)}
-                            className="w-full bg-white border border-border rounded px-3 py-2 text-xs focus:border-primary focus:outline-none"
-                          />
-                        </div>
-                        <div className="flex-1 w-full sm:w-auto">
-                          <input
-                            type="text"
-                            placeholder="Full Name"
-                            value={person.name}
-                            onChange={e => updatePersonnel(index, 'name', e.target.value)}
-                            className="w-full bg-white border border-border rounded px-3 py-2 text-xs focus:border-primary focus:outline-none"
-                          />
-                        </div>
-                        <div className="flex-1 w-full sm:w-auto">
-                          <input
-                            type="tel"
-                            maxLength={11}
-                            placeholder="09XXXXXXXXX"
-                            value={person.contact}
-                            onChange={e => updatePersonnel(index, 'contact', e.target.value)}
-                            className={`w-full bg-white border rounded px-3 py-2 text-xs focus:outline-none ${personnelContactErrors[index] ? 'border-[#DC2626] focus:border-[#DC2626]' : 'border-border focus:border-primary'}`}
-                          />
-                          {personnelContactErrors[index] && <span className="text-[#DC2626] text-[10px] font-bold mt-0.5 block">{personnelContactErrors[index]}</span>}
-                        </div>
-                        <button 
-                          onClick={() => removePersonnel(index)}
-                          className="p-2 text-text-faint hover:text-[#DC2626] transition-colors self-end sm:self-auto"
-                          title="Remove"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                    {keyPersonnel.length === 0 && (
-                      <p className="text-xs text-text-faint text-center py-4 bg-surface-alt rounded border border-dashed border-border">
-                        No key personnel added. Click the add button to start.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
                 <div className="flex gap-3 mt-4">
                   <button
                     onClick={handleSaveStation}
@@ -489,9 +424,16 @@ export const ResponderSettings = () => {
           <div className="bg-[#B91C1C] rounded-lg p-6 text-white">
             <Settings className="w-6 h-6 mb-3 text-white/80" />
             <h3 className="font-bold text-lg mb-1">Need Admin Help?</h3>
-            <p className="text-xs text-white/80 leading-relaxed">
+            <p className="text-xs text-white/80 leading-relaxed mb-4">
               Contact your system administrator to change your role, reset your password, or manage account access.
             </p>
+            <a
+              href={`mailto:agapsense@gmail.com?subject=${encodeURIComponent(`Account Support Request - BFP Responder / ${profile.id}`)}&body=${encodeURIComponent(`User ID: ${profile.id}\nRole: BFP Responder\n\nPlease describe your request details below (e.g., role change, password reset, or access issues):\n\n`)}`}
+              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2.5 bg-white text-[#B91C1C] text-xs font-bold rounded-md hover:bg-gray-50 transition-colors"
+            >
+              <Mail className="w-4 h-4" />
+              Email Administrator
+            </a>
           </div>
         </div>
       </div>
