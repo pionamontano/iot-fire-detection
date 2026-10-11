@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, FileText, Users, Cpu, Settings, LogOut, Menu, X } from 'lucide-react';
 import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
+import { GlobalErrorBoundary } from './GlobalErrorBoundary';
 
 export const ResponderLayout: React.FC = () => {
   const { signOut } = useAuth();
@@ -148,7 +149,9 @@ export const ResponderLayout: React.FC = () => {
         {/* ─── Main Content ─── */}
         <main className="flex-1 h-full overflow-y-auto flex flex-col relative z-0">
           <div className="p-6 md:p-10 flex-1">
-            <Outlet />
+            <GlobalErrorBoundary>
+              <Outlet />
+            </GlobalErrorBoundary>
           </div>
         </main>
       </div>

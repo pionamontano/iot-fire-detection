@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { registerServiceWorker } from './lib/pushNotifications';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
 import { AuthGuard } from './components/AuthGuard';
 import { AdminLayout } from './components/AdminLayout';
 import { ResponderLayout } from './components/ResponderLayout';
@@ -41,7 +42,8 @@ function App() {
     return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
+        <GlobalErrorBoundary>
+          <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register/resident" element={<RegisterResident />} />
@@ -90,7 +92,8 @@ function App() {
 
           {/* 404 Fallback */}
           <Route path="*" element={<NotFound />} />
-        </Routes>
+          </Routes>
+        </GlobalErrorBoundary>
       </BrowserRouter>
     </AuthProvider>
   );
