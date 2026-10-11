@@ -15,7 +15,10 @@ const timeAgo = (dateStr: string) => {
   return `${days}d ago`;
 };
 
+import { useAuth } from '../contexts/AuthContext';
+
 export const Devices = () => {
+  const { session } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -48,34 +51,45 @@ export const Devices = () => {
   });
 
   const fetchDevices = useCallback(async () => {
+    if (!session) return;
     setLoading(true);
-    const [devicesRes, batteryRes] = await Promise.all([
-      supabase.from('devices').select('*').order('created_at', { ascending: false }),
-      // Latest readings across devices, to derive each device's current
-      // on_battery state (no per-device "latest reading" view exists, so
-      // the most recent batch is reduced client-side below).
-      supabase.from('sensor_readings')
-        .select('device_id, on_battery, recorded_at')
-        .order('recorded_at', { ascending: false })
-        .limit(300),
-    ]);
+    try {
+      const [devicesRes, batteryRes] = await Promise.all([
+        supabase.from('devices').select('*').order('created_at', { ascending: false }),
+        // Latest readings across devices, to derive each device's current
+        // on_battery state (no per-device "latest reading" view exists, so
+        // the most recent batch is reduced client-side below).
+        supabase.from('sensor_readings')
+          .select('device_id, on_battery, recorded_at')
+          .order('recorded_at', { ascending: false })
+          .limit(300),
+      ]);
 
-    if (!devicesRes.error && devicesRes.data) {
-      setDevices(devicesRes.data);
-    }
-    if (batteryRes.data) {
-      const latestByDevice: Record<string, boolean> = {};
-      for (const r of batteryRes.data) {
-        if (!(r.device_id in latestByDevice)) latestByDevice[r.device_id] = r.on_battery;
+      if (devicesRes.error) throw devicesRes.error;
+
+      if (devicesRes.data) {
+        setDevices(devicesRes.data);
       }
-      setBatteryByDevice(latestByDevice);
+      if (batteryRes.data) {
+        const latestByDevice: Record<string, boolean> = {};
+        for (const r of batteryRes.data) {
+          if (!(r.device_id in latestByDevice)) latestByDevice[r.device_id] = r.on_battery;
+        }
+        setBatteryByDevice(latestByDevice);
+      }
+    } catch (error: any) {
+      console.error('Error fetching devices', error);
+      alert('Failed to load devices: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchDevices();
-  }, [fetchDevices]);
+    if (session) {
+      fetchDevices();
+    }
+  }, [session, fetchDevices]);
 
   const openEditDevice = (device: Device) => {
     setEditingDevice(device);

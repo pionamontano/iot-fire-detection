@@ -48,6 +48,7 @@ const statusConfig = {
 };
 
 export const Alerts = () => {
+  const { session } = useAuth();
   const [rawDevices, setRawDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,29 +67,39 @@ export const Alerts = () => {
   const itemsPerPage = 5;
 
   const fetchData = useCallback(async () => {
+    if (!session) return;
     setLoading(true);
-    const [devicesRes, alertsRes, batteryRes] = await Promise.all([
-      supabase.from('devices').select('*').order('created_at', { ascending: false }),
-      supabase.from('alert_events').select('*, devices(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
-      // Latest readings across devices, to derive each device's current
-      // on_battery state (no per-device "latest reading" view exists, so
-      // the most recent batch is reduced client-side below).
-      supabase.from('sensor_readings')
-        .select('device_id, on_battery, recorded_at')
-        .order('recorded_at', { ascending: false })
-        .limit(300),
-    ]);
+    try {
+      const [devicesRes, alertsRes, batteryRes] = await Promise.all([
+        supabase.from('devices_safe').select('*').order('created_at', { ascending: false }),
+        supabase.from('alert_events').select('*, devices_safe(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
+        // Latest readings across devices, to derive each device's current
+        // on_battery state (no per-device "latest reading" view exists, so
+        // the most recent batch is reduced client-side below).
+        supabase.from('sensor_readings')
+          .select('device_id, on_battery, recorded_at')
+          .order('recorded_at', { ascending: false })
+          .limit(300),
+      ]);
 
-    setRawDevices(devicesRes.data || []);
-    setAlerts((alertsRes.data || []) as unknown as AlertEvent[]);
-    if (batteryRes.data) {
-      const latestByDevice: Record<string, boolean> = {};
-      for (const r of batteryRes.data) {
-        if (!(r.device_id in latestByDevice)) latestByDevice[r.device_id] = r.on_battery;
+      if (devicesRes.error) throw devicesRes.error;
+      if (alertsRes.error) throw alertsRes.error;
+
+      setRawDevices(devicesRes.data || []);
+      setAlerts((alertsRes.data || []) as unknown as AlertEvent[]);
+      if (batteryRes.data) {
+        const latestByDevice: Record<string, boolean> = {};
+        for (const r of batteryRes.data) {
+          if (!(r.device_id in latestByDevice)) latestByDevice[r.device_id] = r.on_battery;
+        }
+        setBatteryByDevice(latestByDevice);
       }
-      setBatteryByDevice(latestByDevice);
+    } catch (error: any) {
+      console.error('Error fetching alerts data:', error);
+      alert('Failed to load alerts: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   // Re-derived on every fetch AND every 30s tick, so a device's badge advances
@@ -102,7 +113,9 @@ export const Alerts = () => {
   }, [rawDevices, alerts, now]);
 
   useEffect(() => {
-    fetchData();
+    if (session) {
+      fetchData();
+    }
 
     const deviceSub = supabase.channel('sysoverview_devices')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, fetchData)
@@ -115,7 +128,7 @@ export const Alerts = () => {
       supabase.removeChannel(deviceSub);
       supabase.removeChannel(alertSub);
     };
-  }, [fetchData]);
+  }, [session, fetchData]);
 
   const activeAlertCount = devices.filter(d => d.status === 'critical').length;
   const operationalCount = devices.filter(d => d.status === 'operational').length;

@@ -87,6 +87,7 @@ const timeAgo = (dateStr: string) => {
 
 export const InteractiveMap = () => {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
     const now = useNowTick();
@@ -97,7 +98,9 @@ export const InteractiveMap = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    fetchData();
+    if (session) {
+      fetchData();
+    }
 
     const deviceSub = supabase.channel('map_devices')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, fetchData)
@@ -111,9 +114,10 @@ export const InteractiveMap = () => {
       supabase.removeChannel(deviceSub);
       supabase.removeChannel(alertSub);
     };
-  }, []);
+  }, [session]);
 
   const fetchData = async () => {
+    if (!session) return;
     try {
       // Fetch devices and all recent alerts for the feed (limit 50)
       const [devicesRes, alertsRes] = await Promise.all([
@@ -142,8 +146,9 @@ export const InteractiveMap = () => {
         setDevices(devicesWithLiveLocation);
       }
       if (alertsRes.data) setAlerts(alertsRes.data as unknown as AlertEvent[]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching map data', error);
+      alert('Failed to load map data: ' + error.message);
     }
   };
 

@@ -13,6 +13,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { DashboardSkeleton } from '../components/SkeletonLoaders';
 import { getConnectivityStatus } from '../lib/deviceStatus';
 import { useNowTick } from '../hooks/useNowTick';
+import { useAuth } from '../contexts/AuthContext';
 
 // Helper to determine device status based on alerts and last_seen_at
 const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[], now: number): 'online' | 'reconnecting' | 'alert' | 'offline' => {
@@ -34,6 +35,7 @@ interface ActivityLogEntry {
 }
 
 export const Dashboard = () => {
+  const { session } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
   // device_id -> latest on_battery (spec HW-1.5.2/SW-2.4.4 — previously
@@ -47,7 +49,9 @@ export const Dashboard = () => {
   const now = useNowTick();
 
   useEffect(() => {
-    fetchData();
+    if (session) {
+      fetchData();
+    }
 
     const deviceSub = supabase.channel('dash_devices')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, fetchData)
@@ -66,7 +70,7 @@ export const Dashboard = () => {
       supabase.removeChannel(alertSub);
       supabase.removeChannel(profileSub);
     };
-  }, []);
+  }, [session]);
 
   const fetchData = async () => {
     try {

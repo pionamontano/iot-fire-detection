@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Download, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Zap, History, Filter,  } from 'lucide-react';
 import { TableBodySkeleton } from '../components/SkeletonLoaders';
+import { useAuth } from '../contexts/AuthContext';
 
 type LogEvent = {
   id: string;
@@ -27,6 +28,7 @@ const statusBadgeConfig = {
 };
 
 export const Logs = () => {
+  const { session } = useAuth();
   const [logs, setLogs] = useState<LogEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -36,10 +38,13 @@ export const Logs = () => {
   const itemsPerPage = 25;
 
   useEffect(() => {
-    fetchLogs();
-  }, []);
+    if (session) {
+      fetchLogs();
+    }
+  }, [session]);
 
   const fetchLogs = async () => {
+    if (!session) return;
     setLoading(true);
 
     try {

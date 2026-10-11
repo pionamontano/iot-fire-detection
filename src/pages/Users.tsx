@@ -60,10 +60,13 @@ export const Users = () => {
   const [assignError, setAssignError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (currentProfile) {
+      fetchData();
+    }
+  }, [currentProfile]);
 
   const fetchData = async () => {
+    if (!currentProfile) return;
     try {
       setLoading(true);
       
