@@ -43,7 +43,6 @@
 // ============================================================
 
 #include <ArduinoJson.h>
-#include <Preferences.h>
 
 #include "connectivity.h"
 #include "gsm.h"
@@ -52,16 +51,9 @@
 #include <WiFiManager.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <TelnetStream.h>
-
-static Preferences prefs;
-static const char* NVS_NAMESPACE = "agap_cfg";
 
 #if DEBUG_MODE
-  #define CLOG(fmt, ...) { \
-      Serial.printf("[CONN] " fmt "\n", ##__VA_ARGS__); \
-      TelnetStream.printf("[CONN] " fmt "\n", ##__VA_ARGS__); \
-  }
+  #define CLOG(fmt, ...) Serial.printf("[CONN] " fmt "\n", ##__VA_ARGS__)
 #else
   #define CLOG(fmt, ...)
 #endif
@@ -195,8 +187,7 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
           "\"rssi\":%d,"
           "\"on_battery\":%s,"
           "\"sensor_ready\":%s,"
-          "\"mq7_phase\":\"%s\","
-          "\"local_ip\":\"%s\""
+          "\"mq7_phase\":\"%s\""
         "}",
         DEVICE_ID,
         sd.co_ppm, sd.temperature_c,
@@ -205,8 +196,7 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
         batteryMv, rssi,
         on_battery      ? "true" : "false",
         sd.sensor_ready ? "true" : "false",
-        mq7Phase,
-        WiFi.localIP().toString().c_str()
+        mq7Phase
     );
     return httpsPost(ENDPOINT_INGEST, payload);
 }
@@ -377,15 +367,6 @@ bool fetchRemoteConfig(ConnectivityCtx* ctx) {
     CLOG("Config loaded: CO>=%.0f Temp>=%.0f Owner=%s BFP=%s",
          ctx->co_alert_ppm, ctx->temp_alert_c,
          ctx->ownerNumber, ctx->bfpNumber);
-
-    // Save fetched config to NVS for offline fallback
-    prefs.begin(NVS_NAMESPACE, false);
-    if (ctx->ownerNumber[0] != '\0') prefs.putString("owner_num", ctx->ownerNumber);
-    if (ctx->bfpNumber[0] != '\0') prefs.putString("bfp_num", ctx->bfpNumber);
-    if (ctx->co_alert_ppm > 0) prefs.putFloat("co_thresh", ctx->co_alert_ppm);
-    if (ctx->temp_alert_c > 0) prefs.putFloat("temp_thresh", ctx->temp_alert_c);
-    prefs.end();
-
     return true;
 }
 
@@ -410,30 +391,14 @@ void connectivityInit(ConnectivityCtx* ctx) {
     ctx->blueLedState       = false;
     ctx->batteryMv          = 0;
     ctx->rssi               = 0;
-
-    // Load config from NVS with defaults
-    prefs.begin(NVS_NAMESPACE, false);
-    ctx->co_alert_ppm = prefs.getFloat("co_thresh", CO_ALERT_PPM_DEFAULT);
-    ctx->temp_alert_c = prefs.getFloat("temp_thresh", TEMP_ALERT_PPM_DEFAULT);
-
-    String owner = prefs.getString("owner_num", OWNER_SMS_NUMBER_DEFAULT);
-    String bfp = prefs.getString("bfp_num", BFP_SMS_NUMBER_DEFAULT);
-
-    strncpy(ctx->ownerNumber, owner.c_str(), sizeof(ctx->ownerNumber) - 1);
-    ctx->ownerNumber[sizeof(ctx->ownerNumber) - 1] = '\0';
-
-    strncpy(ctx->bfpNumber, bfp.c_str(), sizeof(ctx->bfpNumber) - 1);
-    ctx->bfpNumber[sizeof(ctx->bfpNumber) - 1] = '\0';
-    prefs.end();
-
-    CLOG("Loaded NVS config: CO>=%.0f Temp>=%.0f Owner=%s BFP=%s",
-         ctx->co_alert_ppm, ctx->temp_alert_c,
-         ctx->ownerNumber, ctx->bfpNumber);
-
+    ctx->co_alert_ppm       = CO_ALERT_PPM_DEFAULT;
+    ctx->temp_alert_c       = TEMP_ALERT_PPM_DEFAULT;
     // [22] Zero out lastAlertEventId so first postSmsStatus() never sends garbage
     memset(ctx->lastAlertEventId, 0, sizeof(ctx->lastAlertEventId));
     memset(ctx->lastAddressResolved, 0, sizeof(ctx->lastAddressResolved));
     memset(ctx->lastTriggeredAt, 0, sizeof(ctx->lastTriggeredAt));
+    strncpy(ctx->ownerNumber, OWNER_SMS_NUMBER_DEFAULT, sizeof(ctx->ownerNumber) - 1);
+    strncpy(ctx->bfpNumber,   BFP_SMS_NUMBER_DEFAULT,   sizeof(ctx->bfpNumber)   - 1);
 
     WiFiManager wm;
     wm.setConnectTimeout(WIFI_CONNECT_TIMEOUT_S);
@@ -707,17 +672,9 @@ static void fireTier1Warning(ConnectivityCtx* ctx, const SensorData& sd, const G
 static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
     // 1. POST to trigger-alert — updates ctx->lastAlertEventId,
     //    ownerNumber, bfpNumber from response
-    bool httpSuccess = false;
     if (ctx->deviceState == DeviceState::ONLINE) {
         int code = postAlert(ctx, sd, fix, 2);
         CLOG("Tier 2 alert POST: code=%d", code);
-        if (code == 200 || code == 201) {
-            httpSuccess = true;
-        } else {
-            CLOG("Tier 2 alert POST failed or timed out — triggering SMS fallback");
-        }
-    } else {
-        CLOG("Device offline — triggering SMS fallback");
     }
 
     // 2. Queue SMS using freshest contacts — non-blocking. Snapshot
@@ -726,31 +683,18 @@ static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const Gps
     //    or the POST failed). Callers reset it to empty on every
     //    CLEAR→TIERx transition (see connectivityUpdate()), so it can
     //    never carry a stale, unrelated alert's id into this SMS.
-    if (!httpSuccess) {
-        uint32_t now = millis();
-        if (now - ctx->lastSmsSent_ms >= SMS_DEBOUNCE_MS || ctx->lastSmsSent_ms == 0) {
-            ctx->lastSmsSent_ms = now;
-
-            if (ctx->ownerNumber[0] != '\0') {
-                gsmSendOwnerSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng,
-                               ctx->lastAddressResolved,
-                               ctx->ownerNumber, ctx->lastAlertEventId);
-            } else {
-                CLOG("WARN: No owner number cached for SMS fallback");
-            }
-
-            if (ctx->bfpNumber[0] != '\0') {
-                gsmSendBfpSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng,
-                             ctx->lastAddressResolved, ctx->lastTriggeredAt,
-                             ctx->bfpNumber, ctx->lastAlertEventId);
-            } else {
-                CLOG("WARN: No BFP number cached for SMS fallback");
-            }
-
-            CLOG("Tier 2 SMS queued: owner=%s bfp=%s event=%s", ctx->ownerNumber, ctx->bfpNumber,
-                 ctx->lastAlertEventId[0] ? ctx->lastAlertEventId : "(none)");
-        } else {
-            CLOG("SMS debounced — %lu ms since last send", now - ctx->lastSmsSent_ms);
-        }
+    uint32_t now = millis();
+    if (now - ctx->lastSmsSent_ms >= SMS_DEBOUNCE_MS || ctx->lastSmsSent_ms == 0) {
+        ctx->lastSmsSent_ms = now;
+        gsmSendOwnerSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng,
+                       ctx->lastAddressResolved,
+                       ctx->ownerNumber, ctx->lastAlertEventId);
+        gsmSendBfpSms(sd.co_ppm, sd.temperature_c, fix.lat, fix.lng,
+                     ctx->lastAddressResolved, ctx->lastTriggeredAt,
+                     ctx->bfpNumber, ctx->lastAlertEventId);
+        CLOG("Tier 2 SMS queued: owner=%s bfp=%s event=%s", ctx->ownerNumber, ctx->bfpNumber,
+             ctx->lastAlertEventId[0] ? ctx->lastAlertEventId : "(none)");
+    } else {
+        CLOG("SMS debounced — %lu ms since last send", now - ctx->lastSmsSent_ms);
     }
 }
