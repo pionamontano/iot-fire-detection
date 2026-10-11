@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Users,  Settings, Cpu, LogOut, Menu, X, BarChart3, FileText } from 'lucide-react';
 import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
+import { GlobalErrorBoundary } from './GlobalErrorBoundary';
 
 export const AdminLayout: React.FC = () => {
   const { signOut } = useAuth();
@@ -153,7 +154,9 @@ export const AdminLayout: React.FC = () => {
         {/* ─── Main Content ─── */}
         <main className="flex-1 h-full overflow-y-auto flex flex-col relative z-0">
           <div className={location.pathname === '/admin/map' ? 'flex-1 flex flex-col relative min-h-full' : 'p-6 md:p-10 flex-1'}>
-            <Outlet />
+            <GlobalErrorBoundary>
+              <Outlet />
+            </GlobalErrorBoundary>
           </div>
         </main>
       </div>
