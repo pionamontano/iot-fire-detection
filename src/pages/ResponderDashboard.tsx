@@ -179,7 +179,7 @@ export const ResponderDashboard = () => {
             style={{ height: '100%', width: '100%', minHeight: 420 }}
             className="z-0"
           >
-            <MapUpdater center={selectedLocation} />
+            <MapUpdater center={null} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
