@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Device, AlertEvent } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,23 +12,54 @@ import {
   MapPin,
   Filter,
   Loader2,
+  PhoneCall,
+  Navigation,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
 // ─── Map Marker Icons ───
-const createIcon = (color: string, size = 14) =>
-  new L.DivIcon({
-    className: 'custom-leaflet-icon',
-    html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:2px solid white;box-shadow:0 1px 4px ${color}80;"></div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
+const createCustomIcon = (type: 'online' | 'alert' | 'fault' | 'offline') => {
+  let color = '#10B981'; // Green (Online)
+  let glow = 'rgba(16, 185, 129, 0.3)';
+  let size = 10;
 
-const fireIcon = createIcon('#DC2626', 16);
-const faultIcon = createIcon('#F59E0B', 14);
-const normalIcon = createIcon('#10B981', 10);
-const offlineIcon = createIcon('#A1A1AA', 10);
+  if (type === 'alert') {
+    color = '#DC2626'; // Red (Fire Alert)
+    glow = 'rgba(220, 38, 38, 0.4)';
+    size = 16;
+  } else if (type === 'fault') {
+    color = '#F59E0B'; // Amber (Fault)
+    glow = 'rgba(245, 158, 11, 0.3)';
+    size = 14;
+  } else if (type === 'offline') {
+    color = '#71717A'; // Gray (Offline)
+    glow = 'transparent';
+    size = 10;
+  }
+
+  const html = `
+    <div style="position: relative; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">
+      ${type === 'alert' ? `<div style="position: absolute; width: 48px; height: 48px; background: ${glow}; border-radius: 50%; animation: pulse 2s infinite;"></div>` : ''}
+      <div style="width: ${size}px; height: ${size}px; background: ${color}; border: 2px solid white; border-radius: 50%; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); position: relative; z-index: 10;"></div>
+    </div>
+  `;
+
+  return new L.DivIcon({
+    html,
+    className: 'custom-leaflet-marker',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12]
+  });
+};
+
+const fireIcon = createCustomIcon('alert');
+const faultIcon = createCustomIcon('fault');
+const normalIcon = createCustomIcon('online');
+const offlineIcon = createCustomIcon('offline');
 
 type DeviceWithStatus = Device & {
   status: 'fire' | 'fault' | 'normal' | 'offline';
@@ -46,11 +77,116 @@ const timeAgo = (dateStr: string) => {
   return `${Math.floor(hours / 24)}d AGO`;
 };
 
+
 export const ResponderDashboard = () => {
-    const [devices, setDevices] = useState<DeviceWithStatus[]>([]);
+  const [devices, setDevices] = useState<DeviceWithStatus[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [acknowledging, setAcknowledging] = useState<string | null>(null);
+  const [klaxonArmed, setKlaxonArmed] = useState(true);
+
+  // Klaxon AudioContext ref
+  const audioCtxRef = React.useRef<AudioContext | null>(null);
+  const oscillatorRef = React.useRef<OscillatorNode | null>(null);
+  const gainNodeRef = React.useRef<GainNode | null>(null);
+  const sirenIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPlayingRef = React.useRef(false);
+
+  const startKlaxon = useCallback(() => {
+    if (isPlayingRef.current) return;
+    isPlayingRef.current = true;
+
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!audioCtxRef.current && AudioContextClass) {
+        audioCtxRef.current = new AudioContextClass();
+      }
+
+      const ctx = audioCtxRef.current;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      oscillator.type = 'square';
+      oscillator.frequency.setValueAtTime(800, ctx.currentTime); // Start at 800Hz
+
+      gainNode.gain.setValueAtTime(0, ctx.currentTime);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      oscillator.start();
+
+      oscillatorRef.current = oscillator;
+      gainNodeRef.current = gainNode;
+
+      let high = false;
+      sirenIntervalRef.current = setInterval(() => {
+        if (!ctx) return;
+        const targetFreq = high ? 800 : 1200;
+        oscillator.frequency.setTargetAtTime(targetFreq, ctx.currentTime, 0.1);
+        gainNode.gain.setTargetAtTime(0.3, ctx.currentTime, 0.1);
+        high = !high;
+      }, 500);
+
+    } catch (err) {
+      console.warn("AudioContext failed to start:", err);
+    }
+  }, []);
+
+  const stopKlaxon = useCallback(() => {
+    if (!isPlayingRef.current) return;
+    isPlayingRef.current = false;
+
+    if (sirenIntervalRef.current) {
+      clearInterval(sirenIntervalRef.current);
+      sirenIntervalRef.current = null;
+    }
+
+    try {
+      if (gainNodeRef.current && audioCtxRef.current) {
+        gainNodeRef.current.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.1);
+      }
+      setTimeout(() => {
+        if (oscillatorRef.current) {
+          oscillatorRef.current.stop();
+          oscillatorRef.current.disconnect();
+          oscillatorRef.current = null;
+        }
+        if (gainNodeRef.current) {
+          gainNodeRef.current.disconnect();
+          gainNodeRef.current = null;
+        }
+      }, 200);
+    } catch (err) {
+       console.warn("Error stopping audio:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopKlaxon();
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(console.warn);
+      }
+    };
+  }, [stopKlaxon]);
+
+  // Check if there is an unacknowledged critical fire alert
+  const hasUnacknowledgedCriticalFire = useMemo(() => {
+    return activeAlerts.some(a => a.alert_tier === 2 && (!a.incident_status || a.incident_status === 'active'));
+  }, [activeAlerts]);
+
+  useEffect(() => {
+    if (hasUnacknowledgedCriticalFire && klaxonArmed) {
+      startKlaxon();
+    } else {
+      stopKlaxon();
+    }
+  }, [hasUnacknowledgedCriticalFire, klaxonArmed, startKlaxon, stopKlaxon]);
+
 
   const handleAcknowledge = async (alertId: string) => {
     setAcknowledging(alertId);
@@ -93,7 +229,7 @@ export const ResponderDashboard = () => {
         .order('recorded_at', { foreignTable: 'sensor_readings', ascending: false })
         .limit(1, { foreignTable: 'sensor_readings' })
         .order('created_at', { ascending: false }),
-      supabase.from('alert_events').select('*, devices(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
+      supabase.from('alert_events').select('*, devices(device_code, label, location_desc, bfp_contact)').order('triggered_at', { ascending: false }),
     ]);
 
     const allAlerts = (alertsRes.data || []) as unknown as AlertEvent[];
@@ -163,13 +299,23 @@ export const ResponderDashboard = () => {
   }, [fetchData]);
 
   // Counts
-  const activeAlarmCount = devices.filter(d => d.status === 'fire' || d.status === 'fault').length;
+  const activeAlarmCount = devices.filter(d => d.status === 'fire').length;
+  const preAlertsCount = devices.filter(d => d.status === 'fault').length;
   const devicesOnline = devices.filter(d => d.status !== 'offline').length;
-  const devicesOffline = devices.filter(d => d.status === 'offline').length;
-  const alertsToday = activeAlerts.length;
+  const totalDevices = devices.length;
+  const coveragePercent = totalDevices > 0 ? ((devicesOnline / totalDevices) * 100).toFixed(1) : '0.0';
+  const coverageText = `${devicesOnline} / ${totalDevices} Online (${coveragePercent}% Coverage)`;
 
   // Live feed alerts (top 5 unresolvedAlerts with device join data)
   const feedAlerts = activeAlerts.slice(0, 5);
+
+  const mapBounds = useMemo(() => {
+    const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);
+    if (validDevices.length === 0) return null;
+
+    const bounds = L.latLngBounds(validDevices.map(d => [d.latitude as number, d.longitude as number]));
+    return bounds;
+  }, [devices]);
 
   if (loading) {
     return <ResponderDashboardSkeleton />;
@@ -177,12 +323,54 @@ export const ResponderDashboard = () => {
 
   return (
     <div className="space-y-8 pb-10">
+      {/* Header with Klaxon Toggle */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={() => {
+            // Need a user gesture to resume audio context reliably if it was suspended
+            if (!klaxonArmed && audioCtxRef.current?.state === 'suspended') {
+              audioCtxRef.current.resume();
+            }
+            setKlaxonArmed(!klaxonArmed);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-colors ${
+            klaxonArmed
+              ? 'bg-red-100 text-red-700 border border-red-200 hover:bg-red-200'
+              : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+          }`}
+        >
+          {klaxonArmed ? (
+            <>
+              <Volume2 className="w-4 h-4" /> Klaxon Armed
+            </>
+          ) : (
+            <>
+              <VolumeX className="w-4 h-4" /> Muted
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Zero Coverage Alert */}
+      {totalDevices > 0 && devicesOnline === 0 && (
+        <div className="bg-red-600 text-white font-bold px-4 py-3 rounded-lg flex items-center justify-center gap-2 mb-6">
+          <AlertTriangle className="w-5 h-5" />
+          CRITICAL: ALL TELEMETRY LOST (0 ONLINE DEVICES)
+        </div>
+      )}
+
       {/* ─── 4 Stat Cards ─── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard label="Active Alarms" value={String(activeAlarmCount).padStart(2, '0')} color="#DC2626" icon={<AlertTriangle className="w-5 h-5" />} />
-        <StatCard label="Devices Online" value={devicesOnline.toLocaleString()} color="#10B981" icon={<Wifi className="w-5 h-5" />} />
-        <StatCard label="Devices Offline" value={String(devicesOffline)} color="#A1A1AA" icon={<WifiOff className="w-5 h-5" />} />
-        <StatCard label="Alerts Today" value={String(alertsToday)} color="#DC2626" icon={<Clock className="w-5 h-5" />} />
+        <StatCard
+          label="Active Alarms"
+          value={String(activeAlarmCount).padStart(2, '0')}
+          color="#DC2626"
+          icon={<AlertTriangle className="w-5 h-5" />}
+          highlightClass={activeAlarmCount > 0 ? "ring-2 ring-red-500 bg-red-50 animate-pulse" : ""}
+        />
+        <StatCard label="Pre-Alerts / Warning" value={String(preAlertsCount)} color="#F59E0B" icon={<AlertTriangle className="w-5 h-5" />} />
+        <StatCard label="Monitored Coverage" value={totalDevices > 0 ? coverageText : "0 / 0 Online (0% Coverage)"} color="#10B981" icon={<Wifi className="w-5 h-5" />} isTextSmall />
+        <StatCard label="Alerts Today" value={String(activeAlerts.length)} color="#DC2626" icon={<Clock className="w-5 h-5" />} />
       </div>
 
       {/* ─── Map + Live Alert Feed ─── */}
@@ -247,71 +435,65 @@ export const ResponderDashboard = () => {
               </div>
             ) : (
               feedAlerts.map(alert => {
-                const deviceCode = (alert as any).devices?.device_code || 'Unknown';
-                const deviceLabel = (alert as any).devices?.label || '';
-                const loc = (alert as any).devices?.location_desc || '';
+                const device = (alert as any).devices || {};
+                const deviceCode = device.device_code || 'Unknown';
+                const deviceLabel = device.label || '';
+                const loc = device.location_desc || '';
+                const bfpContact = device.bfp_contact || '';
+
+                const isFire = alert.alert_tier === 2;
+                const badgeColor = isFire ? 'bg-red-600 text-white' : 'bg-amber-500 text-white';
+                const badgeText = isFire ? 'CRITICAL FIRE' : 'ADVISORY';
+                const textColor = isFire ? 'text-red-700' : 'text-amber-700';
+                const bgLightColor = isFire ? 'bg-red-50' : 'bg-amber-50';
+
                 return (
-                  <div key={alert.id} className="px-5 py-4">
+                  <div key={alert.id} className={`px-5 py-4 ${bgLightColor}`}>
                     <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h4 className="text-[#DC2626] font-bold text-sm">
-                          {deviceCode} • {deviceLabel}
+                      <div className="flex flex-col gap-1">
+                        <span className={`text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded self-start ${badgeColor}`}>
+                          {badgeText}
+                        </span>
+                        <h4 className={`font-bold text-sm ${textColor}`}>
+                          {deviceCode}: {deviceLabel}
                         </h4>
-                        <p className="text-[#5B403D] text-xs mt-0.5">{loc}</p>
+                        <p className="text-[#5B403D] text-xs font-medium">{loc}</p>
                       </div>
-                      <span className={`text-[9px] font-bold tracking-[0.05em] uppercase px-2 py-0.5 rounded ${
-                        timeAgo(alert.triggered_at) === 'JUST NOW' ? 'bg-[#FEE2E2] text-[#DC2626]' : 'text-[#A1A1AA]'
-                      }`}>
-                        {timeAgo(alert.triggered_at)}
+                      <span className="text-[10px] font-bold tracking-wider uppercase text-gray-500 whitespace-nowrap">
+                        Triggered {timeAgo(alert.triggered_at).toLowerCase()}
                       </span>
                     </div>
                     {/* Sensor Readings */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-[#FEF2F2] rounded px-3 py-2">
-                        <span className="text-[9px] text-[#5B403D] uppercase tracking-[0.05em] font-bold block">Temp</span>
-                        <span className="text-[#DC2626] font-bold text-sm">{alert.temp_celsius}°C</span>
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <div className="bg-white/60 border border-white rounded px-3 py-2">
+                        <span className="text-[9px] text-[#5B403D] uppercase tracking-wider font-bold block">Peak Temp</span>
+                        <span className={`font-bold text-sm ${textColor}`}>{alert.temp_celsius}°C</span>
                       </div>
-                      <div className="bg-[#FEF2F2] rounded px-3 py-2">
-                        <span className="text-[9px] text-[#5B403D] uppercase tracking-[0.05em] font-bold block">Smoke</span>
-                        <span className="text-[#DC2626] font-bold text-sm">{alert.co_ppm > 0 ? `${Math.min(99, Math.round(alert.co_ppm / 5))}%` : '0%'}</span>
+                      <div className="bg-white/60 border border-white rounded px-3 py-2">
+                        <span className="text-[9px] text-[#5B403D] uppercase tracking-wider font-bold block">CO Level</span>
+                        <span className={`font-bold text-sm ${textColor}`}>{alert.co_ppm} ppm</span>
                       </div>
                     </div>
-                    {alert.latitude && alert.longitude && (
-                      <p className="text-[10px] text-[#A1A1AA] mt-2 flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {alert.latitude.toFixed(4)}° N, {alert.longitude.toFixed(4)}° E
-                      </p>
-                    )}
 
-                    {/* Incident Status / Acknowledge */}
-                    <div className="mt-3 pt-3 border-t border-[#E5E2E1] flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-[#5B403D] uppercase tracking-[0.05em]">Status</span>
-                        <span className={`text-[10px] font-bold uppercase tracking-[0.05em] ${
-                          alert.incident_status === 'active' ? 'text-[#DC2626]' :
-                          alert.incident_status === 'acknowledged' ? 'text-[#F59E0B]' :
-                          alert.incident_status === 'responding' ? 'text-[#3B82F6]' : 'text-[#10B981]'
-                        }`}>
-                          {alert.incident_status || 'active'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-end gap-2">
+                    {/* Interactive Dispatch Actions */}
+                    <div className="mt-4 flex flex-col gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         {(!alert.incident_status || alert.incident_status === 'active') && (
                           <button
                             onClick={() => handleAcknowledge(alert.id)}
                             disabled={acknowledging === alert.id}
-                            className="bg-[#DC2626] hover:bg-[#B91C1C] text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors disabled:opacity-50 col-span-2"
                           >
-                            {acknowledging === alert.id ? 'Updating...' : 'Acknowledge'}
+                            {acknowledging === alert.id ? 'Updating...' : 'Acknowledge Alarm'}
                           </button>
                         )}
                         {alert.incident_status === 'acknowledged' && (
                           <button
                             onClick={() => handleUpdateStatus(alert.id, 'responding')}
                             disabled={acknowledging === alert.id}
-                            className="bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors disabled:opacity-50 col-span-2"
                           >
-                            {acknowledging === alert.id ? 'Updating...' : 'Mark Responding'}
+                            {acknowledging === alert.id ? 'Updating...' : 'Dispatch Unit'}
                           </button>
                         )}
                         {(alert.incident_status === 'acknowledged' || alert.incident_status === 'responding') && (
@@ -319,19 +501,36 @@ export const ResponderDashboard = () => {
                             <button
                               onClick={() => handleUpdateStatus(alert.id, 'resolved')}
                               disabled={acknowledging === alert.id}
-                              className="bg-[#10B981] hover:bg-[#059669] text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors disabled:opacity-50"
                             >
                               Resolve
                             </button>
                             <button
                               onClick={() => handleUpdateStatus(alert.id, 'false_alarm')}
                               disabled={acknowledging === alert.id}
-                              className="bg-[#6B7280] hover:bg-[#4B5563] text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                              className="w-full bg-gray-600 hover:bg-gray-700 text-white text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors disabled:opacity-50"
                             >
                               False Alarm
                             </button>
                           </>
                         )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <a
+                          href={alert.latitude && alert.longitude ? `https://www.google.com/maps/dir/?api=1&destination=${alert.latitude},${alert.longitude}` : '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`flex items-center justify-center gap-1.5 w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors ${!(alert.latitude && alert.longitude) && 'opacity-50 pointer-events-none'}`}
+                        >
+                          <Navigation className="w-3 h-3" /> Navigation
+                        </a>
+                        <a
+                          href={bfpContact ? `tel:${bfpContact}` : '#'}
+                          className={`flex items-center justify-center gap-1.5 w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors ${!bfpContact && 'opacity-50 pointer-events-none'}`}
+                        >
+                          <PhoneCall className="w-3 h-3" /> Call Contact
+                        </a>
                       </div>
                     </div>
                   </div>
@@ -348,11 +547,11 @@ export const ResponderDashboard = () => {
 
 // ─── Helper Components ───
 
-const StatCard = ({ label, value, color, icon }: { label: string; value: string; color: string; icon: React.ReactNode }) => (
-  <div className="bg-[#F6F3F2] border border-[#E5E2E1] rounded-lg px-5 py-4 flex flex-col gap-1">
+const StatCard = ({ label, value, color, icon, highlightClass = "", isTextSmall = false }: { label: string; value: string; color: string; icon: React.ReactNode; highlightClass?: string; isTextSmall?: boolean }) => (
+  <div className={`${highlightClass ? highlightClass : 'bg-[#F6F3F2]'} border border-[#E5E2E1] rounded-lg px-5 py-4 flex flex-col gap-1`}>
     <span className="text-[#5B403D] font-bold text-[10px] tracking-[0.1em] uppercase">{label}</span>
     <div className="flex items-end justify-between">
-      <span className="font-extrabold text-[36px] leading-[40px] tracking-[-0.05em]" style={{ color }}>
+      <span className={`font-extrabold ${isTextSmall ? 'text-[24px]' : 'text-[36px]'} leading-[40px] tracking-[-0.05em]`} style={{ color }}>
         {value}
       </span>
       <div className="pb-1" style={{ color }}>{icon}</div>
@@ -369,6 +568,14 @@ const LegendDot = ({ color, label }: { color: string; label: string }) => (
 
 const MapUpdater = ({ devices }: { devices: DeviceWithStatus[] }) => {
   const map = useMap();
+
+  useEffect(() => {
+    // Prevent Leaflet container re-render/initialization bugs when navigating between tabs
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
+  }, [map]);
+
   useEffect(() => {
     const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);
     if (validDevices.length > 0) {
