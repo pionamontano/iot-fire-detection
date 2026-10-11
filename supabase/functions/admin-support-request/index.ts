@@ -62,21 +62,29 @@ serve(async (req: Request) => {
       });
     }
 
-    const subject = `[Admin Support] [${profile.role}] - User ID: ${user.id} - ${category}`;
+    const userRole = profile?.role;
+    const userEmail = user?.email || 'No email registered';
+    const userPhone = user?.phone || user?.user_metadata?.phone || 'No phone registered';
 
-    // We construct HTML for the email
-    const htmlBody = `
-      <h2>Admin Support Request</h2>
-      <p><strong>User ID:</strong> ${user.id}</p>
-      <p><strong>Name:</strong> ${profile.full_name || 'N/A'}</p>
-      <p><strong>Role:</strong> ${profile.role}</p>
-      <p><strong>Email:</strong> ${profile.email || user.email || 'N/A'}</p>
-      <p><strong>Contact Number:</strong> ${profile.contact_number || 'N/A'}</p>
-      <p><strong>Category:</strong> ${category}</p>
-      <hr />
-      <h3>Message:</h3>
-      <p>${message.replace(/\n/g, '<br />')}</p>
-    `;
+    const emailPayload: Record<string, unknown> = {
+      from: 'AgapSense Support <onboarding@resend.dev>',
+      to: ['agapsense@gmail.com'],
+      subject: `[Admin Support] ${category} - ${user?.id}`,
+      html: `
+        <h3>BFP Support Request</h3>
+        <p><strong>Category:</strong> ${category}</p>
+        <p><strong>User ID:</strong> ${user?.id}</p>
+        <p><strong>Role:</strong> ${userRole || 'BFP Responder'}</p>
+        <p><strong>Contact Email:</strong> ${userEmail}</p>
+        <p><strong>Contact Phone:</strong> ${userPhone}</p>
+        <p><strong>Message:</strong></p>
+        <p>${message}</p>
+      `,
+    };
+
+    if (user?.email) {
+      emailPayload.reply_to = user.email;
+    }
 
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -84,19 +92,14 @@ serve(async (req: Request) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${resendApiKey}`
       },
-      body: JSON.stringify({
-        from: 'onboarding@resend.dev',
-        to: 'agapsense@gmail.com',
-        subject: subject,
-        html: htmlBody
-      })
+      body: JSON.stringify(emailPayload)
     });
 
     const resData = await res.json();
 
     if (!res.ok) {
       console.error('Resend API error:', resData);
-      return new Response(JSON.stringify({ error: 'Failed to send email' }), {
+      return new Response(JSON.stringify({ error: resData }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
       });
