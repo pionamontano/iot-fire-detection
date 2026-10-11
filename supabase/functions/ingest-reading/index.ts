@@ -9,6 +9,59 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-key',
 };
 
+function buildTieredAddress(address: Record<string, string> | undefined): string | null {
+  if (!address) return null;
+
+  const street = [address.house_number, address.road].filter(Boolean).join(' ') || null;
+  const barangay = address.suburb || address.village || address.neighbourhood || address.quarter || null;
+  const municipality = address.city || address.municipality || address.town || address.county || null;
+
+  const parts = [street, barangay, municipality].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
+async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
+  if (!lat || !lon) return null;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`,
+      {
+        headers: {
+          'User-Agent': 'AgapSense-FireAlertSystem/1.0 (trixyannbernades@gmail.com)'
+        },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return buildTieredAddress(data?.address) || data?.display_name || null;
+  } catch (e) {
+    console.error('Geocoding error/timeout:', e);
+    return null;
+  }
+}
+
+// Haversine distance in meters
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // metres
+  const φ1 = lat1 * Math.PI/180; // φ, λ in radians
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lon2-lon1) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c;
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -31,7 +84,7 @@ serve(async (req: Request) => {
     // 1. Authenticate device
     const { data: device, error: deviceError } = await supabaseAdmin
       .from('devices')
-      .select('id, is_active, co_threshold, temp_threshold')
+      .select('id, location_desc, latitude, longitude, is_active, co_threshold, temp_threshold')
       .eq('api_key', deviceKey)
       .maybeSingle();
 
@@ -118,6 +171,63 @@ serve(async (req: Request) => {
           .eq('device_id', device.id)
           .is('resolved_at', null)
       );
+    }
+
+    // Address Discrepancy Detection
+    if (hasCachedCoords && device.latitude && device.longitude && gps_valid) {
+      const distance = getDistance(latitude, longitude, device.latitude, device.longitude);
+      // If distance > 100 meters, check for discrepancy
+      if (distance > 100) {
+        // Find resident
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('id, address')
+          .eq('device_id', device.id)
+          .eq('role', 'resident')
+          .maybeSingle();
+
+        if (profile) {
+          // Prevent repeated notification if user already dismissed/resolved for a location near this one
+          // We look for any discrepancy for this device that is pending, OR one that was dismissed/approved
+          // within 50 meters of the current coordinates.
+          const { data: recentDiscrepancies } = await supabaseAdmin
+            .from('address_discrepancies')
+            .select('id, status, latitude, longitude')
+            .eq('device_id', device.id);
+
+          let shouldNotify = true;
+          if (recentDiscrepancies && recentDiscrepancies.length > 0) {
+            for (const d of recentDiscrepancies) {
+              if (d.status === 'pending') {
+                shouldNotify = false;
+                break;
+              }
+              // If previously rejected/approved, but we are still roughly in the same spot, don't spam.
+              if (getDistance(latitude, longitude, d.latitude, d.longitude) < 50) {
+                shouldNotify = false;
+                break;
+              }
+            }
+          }
+
+          if (shouldNotify) {
+             const geocodedAddress = await reverseGeocode(latitude, longitude);
+             // Verify that reverse geocoding returned a specific enough address (not just a single word / country)
+             if (geocodedAddress && geocodedAddress.includes(',')) {
+               writePromises.push(
+                 supabaseAdmin.from('address_discrepancies').insert({
+                   device_id: device.id,
+                   resident_id: profile.id,
+                   gps_derived_address: geocodedAddress,
+                   registered_address: device.location_desc || 'Unknown',
+                   latitude,
+                   longitude
+                 })
+               );
+             }
+          }
+        }
+      }
     }
 
     const results = await Promise.all(writePromises);

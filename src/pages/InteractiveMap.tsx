@@ -124,7 +124,9 @@ export const InteractiveMap = () => {
     try {
       // Fetch devices and all recent alerts for the feed (limit 50)
       const [devicesRes, alertsRes] = await Promise.all([
-        supabase.from('devices').select('*'),
+        supabase.from('devices').select('*, sensor_readings(latitude, longitude, recorded_at)')
+          .order('recorded_at', { foreignTable: 'sensor_readings', ascending: false })
+          .limit(1, { foreignTable: 'sensor_readings' }),
         supabase.from('alert_events').select('*, devices(device_code, location_desc)').order('triggered_at', { ascending: false }).limit(50)
       ]);
 
@@ -134,7 +136,17 @@ export const InteractiveMap = () => {
         // was placed at a fabricated position derived from a hash of its
         // id, which looked plausible but was entirely fictional and could
         // mislead a responder relying on this view.
-        setDevices(devicesRes.data);
+        const devicesWithLiveLocation = devicesRes.data.map(d => {
+          const readings = d.sensor_readings as any[] || [];
+          if (readings.length > 0) {
+            const latest = readings[0];
+            if (latest.latitude != null && latest.longitude != null) {
+              return { ...d, latitude: latest.latitude, longitude: latest.longitude };
+            }
+          }
+          return d;
+        });
+        setDevices(devicesWithLiveLocation);
       }
       if (alertsRes.data) setAlerts(alertsRes.data as unknown as AlertEvent[]);
     } catch (error) {

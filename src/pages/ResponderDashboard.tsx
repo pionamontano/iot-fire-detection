@@ -57,14 +57,17 @@ export const ResponderDashboard = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [devicesRes, alertsRes] = await Promise.all([
-      supabase.from('devices_safe').select('*').order('created_at', { ascending: false }),
+      supabase.from('devices_safe').select('*, sensor_readings(latitude, longitude, recorded_at)')
+        .order('recorded_at', { foreignTable: 'sensor_readings', ascending: false })
+        .limit(1, { foreignTable: 'sensor_readings' })
+        .order('created_at', { ascending: false }),
       supabase.from('alert_events').select('*, devices(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
     ]);
 
     const allAlerts = (alertsRes.data || []) as unknown as AlertEvent[];
     const unresolvedAlerts = allAlerts.filter(a => !a.resolved_at);
 
-    const enriched: DeviceWithStatus[] = (devicesRes.data || []).map(d => {
+    const enriched: DeviceWithStatus[] = (devicesRes.data || []).map((d: any) => {
       const alert = unresolvedAlerts.find(a => a.device_id === d.id);
       let status: DeviceWithStatus['status'] = 'normal';
       if (alert) {
@@ -80,6 +83,16 @@ export const ResponderDashboard = () => {
       
       let lat = d.latitude;
       let lng = d.longitude;
+
+      const readings = d.sensor_readings as any[] || [];
+      if (readings.length > 0) {
+        const latest = readings[0];
+        if (latest.latitude != null && latest.longitude != null) {
+          lat = latest.latitude;
+          lng = latest.longitude;
+        }
+      }
+
       if (!lat || !lng) {
         let hash = 0;
         for (let j = 0; j < d.id.length; j++) {
@@ -92,7 +105,10 @@ export const ResponderDashboard = () => {
 
       // Simulate connectivity % based on status
       const connectivity = status === 'offline' ? 0 : status === 'fire' ? 98 : status === 'fault' ? 92 : 100;
-      return { ...d, status, activeAlert: alert, connectivity, latitude: lat, longitude: lng };
+
+      const { sensor_readings, ...deviceWithoutReadings } = d;
+
+      return { ...deviceWithoutReadings, status, activeAlert: alert, connectivity, latitude: lat, longitude: lng };
     });
 
     setDevices(enriched);

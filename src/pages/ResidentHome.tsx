@@ -88,6 +88,7 @@ export const ResidentHome = () => {
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [discrepancy, setDiscrepancy] = useState<any>(null);
   
   // Device linking state
   const [linkCode, setLinkCode] = useState('');
@@ -96,17 +97,20 @@ export const ResidentHome = () => {
 
   const fetchData = useCallback(async (deviceId: string) => {
     try {
-      const [deviceRes, readingRes, alertsRes, historyRes] = await Promise.all([
+      const [deviceRes, readingRes, alertsRes, historyRes, discrepancyRes] = await Promise.all([
         supabase.from('devices_safe').select('*').eq('id', deviceId).single(),
         supabase.from('sensor_readings').select('*').eq('device_id', deviceId).order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('alert_events').select('*').eq('device_id', deviceId).order('triggered_at', { ascending: false }).limit(10),
-        supabase.from('sensor_readings').select('*').eq('device_id', deviceId).order('recorded_at', { ascending: false }).limit(24)
+        supabase.from('sensor_readings').select('*').eq('device_id', deviceId).order('recorded_at', { ascending: false }).limit(24),
+        supabase.from('address_discrepancies').select('*').eq('device_id', deviceId).eq('status', 'pending').order('created_at', { ascending: false }).limit(1).maybeSingle()
       ]);
 
       if (deviceRes.data) setDevice(deviceRes.data);
       if (readingRes.data) setLatestReading(readingRes.data);
       if (alertsRes.data) setActiveAlerts(alertsRes.data);
       if (historyRes.data) setRecentReadings(historyRes.data);
+      if (discrepancyRes.data) setDiscrepancy(discrepancyRes.data);
+      else setDiscrepancy(null);
       setLastRefreshed(new Date());
     } catch (error) {
       console.error("Error fetching device data", error);
@@ -141,6 +145,9 @@ export const ResidentHome = () => {
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alert_events', filter: `device_id=eq.${profile.device_id}` }, (payload) => {
         setActiveAlerts(prev => [payload.new as AlertEvent, ...prev].slice(0, 10));
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'address_discrepancies', filter: `device_id=eq.${profile.device_id}` }, (payload) => {
+        setDiscrepancy(payload.new);
       })
       .subscribe();
 
@@ -291,9 +298,46 @@ export const ResidentHome = () => {
     displayLng = DEFAULT_CENTER[1] + lngOffset;
   }
 
+  const handleDiscrepancyResolution = async (status: 'approved' | 'rejected') => {
+    if (!discrepancy) return;
+    try {
+      setLoading(true);
+      await supabase.from('address_discrepancies').update({ status, resolved_at: new Date().toISOString() }).eq('id', discrepancy.id);
+      if (status === 'approved') {
+         await supabase.from('devices').update({
+           location_desc: discrepancy.gps_derived_address,
+           latitude: discrepancy.latitude,
+           longitude: discrepancy.longitude
+         }).eq('id', device.id);
+      }
+      setDiscrepancy(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
-      
+      {discrepancy && (
+        <div className="bg-[#FEF3C7] border border-[#F59E0B] p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex gap-3">
+            <AlertTriangle className="text-[#D97706] mt-0.5 shrink-0" size={20} />
+            <div>
+              <h4 className="text-[#92400E] font-bold text-sm">Location Discrepancy Detected</h4>
+              <p className="text-[#B45309] text-xs mt-1">
+                The device's GPS indicates it is at <strong className="font-extrabold">{discrepancy.gps_derived_address}</strong>, but its registered location is <strong className="font-extrabold">{discrepancy.registered_address}</strong>. Do you want to update the registered location?
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto">
+             <button onClick={() => handleDiscrepancyResolution('approved')} className="flex-1 sm:flex-none px-4 py-2 bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold rounded shadow-sm transition-colors uppercase tracking-wider">Update</button>
+             <button onClick={() => handleDiscrepancyResolution('rejected')} className="flex-1 sm:flex-none px-4 py-2 bg-white hover:bg-gray-50 text-[#92400E] border border-[#D97706] text-xs font-bold rounded shadow-sm transition-colors uppercase tracking-wider">Keep Current</button>
+          </div>
+        </div>
+      )}
+
       {/* 4 Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
