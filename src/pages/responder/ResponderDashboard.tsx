@@ -267,8 +267,8 @@ export const ResponderDashboard = () => {
           hash = ((hash << 5) - hash) + d.id.charCodeAt(j);
           hash |= 0;
         }
-        lat = 14.843 + ((hash & 0xFFFF) / 0xFFFF - 0.5) * 0.01; // Malolos coordinates fallback
-        lng = 120.811 + (((hash >> 16) & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
+        lat = 14.8527 + ((hash & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
+        lng = 120.8160 + (((hash >> 16) & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
       }
 
       // Simulate connectivity % based on status
@@ -378,12 +378,12 @@ export const ResponderDashboard = () => {
         {/* Interactive Map (8/12) */}
         <div className="lg:col-span-8 bg-[#2D1F1E] rounded-lg overflow-hidden relative" style={{ minHeight: 420 }}>
           <MapContainer
-            center={[14.843, 120.811]}
+            center={[14.8527, 120.8160]}
             zoom={13}
             style={{ height: '100%', width: '100%', minHeight: 420 }}
             className="z-0"
           >
-            <MapUpdater bounds={mapBounds} center={null} />
+            <MapUpdater devices={devices} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -566,7 +566,7 @@ const LegendDot = ({ color, label }: { color: string; label: string }) => (
   </div>
 );
 
-const MapUpdater = ({ bounds, center }: { bounds: L.LatLngBounds | null, center: [number, number] | null }) => {
+const MapUpdater = ({ devices }: { devices: DeviceWithStatus[] }) => {
   const map = useMap();
 
   useEffect(() => {
@@ -577,11 +577,13 @@ const MapUpdater = ({ bounds, center }: { bounds: L.LatLngBounds | null, center:
   }, [map]);
 
   useEffect(() => {
-    if (bounds && bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [50, 50], duration: 1.5 });
-    } else if (center) {
-      map.flyTo(center, 16, { duration: 1.5 });
+    const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);
+    if (validDevices.length > 0) {
+      const bounds = L.latLngBounds(validDevices.map(d => [d.latitude as number, d.longitude as number]));
+      map.fitBounds(bounds, { maxZoom: 16, padding: [20, 20] });
+    } else {
+      map.flyTo([14.8527, 120.8160], 13, { duration: 1.5 });
     }
-  }, [bounds, center, map]);
+  }, [devices, map]);
   return null;
 };

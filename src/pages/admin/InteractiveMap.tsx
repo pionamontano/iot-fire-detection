@@ -7,15 +7,15 @@ import {
         Activity,
   Layers,
       } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getConnectivityStatus } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
 
 // Default center: arbitrary coords for campus (e.g. Quezon City area)
-const DEFAULT_CENTER: [number, number] = [14.634, 121.045];
-const DEFAULT_ZOOM = 16;
+const DEFAULT_CENTER: [number, number] = [14.8527, 120.8160];
+const DEFAULT_ZOOM = 13;
 
 // Custom Icons
 const createCustomIcon = (type: 'online' | 'alert' | 'fault' | 'offline') => {
@@ -182,6 +182,7 @@ export const InteractiveMap = () => {
           className="w-full h-full"
           zoomControl={false}
         >
+          <MapBoundsUpdater devices={displayedDevices} />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -410,3 +411,17 @@ const FilterBtn = ({ label, active, onClick }: { label: string, active: boolean,
     {label}
   </button>
 );
+
+const MapBoundsUpdater = ({ devices }: { devices: Device[] }) => {
+  const map = useMap();
+  useEffect(() => {
+    const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);
+    if (validDevices.length > 0) {
+      const bounds = L.latLngBounds(validDevices.map(d => [d.latitude as number, d.longitude as number]));
+      map.fitBounds(bounds, { maxZoom: 16, padding: [20, 20] });
+    } else {
+      map.flyTo(DEFAULT_CENTER, DEFAULT_ZOOM, { duration: 1.5 });
+    }
+  }, [devices, map]);
+  return null;
+};
