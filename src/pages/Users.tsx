@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Profile, RegistrationRequest, Device } from '../lib/supabase';
 import { 
-  Users as UsersIcon, Plus, UserPlus, Shield, Smartphone, 
-  MapPin, Loader2, Link, Edit2, Key, CheckCircle, XCircle, 
-  Trash2, Search, Filter, ShieldAlert, FileText, Settings, X, User, AlertCircle
+  UserPlus, Smartphone,
+  Loader2, Link, CheckCircle,
+  Search, X, AlertCircle, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -270,7 +270,7 @@ export const Users = () => {
     }
   };
 
-  const getStatusBadgeColor = (status: string) => {
+  const _getStatusBadgeColor = (status: string) => {
     switch (status) {
       case 'approved': return 'bg-[#ECFDF5] text-[#047857] border-[#A7F3D0]';
       case 'pending': return 'bg-[#FFFBEB] text-[#D97706] border-[#FDE68A]';

@@ -5,7 +5,7 @@ import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './Heade
 import { useAuth } from '../contexts/AuthContext';
 
 export const ResponderLayout: React.FC = () => {
-  const { signOut, profile } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);

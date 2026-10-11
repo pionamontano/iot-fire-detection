@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Wifi, WifiOff, ShieldAlert, BellRing, Clock,
   MapPin, Activity, CheckCircle2, AlertTriangle,
-  Battery, Signal, Zap, Shield, PhoneCall, RefreshCw, XCircle, Cpu, Loader2
+  Battery, Signal, Zap, Shield, PhoneCall, RefreshCw,  Cpu, Loader2
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';

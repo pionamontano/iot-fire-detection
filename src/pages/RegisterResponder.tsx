@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { ArrowLeft, User, Mail, Lock, Phone, Building2, Briefcase, FileBadge2, AlertCircle, Loader2 } from 'lucide-react';
-import { AuthHero } from '../components/AuthHero';
 
 export const RegisterResponder = () => {
   const [formData, setFormData] = useState({

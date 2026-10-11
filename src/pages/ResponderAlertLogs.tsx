@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import type { AlertEvent, Device } from '../lib/supabase';
+import type { Device } from '../lib/supabase';
 import { TableBodySkeleton } from '../components/SkeletonLoaders';
 import {
   Download,

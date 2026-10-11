@@ -4,15 +4,9 @@ import { supabase } from '../lib/supabase';
 import type { Device, AlertEvent } from '../lib/supabase';
 import { 
   Search, 
-  MapPin, 
-  AlertTriangle, 
-  Clock, 
-  Activity,
+        Activity,
   Layers,
-  ZoomIn,
-  ZoomOut,
-  Crosshair
-} from 'lucide-react';
+      } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -95,8 +89,7 @@ export const InteractiveMap = () => {
   const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
-  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
-  const now = useNowTick();
+    const now = useNowTick();
 
   // Controls
   const [hideOffline, setHideOffline] = useState(false);

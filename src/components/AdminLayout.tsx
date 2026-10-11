@@ -1,11 +1,11 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, AlertTriangle, Settings, Cpu, LogOut, Menu, X, BarChart3, FileText } from 'lucide-react';
+import { LayoutDashboard, Users,  Settings, Cpu, LogOut, Menu, X, BarChart3, FileText } from 'lucide-react';
 import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 
 export const AdminLayout: React.FC = () => {
-  const { signOut, profile } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
