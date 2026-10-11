@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   Wifi, WifiOff, ShieldAlert, BellRing, Clock,
   MapPin, Activity, CheckCircle2, AlertTriangle,
-  Battery, Signal, Zap, Shield, PhoneCall, RefreshCw,  Cpu, Loader2
+  Battery, Signal, Zap, Shield, RefreshCw, Cpu, Loader2
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -606,21 +606,6 @@ export const ResidentHome = () => {
               <MapPin size={16} className="text-[#52525B] mt-0.5" />
               <span className="text-xs font-bold text-[#18181B] uppercase">{device.location_desc}</span>
             </div>
-          </div>
-
-          {/* Emergency Support */}
-          <div className="bg-[#B91C1C] rounded-lg p-6 text-white shadow-sm relative overflow-hidden">
-            <PhoneCall size={24} className="mb-4 text-white" />
-            <h2 className="text-lg font-black tracking-tight mb-2">Emergency Support 24/7</h2>
-            <p className="text-xs text-white/90 mb-6 leading-relaxed">
-              Connected directly to the AgapSense response center for immediate intervention.
-            </p>
-            <a 
-              href={`tel:${device.bfp_contact || '911'}`}
-              className="block w-full py-3 bg-white text-[#B91C1C] text-[10px] font-bold uppercase tracking-widest rounded hover:bg-gray-50 transition-colors text-center"
-            >
-              CALL {device.bfp_contact || '911'} NOW
-            </a>
           </div>
 
         </div>
