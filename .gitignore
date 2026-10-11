@@ -27,3 +27,4 @@ dist-ssr
 firmware/agapsense-firmware/src/config.h
 firmware/agapsense-firmware/.pio/
 supabase/.temp/
+supabase/.branches/
