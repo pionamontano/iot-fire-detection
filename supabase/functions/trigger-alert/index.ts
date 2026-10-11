@@ -141,7 +141,7 @@ serve(async (req: Request) => {
     }
 
     // [FIX #2] Fallback destructuring for legacy vs fixed firmware field names
-    const tier = body.tier ?? body.alert_tier;
+    const reqTier = body.tier ?? body.alert_tier; // Firmware tier provided but overridden by server
     const temp_celsius = body.temp_celsius ?? body.temperature_c;
     const latitude = body.latitude ?? body.lat;
     const longitude = body.longitude ?? body.lng;
@@ -149,13 +149,6 @@ serve(async (req: Request) => {
     const gps_valid = body.gps_valid ?? false;
 
     // 3. [FIX #3] Input validation before database touches
-    if (tier !== 1 && tier !== 2) {
-      return new Response(JSON.stringify({ error: 'Invalid or missing tier (must be 1 or 2)' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const isValidNumber = (val: unknown): boolean => typeof val === 'number' && Number.isFinite(val);
 
     if (!isValidNumber(co_ppm) || !isValidNumber(temp_celsius)) {
@@ -166,6 +159,25 @@ serve(async (req: Request) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
+    }
+
+    // 3.5 Recalculate tier based on server-side thresholds to ensure backend authority
+    const coThreshold = device.co_threshold ?? Infinity;
+    const tempThreshold = device.temp_threshold ?? Infinity;
+
+    const coExceeded = co_ppm >= coThreshold;
+    const tempExceeded = temp_celsius >= tempThreshold;
+
+    let tier: number;
+    if (coExceeded && tempExceeded) {
+      tier = 2;
+    } else if (coExceeded || tempExceeded) {
+      tier = 1;
+    } else {
+      return new Response(JSON.stringify({ error: 'Sensor readings do not exceed thresholds; alert rejected.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     if (gps_valid && (!isValidNumber(latitude) || !isValidNumber(longitude))) {

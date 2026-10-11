@@ -164,7 +164,7 @@ sequenceDiagram
 - **Rule Identifier:** RULE-T1-ALERT
 - **Trigger:** New sensor reading ingested via `/trigger-alert` Edge Function.
 - **Inputs:** `co_ppm`, `temp_celsius`.
-- **Processing Logic:** If *either* CO OR Temperature exceeds threshold (but not both), `alert_tier` is 1. (Handled via firmware logic `isTier1()`).
+- **Processing Logic:** If *either* CO OR Temperature exceeds threshold (but not both), `alert_tier` is 1. The Edge Function recalculates and overrides the firmware-supplied tier based on database thresholds to ensure backend authority.
 - **Result:** Triggers yellow LED, sends Telegram warning. Does NOT send SMS.
 - **Relevant Database Records:** Inserts into `alert_events`.
 - **Source File:** `firmware/agapsense-firmware/src/connectivity.cpp`, `supabase/functions/trigger-alert/index.ts`.
@@ -174,7 +174,7 @@ sequenceDiagram
 - **Rule Identifier:** RULE-T2-ALERT
 - **Trigger:** New sensor reading ingested via `/trigger-alert` Edge Function.
 - **Inputs:** `co_ppm`, `temp_celsius`.
-- **Processing Logic:** If *both* CO AND Temperature exceed thresholds, `alert_tier` is 2. (Handled via firmware logic `isTier2()`).
+- **Processing Logic:** If *both* CO AND Temperature exceed thresholds, `alert_tier` is 2. The Edge Function recalculates and overrides the firmware-supplied tier based on database thresholds to ensure backend authority.
 - **Result:** Triggers red LED + buzzer, sends Telegram, and firmware dispatches SMS to owner and BFP.
 - **Relevant Database Records:** Inserts into `alert_events` with `alert_tier=2`.
 - **Source File:** `firmware/agapsense-firmware/src/connectivity.cpp`, `supabase/functions/trigger-alert/index.ts`.
