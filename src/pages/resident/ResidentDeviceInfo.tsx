@@ -7,7 +7,7 @@ import { MapPin, Thermometer, Wind, Clock, Wifi, WifiOff, CheckCircle2, XCircle,
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 
-const DEFAULT_CENTER: [number, number] = [14.634, 121.045];
+const DEFAULT_CENTER: [number, number] = [14.8527, 120.8160];
 
 const markerIcon = new L.Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
