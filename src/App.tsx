@@ -8,31 +8,39 @@ import { AdminLayout } from './components/AdminLayout';
 import { ResponderLayout } from './components/ResponderLayout';
 import { ResidentLayout } from './components/ResidentLayout';
 
-// Pages
-import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
-import { Devices } from './pages/Devices';
-import { Users } from './pages/Users';
-import { Alerts } from './pages/Alerts';
-import { Logs } from './pages/Logs';
-import { Settings } from './pages/Settings';
-import { InteractiveMap } from './pages/InteractiveMap';
-import { ResponderDashboard } from './pages/ResponderDashboard';
-import { ResponderAlertLogs } from './pages/ResponderAlertLogs';
-import { ResponderSettings } from './pages/ResponderSettings';
-import { ResidentHome } from './pages/ResidentHome';
-import { ResidentSetup } from './pages/ResidentSetup';
-import { ResidentAlertSettings } from './pages/ResidentAlertSettings';
-import { ResidentDeviceInfo } from './pages/ResidentDeviceInfo';
-import { ResidentSystemLog } from './pages/ResidentSystemLog';
-import { ResidentAccount } from './pages/ResidentAccount';
-import { NotFound } from './pages/NotFound';
-import { SessionExpired } from './pages/SessionExpired';
-import { RegisterResident } from './pages/RegisterResident';
-import { RegisterResponder } from './pages/RegisterResponder';
-import { PendingApproval } from './pages/PendingApproval';
-import { ForgotPassword } from './pages/ForgotPassword';
-import { ResetPassword } from './pages/ResetPassword';
+// Pages - Auth
+import { Login } from './pages/auth/Login';
+import { RegisterResident } from './pages/auth/RegisterResident';
+import { RegisterResponder } from './pages/auth/RegisterResponder';
+import { ForgotPassword } from './pages/auth/ForgotPassword';
+import { ResetPassword } from './pages/auth/ResetPassword';
+import { PendingApproval } from './pages/auth/PendingApproval';
+import { SessionExpired } from './pages/auth/SessionExpired';
+
+// Pages - Admin
+import { Dashboard } from './pages/admin/Dashboard';
+import { Devices } from './pages/admin/Devices';
+import { Users } from './pages/admin/Users';
+import { Alerts } from './pages/admin/Alerts';
+import { Logs } from './pages/admin/Logs';
+import { InteractiveMap } from './pages/admin/InteractiveMap';
+import { Settings } from './pages/admin/Settings';
+
+// Pages - Responder
+import { ResponderDashboard } from './pages/responder/ResponderDashboard';
+import { ResponderAlertLogs } from './pages/responder/ResponderAlertLogs';
+import { ResponderSettings } from './pages/responder/ResponderSettings';
+
+// Pages - Resident
+import { ResidentHome } from './pages/resident/ResidentHome';
+import { ResidentSetup } from './pages/resident/ResidentSetup';
+import { ResidentAlertSettings } from './pages/resident/ResidentAlertSettings';
+import { ResidentDeviceInfo } from './pages/resident/ResidentDeviceInfo';
+import { ResidentSystemLog } from './pages/resident/ResidentSystemLog';
+import { ResidentAccount } from './pages/resident/ResidentAccount';
+
+// Pages - Common
+import { NotFound } from './pages/common/NotFound';
 
 function App() {
 
