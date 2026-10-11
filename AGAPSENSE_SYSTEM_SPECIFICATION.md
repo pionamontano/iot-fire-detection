@@ -203,7 +203,7 @@ sequenceDiagram
 ## Section 8 — IoT Device and Sensor Data Processing
 - **Device Architecture:** ESP32 running FreeRTOS tasks.
 - **Data Transmission:** Wi-Fi POST requests to Supabase Edge Functions. GSM module used as secondary for SMS alerts.
-- **Sensor Readings:** `MQ-7` for CO (requires a warmup sequence tracked by `sensor_ready` flag). `DS18B20` for temperature.
+- **Sensor Readings:** `MQ-7` for CO utilizes an alternating heating cycle (60 s at 5.0 V high-heat purge, 90 s at 1.4 V measurement phase) tracked via the `sensor_ready` flag. Routine telemetry is transmitted unconditionally (every 30 s), but alert evaluations (`evaluateAlerts()`) are suppressed during the preheat/purge phase to prevent false positives. `DS18B20` provides continuous ambient temperature monitoring.
 - **Threshold Processing:** Firmware pulls `co_alert_ppm` and `temp_alert_c` from the backend (`fetchRemoteConfig()`). It evaluates thresholds locally on the device (`evaluateAlerts()`).
 - **Alert Conditions:** Uses a debounce counter (`ALERT_DEBOUNCE_COUNT`) to prevent transient spikes from triggering immediate alerts.
 
