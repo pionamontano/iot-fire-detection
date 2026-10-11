@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, BellRing, Settings, LogOut, Menu, X, Cpu, FileText } from 'lucide-react';
 import { NotificationDropdown, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
+import { GlobalErrorBoundary } from './GlobalErrorBoundary';
 
 export const ResidentLayout = () => {
   const { signOut, profile } = useAuth();
@@ -129,7 +130,9 @@ export const ResidentLayout = () => {
 
         <main className="flex-1 overflow-y-auto h-full p-4 lg:p-8 bg-[#F4F4F5] relative z-0">
           <div className="max-w-6xl mx-auto">
-            <Outlet />
+            <GlobalErrorBoundary>
+              <Outlet />
+            </GlobalErrorBoundary>
           </div>
         </main>
       </div>

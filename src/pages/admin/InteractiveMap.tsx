@@ -181,7 +181,6 @@ export const InteractiveMap = () => {
           zoom={DEFAULT_ZOOM} 
           className="w-full h-full"
           zoomControl={false}
-          ref={setMapInstance}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
