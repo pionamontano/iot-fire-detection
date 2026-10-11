@@ -143,14 +143,10 @@ static void taskGSM(void* pvParams) {
 void setup() {
 #if DEBUG_MODE
     Serial.begin(DEBUG_BAUD);
-    TelnetStream.begin();
     delay(500);
     Serial.println("\n============================================================");
     Serial.println("  Bantay Apoy — IoT Fire Detection Node  v2.0");
     Serial.println("============================================================");
-    TelnetStream.println("\n============================================================");
-    TelnetStream.println("  Bantay Apoy — IoT Fire Detection Node  v2.0");
-    TelnetStream.println("============================================================");
 #endif
 
     // ── Hardware WDT ───────────────────────────────────────

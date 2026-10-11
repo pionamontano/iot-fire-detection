@@ -446,6 +446,12 @@ void connectivityInit(ConnectivityCtx* ctx) {
         ctx->deviceState = DeviceState::ONLINE;
         ctx->rssi        = WiFi.RSSI();
         digitalWrite(LED_BLUE_PIN, HIGH);
+#if DEBUG_MODE
+        TelnetStream.begin();
+        TelnetStream.println("\n============================================================");
+        TelnetStream.println("  Bantay Apoy — IoT Fire Detection Node  v2.0");
+        TelnetStream.println("============================================================");
+#endif
         CLOG("Wi-Fi connected. IP=%s RSSI=%d",
              WiFi.localIP().toString().c_str(), ctx->rssi);
         fetchRemoteConfig(ctx);
