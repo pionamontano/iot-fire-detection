@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
 import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Send, Bell } from 'lucide-react';
+import { AdminSupportModal } from '../../components/AdminSupportModal';
 
 export const ResponderSettings = () => {
   const { profile } = useAuth();
@@ -31,6 +32,7 @@ export const ResponderSettings = () => {
   const [address, setAddress] = useState('');
   const [stationContact, setStationContact] = useState('');
   const [email, setEmail] = useState('');
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -427,16 +429,22 @@ export const ResponderSettings = () => {
             <p className="text-xs text-white/80 leading-relaxed mb-4">
               Contact your system administrator to change your role, reset your password, or manage account access.
             </p>
-            <a
-              href={`mailto:agapsense@gmail.com?subject=${encodeURIComponent(`Account Support Request - BFP Responder / ${profile.id}`)}&body=${encodeURIComponent(`User ID: ${profile.id}\nRole: BFP Responder\n\nPlease describe your request details below (e.g., role change, password reset, or access issues):\n\n`)}`}
-              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2.5 bg-white text-[#B91C1C] text-xs font-bold rounded-md hover:bg-gray-50 transition-colors"
+            <button
+              onClick={() => setIsSupportModalOpen(true)}
+              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2.5 bg-white text-[#B91C1C] text-xs font-bold rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
             >
               <Mail className="w-4 h-4" />
-              Email Administrator
-            </a>
+              Contact Administrator
+            </button>
           </div>
         </div>
       </div>
+
+      <AdminSupportModal
+        isOpen={isSupportModalOpen}
+        onClose={() => setIsSupportModalOpen(false)}
+        profile={profile}
+      />
     </div>
   );
 };
