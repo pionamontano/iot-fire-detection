@@ -164,10 +164,20 @@ export const ResidentHome = () => {
   const handleRunDiagnostics = () => {
     setDiagnosticRunning(true);
     setDiagnosticResult(null);
+
+    const isDeviceOnline = device?.last_seen_at && (Date.now() - new Date(device.last_seen_at).getTime() < 5 * 60 * 1000);
+    const hasActiveAlerts = activeAlerts.filter(a => !a.resolved_at).length > 0;
+
     // Simulate diagnostic run
     setTimeout(() => {
       setDiagnosticRunning(false);
-      setDiagnosticResult('All systems operational. No anomalies detected.');
+      if (!isDeviceOnline) {
+        setDiagnosticResult('Hardware offline: Node is disconnected. Full system check cannot be completed.');
+      } else if (hasActiveAlerts) {
+        setDiagnosticResult('System check complete. Active anomalies detected.');
+      } else {
+        setDiagnosticResult('All systems operational. No anomalies detected.');
+      }
     }, 2500);
   };
 
@@ -563,7 +573,9 @@ export const ResidentHome = () => {
               ) : 'RUN DIAGNOSTICS'}
             </button>
             {diagnosticResult && (
-              <p className="text-[10px] font-bold text-[#10B981] text-center mt-3">{diagnosticResult}</p>
+              <p className={`text-[10px] font-bold text-center mt-3 ${diagnosticResult.includes('All systems operational') ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                {diagnosticResult}
+              </p>
             )}
           </div>
 
