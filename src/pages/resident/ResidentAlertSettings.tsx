@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Device } from '../../lib/supabase';
-import { Thermometer, Wind, MessageSquare, CheckCircle2, ShieldAlert, HelpCircle, AlertTriangle, Save, Send } from 'lucide-react';
+import { Thermometer, Wind, MessageSquare, CheckCircle2, ShieldAlert, HelpCircle, AlertTriangle, Save, Send, X } from 'lucide-react';
 import { AlertSettingsSkeleton } from '../../components/SkeletonLoaders';
 import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription } from '../../lib/pushNotifications';
 import { Bell, BellOff } from 'lucide-react';
@@ -32,6 +32,8 @@ export const ResidentAlertSettings = () => {
   const [origSmoke, setOrigSmoke] = useState(300);
   const [origContact, setOrigContact] = useState('');
 
+  const [isAdviceModalOpen, setIsAdviceModalOpen] = useState(false);
+
   useEffect(() => {
     if (profile?.device_id) {
       fetchDevice(profile.device_id);
@@ -46,6 +48,16 @@ export const ResidentAlertSettings = () => {
   }, [profile]);
 
   // Track changes
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsAdviceModalOpen(false);
+    };
+    if (isAdviceModalOpen) {
+      window.addEventListener('keydown', handleEsc);
+    }
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isAdviceModalOpen]);
+
   useEffect(() => {
     setHasChanges(
       tempThreshold !== origTemp || 
@@ -441,32 +453,160 @@ const handleConnectTelegram = () => {
             </div>
           </div>
 
-          {/* Marketing/Info Image Card */}
-          <div className="bg-[#18181B] rounded-lg p-6 relative overflow-hidden h-48 flex items-end shadow-md group">
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10" />
-            <div className="absolute inset-0 bg-[#3F3F46] group-hover:scale-105 transition-transform duration-700 ease-in-out flex items-center justify-center">
-              <ShieldAlert size={64} className="text-white/20" />
-            </div>
-            
-            <div className="relative z-20">
-              <h4 className="text-white font-bold text-lg leading-tight mb-1">Precision Monitoring</h4>
-              <p className="text-white/70 text-[10px]">Vigilant Guardian Series 7x Sensors</p>
-            </div>
-          </div>
 
           {/* Advice Card */}
-          <div className="bg-[#FCF9F8] border border-[#E5E2E1] rounded-lg p-5 flex gap-4 shadow-sm">
-            <HelpCircle size={20} className="text-[#DC2626] shrink-0" />
-            <div>
-              <h4 className="text-xs font-bold text-[#18181B] mb-1">Need threshold advice?</h4>
-              <p className="text-[10px] text-[#71717A] leading-relaxed">
-                Standard residential safety profiles typically use a 50°C trigger. For industrial kitchens, consider 65°C to avoid false positives.
-              </p>
+          <div
+            className="bg-[#FCF9F8] border border-[#E5E2E1] rounded-lg p-5 flex flex-col gap-3 shadow-sm cursor-pointer hover:bg-[#F3EFEF] transition-colors focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
+            onClick={() => setIsAdviceModalOpen(true)}
+            role="button"
+            tabIndex={0}
+            aria-haspopup="dialog"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setIsAdviceModalOpen(true);
+              }
+            }}
+          >
+            <div className="flex gap-4">
+              <HelpCircle size={20} className="text-[#DC2626] shrink-0" />
+              <div>
+                <h4 className="text-xs font-bold text-[#18181B] mb-1">Need threshold advice?</h4>
+                <p className="text-[10px] text-[#71717A] leading-relaxed">
+                  Standard residential safety profiles typically use a 50°C trigger. For industrial kitchens, consider 65°C to avoid false positives.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end w-full">
+              <span className="text-[10px] font-bold text-[#DC2626] uppercase tracking-wider flex items-center gap-1 group-hover:underline">
+                View Room Guidelines &rarr;
+              </span>
             </div>
           </div>
 
         </div>
       </div>
+
+      {/* Threshold Advice Modal */}
+      {isAdviceModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={() => setIsAdviceModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col relative"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+          >
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-[#E5E2E1] px-6 py-4 flex items-center justify-between z-10 rounded-t-xl">
+              <h2 id="modal-title" className="text-lg font-bold text-[#18181B]">Recommended Sensor Thresholds & Guidelines</h2>
+              <button
+                onClick={() => setIsAdviceModalOpen(false)}
+                className="text-[#71717A] hover:text-[#18181B] transition-colors p-1 rounded-full hover:bg-[#F4F4F5] focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
+                aria-label="Close modal"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 flex flex-col gap-8">
+
+              {/* Reference Table */}
+              <div className="overflow-x-auto border border-[#E5E2E1] rounded-lg shadow-sm">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-[#F4F4F5] text-[#18181B] border-b border-[#E5E2E1]">
+                      <th className="p-3 font-bold border-r border-[#E5E2E1]">Room / Environment</th>
+                      <th className="p-3 font-bold border-r border-[#E5E2E1]">Recommended Temp (°C)</th>
+                      <th className="p-3 font-bold border-r border-[#E5E2E1]">Recommended Smoke (PPM)</th>
+                      <th className="p-3 font-bold">Considerations</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[#52525B]">
+                    <tr className="border-b border-[#E5E2E1] hover:bg-[#FCF9F8]">
+                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Bedrooms & Living Areas</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">50°C – 54°C</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">80 – 120 PPM</td>
+                      <td className="p-3">Life-safety priority; high sensitivity for early sleep evacuation.</td>
+                    </tr>
+                    <tr className="border-b border-[#E5E2E1] hover:bg-[#FCF9F8]">
+                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Kitchens & Dining</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">58°C – 65°C</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">250 – 350 PPM</td>
+                      <td className="p-3">High ambient heat & cooking fumes; prevents false alarms.</td>
+                    </tr>
+                    <tr className="border-b border-[#E5E2E1] hover:bg-[#FCF9F8]">
+                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Server / Equipment Closets</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">40°C – 45°C</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">50 – 80 PPM</td>
+                      <td className="p-3">Low tolerance for heat buildup; sensitive hardware protection.</td>
+                    </tr>
+                    <tr className="border-b border-[#E5E2E1] hover:bg-[#FCF9F8]">
+                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Offices / Public Halls (e.g., Barangay Hall)</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">50°C – 55°C</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">150 – 200 PPM</td>
+                      <td className="p-3">Balanced for regular foot traffic and ambient dust.</td>
+                    </tr>
+                    <tr className="hover:bg-[#FCF9F8]">
+                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Garages & Utility Areas</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">58°C – 60°C</td>
+                      <td className="p-3 border-r border-[#E5E2E1]">250 – 300 PPM</td>
+                      <td className="p-3">Tolerates vehicle exhaust surges and utility equipment heat.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Environmental Factors */}
+              <div>
+                <h3 className="text-sm font-bold tracking-widest uppercase text-[#DC2626] mb-3">Environmental Factors</h3>
+                <ul className="space-y-3 text-sm text-[#52525B]">
+                  <li className="flex gap-2">
+                    <span className="text-[#DC2626] shrink-0 mt-0.5">•</span>
+                    <div>
+                      <strong className="text-[#18181B]">Ambient Climate:</strong> Uninsulated roofing or tropical summer heat can elevate baselines past 38°C–40°C.
+                    </div>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-[#DC2626] shrink-0 mt-0.5">•</span>
+                    <div>
+                      <strong className="text-[#18181B]">Ventilation & Airflow:</strong> Fans or AC returns can disperse smoke plumes away from ceiling sensors.
+                    </div>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-[#DC2626] shrink-0 mt-0.5">•</span>
+                    <div>
+                      <strong className="text-[#18181B]">Ceiling Height:</strong> High/vaulted ceilings create thermal lag and smoke dilution.
+                    </div>
+                  </li>
+                </ul>
+              </div>
+
+              {/* References & Standards Footnote */}
+              <div className="bg-[#FCF9F8] border border-[#E5E2E1] rounded-lg p-5">
+                <h4 className="text-xs font-bold text-[#18181B] mb-2 uppercase tracking-wide">References & Standards</h4>
+                <ul className="space-y-2 text-[11px] text-[#71717A] leading-relaxed">
+                  <li>
+                    <strong className="text-[#52525B]">NFPA 72 (National Fire Alarm and Signaling Code):</strong> Standard fixed-temperature heat detector operating ratings (ordinary temperature classification typically begins at 57°C / 135°F; kitchens/utilities adjusted to intermediate ratings).
+                  </li>
+                  <li>
+                    <strong className="text-[#52525B]">Revised Fire Code of the Philippines (RA 9514 / RIRR):</strong> Standards on automatic detection, notification appliances, and occupancy hazard classifications.
+                  </li>
+                  <li>
+                    <strong className="text-[#52525B]">UL 268 / UL 521 Standards:</strong> Specifications for smoke and heat detector response sensitivities and nuisance-alarm resistance.
+                  </li>
+                </ul>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
