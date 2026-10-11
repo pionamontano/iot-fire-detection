@@ -365,6 +365,7 @@ sequenceDiagram
 - **Push Notifications:** The `push_subscriptions` table and associated Edge Functions exist, but the corresponding frontend Service Worker implementation for Web Push is absent or incomplete.
 - **Hardware Dependency:** The repository assumes standard Wi-Fi coverage; however, actual field deployment robustness (GSM failover reliability) remains unverified.
 - **RLS Edge Cases:** A few database tables (`settings`, `station_settings`) rely heavily on Admin roles; there is no documented frontend GUI to alter `station_settings`, indicating missing admin UI features.
+- **Security Consideration - API Keys:** The `devices.api_key` is stored in plaintext in the database. While it is protected from non-admins via Row Level Security and the `devices_safe` view, storing authentication secrets in plaintext means that any database compromise or admin account breach would expose all device API keys.
 
 ## Section 21 — Glossary and Reference Index
 - **BFP:** Bureau of Fire Protection.
