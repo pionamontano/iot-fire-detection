@@ -9,6 +9,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-key',
 };
 
+interface GeocodeCacheEntry {
+  address: string;
+  timestamp: number;
+}
+
+const GEOCODE_CACHE = new Map<string, GeocodeCacheEntry>();
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24-hour cache
+
 function buildTieredAddress(address: Record<string, string> | undefined): string | null {
   if (!address) return null;
 
@@ -22,6 +30,13 @@ function buildTieredAddress(address: Record<string, string> | undefined): string
 
 async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
   if (!lat || !lon) return null;
+
+  const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+  const cached = GEOCODE_CACHE.get(key);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+    return cached.address;
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -30,7 +45,8 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`,
       {
         headers: {
-          'User-Agent': 'AgapSense-FireAlertSystem/1.0 (trixyannbernades@gmail.com)'
+          // Explicitly document the mandatory User-Agent header per Nominatim Usage Policy
+          'User-Agent': 'AgapSense-Capstone/1.0 (contact@agapsense.local)'
         },
         signal: controller.signal,
       }
@@ -39,7 +55,13 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
 
     if (!res.ok) return null;
     const data = await res.json();
-    return buildTieredAddress(data?.address) || data?.display_name || null;
+    const address = buildTieredAddress(data?.address) || data?.display_name || null;
+
+    if (address) {
+      GEOCODE_CACHE.set(key, { address, timestamp: Date.now() });
+    }
+
+    return address;
   } catch (e) {
     console.error('Geocoding error/timeout:', e);
     return null;
@@ -211,7 +233,15 @@ serve(async (req: Request) => {
           }
 
           if (shouldNotify) {
-             const geocodedAddress = await reverseGeocode(latitude, longitude);
+            let geocodedAddress: string | null = null;
+
+            // Device-State Caching: Check if device hasn't drifted beyond 100 meters from its registered location
+            if (device.latitude && device.longitude && getDistance(latitude, longitude, device.latitude, device.longitude) <= 100) {
+              geocodedAddress = device.location_desc;
+            } else {
+              geocodedAddress = await reverseGeocode(latitude, longitude);
+            }
+
              // Verify that reverse geocoding returned a specific enough address (not just a single word / country)
              if (geocodedAddress && geocodedAddress.includes(',')) {
                writePromises.push(

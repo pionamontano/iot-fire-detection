@@ -209,7 +209,7 @@ sequenceDiagram
 
 ## Section 9 — GPS, Geolocation, and Address Processing
 - **Sources:** Physical GPS module attached to ESP32. Coordinates are stored in `sensor_readings`.
-- **Reverse Geocoding:** The Edge Function calls OpenStreetMap Nominatim: `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`.
+- **Reverse Geocoding:** The Edge Function calls OpenStreetMap Nominatim: `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`. Reverse geocoding queries are deduplicated using a 4-decimal-place grid cache (`~11m`) and stationary-device checks before calling Nominatim.
 - **Tiered Address Generation:** The backend function explicitly parses `house_number`, `road`, `suburb/village` (treated as barangay), and `city/municipality` to build a tiered location string instead of using the raw `display_name`.
 - **Discrepancies:** Handled via the `address_discrepancies` table (Rule RULE-ADDR-DRIFT).
 
@@ -287,7 +287,7 @@ erDiagram
 
 ## Section 14 — External Services and Configuration
 - **Supabase:** PostgreSQL backend, Edge Functions runtime.
-- **OpenStreetMap Nominatim:** Used for reverse geocoding inside Edge Functions. No API key required, but usage limits apply.
+- **OpenStreetMap Nominatim:** Used for reverse geocoding inside Edge Functions. No API key required, but usage limits apply. A custom identifying `User-Agent` string (`AgapSense-Capstone/1.0 (contact@agapsense.local)`) is used, complying with Nominatim’s acceptable use policy. Geocoding requests are cached to avoid hitting rate limits.
 - **Telegram Bot API:** Requires `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` set in Supabase Secrets. Used by `trigger-alert`.
 - **Environment Variables:** `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are mandatory for the frontend.
 

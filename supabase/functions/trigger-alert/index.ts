@@ -9,6 +9,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-key',
 };
 
+interface GeocodeCacheEntry {
+  address: string;
+  timestamp: number;
+}
+
+const GEOCODE_CACHE = new Map<string, GeocodeCacheEntry>();
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24-hour cache
+
 // Builds a street → barangay/suburb → municipality/city string from
 // Nominatim's structured `address` fields (spec HW-1.2.3 / SW-2.3.2),
 // instead of relying on the single, inconsistently-granular display_name
@@ -29,6 +37,13 @@ function buildTieredAddress(address: Record<string, string> | undefined): string
 
 async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
   if (!lat || !lon) return null;
+
+  const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+  const cached = GEOCODE_CACHE.get(key);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+    return cached.address;
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -38,7 +53,7 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
       {
         headers: {
           // [FIX #7] Compliant User-Agent per Nominatim Usage Policy
-          'User-Agent': 'AgapSense-FireAlertSystem/1.0 (trixyannbernades@gmail.com)'
+          'User-Agent': 'AgapSense-Capstone/1.0 (contact@agapsense.local)'
         },
         signal: controller.signal,
       }
@@ -50,7 +65,13 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
     // Tiered street/barangay/municipality string when the structured
     // fields support it; fall back to Nominatim's own display_name
     // (still better than nothing) before giving up entirely.
-    return buildTieredAddress(data?.address) || data?.display_name || null;
+    const address = buildTieredAddress(data?.address) || data?.display_name || null;
+
+    if (address) {
+      GEOCODE_CACHE.set(key, { address, timestamp: Date.now() });
+    }
+
+    return address;
   } catch (e) {
     console.error('Geocoding error/timeout:', e);
     return null;
