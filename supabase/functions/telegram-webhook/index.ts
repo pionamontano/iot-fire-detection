@@ -21,6 +21,7 @@ serve(async (req) => {
   }
   const providedSecret = req.headers.get('X-Telegram-Bot-Api-Secret-Token') ?? '';
   if (!timingSafeEqual(providedSecret, expectedSecret)) {
+    console.error("Rejected update: X-Telegram-Bot-Api-Secret-Token missing or does not match TELEGRAM_WEBHOOK_SECRET (re-run setWebhook with the same secret_token).");
     return new Response("Unauthorized", { status: 401 });
   }
 
@@ -60,12 +61,22 @@ serve(async (req) => {
 
         const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
         const reply = async (text: string) => {
-          if (!botToken) return;
-          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text })
-          });
+          if (!botToken) {
+            console.error("Missing TELEGRAM_BOT_TOKEN; cannot send reply.");
+            return;
+          }
+          try {
+            const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: chatId, text })
+            });
+            if (!res.ok) {
+              console.error(`Telegram sendMessage failed: ${res.status} ${await res.text()}`);
+            }
+          } catch (err) {
+            console.error("Telegram sendMessage error:", err);
+          }
         };
 
         if (!consumed) {
