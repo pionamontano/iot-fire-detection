@@ -37,7 +37,9 @@ select pg_temp.check('anon/authenticated cannot execute raise_alert',
 select pg_temp.check('service_role can execute raise_alert', has_function_privilege('service_role', 'public.raise_alert(uuid,integer,double precision,double precision,double precision,double precision,boolean,text)', 'execute'));
 select pg_temp.check('raise_alert pins search_path', (select prosecdef and proconfig::text like '%search_path=public, pg_temp%' from pg_proc where proname = 'raise_alert'));
 
--- ================= WRITER AUDIT =================
+-- The audit has two expected outcomes depending on whether the Step 6.1 lifecycle guard is installed.
+select exists (select 1 from pg_trigger where tgname = 'alert_events_lifecycle_guard' and not tgisinternal) as lifecycle \gset
+-- ================= WRITER AUDIT (guard installed: :lifecycle) =================
 -- W-ack: responder acknowledge (ResponderDashboard.handleAcknowledge) - authenticated, column UPDATE grant
 select alert_id as i2 from raise_alert('20000000-0000-0000-0000-000000000002', 2, 400, 80, null, null, false, null) \gset
 set role authenticated; select set_config('request.jwt.claim.sub', :'resp', false);
@@ -60,8 +62,8 @@ select alert_id as i4 from raise_alert('20000000-0000-0000-0000-000000000004', 2
 set role authenticated; select set_config('request.jwt.claim.sub', :'resp', false);
 update alert_events set incident_status = 'resolved' where id = :'i4';
 reset role;
-select pg_temp.check('[DEFECT, confirmed] responder "resolve" leaves resolved_at NULL, so the row still counts as OPEN',
-  (select resolved_at is null and incident_status = 'resolved' from alert_events where id = :'i4'));
+select pg_temp.check(case when :'lifecycle' then '[6.1 guard] responder "resolve" now sets resolved_at at write time (defect fixed)' else '[DEFECT, confirmed] responder "resolve" leaves resolved_at NULL, so the row still counts as OPEN' end,
+  (select (resolved_at is not null) = :'lifecycle'::boolean and incident_status = 'resolved' from alert_events where id = :'i4'));
 select alert_id as j4, created as c4 from raise_alert('20000000-0000-0000-0000-000000000004', 2, 410, 85, null, null, false, null) \gset
 select pg_temp.check('[responder resolve] STOPGAP: a new fire after a responder-resolved incident creates a NEW incident',
   :'c4' = 't' and :'j4' <> :'i4'
@@ -84,7 +86,8 @@ update alert_events set resolved_at = now() where id = :'i6';
 reset role;
 select alert_id as j6, created as c6 from raise_alert('20000000-0000-0000-0000-000000000006', 2, 410, 85, null, null, false, null) \gset
 select pg_temp.check('[admin manual resolve] closed via resolved_at => a new fire creates a NEW incident', :'c6' = 't' and :'j6' <> :'i6');
-select pg_temp.check('[admin manual resolve] known leftover: incident_status stays "active" on the closed row (fixed in Step 6)', (select incident_status = 'active' from alert_events where id = :'i6'));
+select pg_temp.check(case when :'lifecycle' then '[6.1 guard] admin resolve now normalises incident_status to resolved' else '[admin manual resolve] known leftover: incident_status stays "active" on the closed row (fixed in Step 6)' end,
+  (select incident_status = (case when :'lifecycle' then 'resolved' else 'active' end) from alert_events where id = :'i6'));
 
 -- W-ingest: ingest-reading auto-resolve (service role): UPDATE ... SET resolved_at WHERE device_id AND resolved_at IS NULL
 select alert_id as i7 from raise_alert('20000000-0000-0000-0000-000000000007', 2, 400, 80, null, null, false, null) \gset
@@ -121,9 +124,23 @@ set role authenticated; select set_config('request.jwt.claim.sub', :'resp', fals
 update alert_events set incident_status = 'resolved' where id = :'n1';
 reset role;
 select alert_id as n2, created as nc2 from raise_alert_nostopgap_test('20000000-0000-0000-0000-000000000010', 2) \gset
-select pg_temp.check('[negative control] WITHOUT the stopgap the new fire is ABSORBED into the "resolved" incident and stays hidden (this is the hazard)',
-  :'nc2' = 'f' and :'n2' = :'n1' and (select incident_status = 'resolved' from alert_events where id = :'n1'));
+select pg_temp.check(case when :'lifecycle' then '[negative control] even WITHOUT the stopgap, the 6.1 guard alone keeps a new fire from being absorbed (new incident)' else '[negative control] WITHOUT the stopgap the new fire is ABSORBED into the "resolved" incident and stays hidden (this is the hazard)' end,
+  case when :'lifecycle' then (:'nc2' = 't' and :'n2' <> :'n1') else (:'nc2' = 'f' and :'n2' = :'n1' and (select incident_status = 'resolved' from alert_events where id = :'n1')) end);
 drop function public.raise_alert_nostopgap_test(uuid, integer);
+
+-- ================= stopgap still protects LEGACY rows written before the guard existed (not yet backfilled) =================
+\if :lifecycle
+select alert_id as l1 from raise_alert('20000000-0000-0000-0000-000000000011', 2, 400, 80, null, null, false, null) \gset
+alter table alert_events disable trigger alert_events_lifecycle_guard;
+alter table alert_events drop constraint alert_events_lifecycle_sync;
+update alert_events set incident_status = 'resolved' where id = :'l1';       -- exactly what the legacy responder UI wrote
+alter table alert_events enable trigger alert_events_lifecycle_guard;
+alter table alert_events add constraint alert_events_lifecycle_sync check ((incident_status in ('resolved', 'false_alarm')) = (resolved_at is not null)) not valid;
+select pg_temp.check('[pre-guard legacy row] status resolved but resolved_at NULL (what an un-backfilled production row looks like)', (select resolved_at is null and incident_status = 'resolved' from alert_events where id = :'l1'));
+select alert_id as l2, created as lc2 from raise_alert('20000000-0000-0000-0000-000000000011', 2, 410, 85, null, null, false, null) \gset
+select pg_temp.check('[pre-guard legacy row] raise_alert stopgap closes it and a new fire becomes a NEW incident',
+  :'lc2' = 't' and :'l2' <> :'l1' and (select resolved_at is not null and incident_status = 'resolved' from alert_events where id = :'l1'));
+\endif
 
 -- ================= delete path / seed script compatibility =================
 delete from alert_events where device_id = '20000000-0000-0000-0000-000000000009';

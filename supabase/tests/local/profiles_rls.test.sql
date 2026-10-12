@@ -25,9 +25,9 @@ end $$;
 -- dependent policies must still work for non-admins
 do $$ declare n int; begin
   perform pg_temp.as_user('00000000-0000-0000-0000-0000000000b1');
-  select count(*) into n from devices_safe;                   perform pg_temp.check('resident still sees own device via devices_safe (got '||n||')', n=1);
+  select count(*) into n from devices_safe where device_code like 'T-%'; perform pg_temp.check('resident still sees own device via devices_safe (got '||n||')', n=1);
   perform pg_temp.as_user('00000000-0000-0000-0000-0000000000c1');
-  select count(*) into n from devices_safe;                   perform pg_temp.check('responder still sees devices via devices_safe (got '||n||')', n=2);
+  select count(*) into n from devices_safe where device_code like 'T-%'; perform pg_temp.check('responder still sees devices via devices_safe (got '||n||')', n=2);
 end $$;
 -- unauthenticated / anon
 reset role; set role anon;

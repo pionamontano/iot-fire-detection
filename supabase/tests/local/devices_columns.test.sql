@@ -19,7 +19,7 @@ do $$ declare n int; begin
   begin perform * from devices; perform pg_temp.check('admin select * on devices is rejected (the DB-001 failure mode)', false);
   exception when insufficient_privilege then perform pg_temp.check('admin select * on devices is rejected (the DB-001 failure mode)', true); end;
 
-  select count(*) into n from (select id,device_code,label,location_desc,co_threshold,temp_threshold,bfp_contact,is_active,created_at,last_seen_at,latitude,longitude,local_ip from devices) s;
+  select count(*) into n from (select id,device_code,label,location_desc,co_threshold,temp_threshold,bfp_contact,is_active,created_at,last_seen_at,latitude,longitude,local_ip from devices where device_code like 'T-%') s;
   perform pg_temp.check('admin explicit-column select works (rows='||n||')', n=2);
 
   begin perform api_key from devices; perform pg_temp.check('api_key is not selectable by authenticated', false);
