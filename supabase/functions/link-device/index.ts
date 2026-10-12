@@ -41,12 +41,21 @@ serve(async (req: Request) => {
 
     const { data: profile } = await supabaseClient
       .from('profiles')
-      .select('role, device_id')
+      .select('role, device_id, status, is_active')
       .eq('id', user.id)
       .maybeSingle()
 
     if (!profile || profile.role !== 'resident') {
       return new Response(JSON.stringify({ error: 'Forbidden. Resident access required.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 403,
+      })
+    }
+
+    // Pending, rejected or deactivated residents must not claim a device
+    // (a linked device makes the account an SMS/push alert recipient).
+    if (profile.status !== 'approved' || profile.is_active !== true) {
+      return new Response(JSON.stringify({ error: 'Forbidden. Your account must be approved and active to link a device.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 403,
       })

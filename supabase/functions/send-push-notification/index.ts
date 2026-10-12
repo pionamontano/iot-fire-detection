@@ -83,11 +83,33 @@ serve(async (req: Request) => {
       });
     }
 
-    // Fetch subscriptions for the given user IDs
+    // Independently of the caller (including the service role), only deliver
+    // to approved, active accounts. This is a second line of defence behind
+    // trigger-alert's own recipient selection and register-push's gate.
+    const requestedIds = userIds.filter((id: unknown): id is string => typeof id === 'string');
+    const { data: eligibleProfiles, error: eligibleError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .in('id', requestedIds)
+      .eq('status', 'approved')
+      .eq('is_active', true);
+
+    if (eligibleError) {
+      throw eligibleError;
+    }
+
+    const eligibleIds = (eligibleProfiles ?? []).map((p: { id: string }) => p.id);
+    if (eligibleIds.length === 0) {
+      return new Response(JSON.stringify({ success: true, sentCount: 0 }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Fetch subscriptions for the eligible user IDs
     const { data: subscriptions, error: subError } = await supabaseAdmin
       .from('push_subscriptions')
       .select('*')
-      .in('user_id', userIds);
+      .in('user_id', eligibleIds);
 
     if (subError) {
       throw subError;

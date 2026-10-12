@@ -59,6 +59,9 @@ serve(async (req: Request) => {
       .select('contact_number')
       .eq('device_id', device.id)
       .eq('role', 'resident')
+      // Only an approved, active resident may be the SMS recipient.
+      .eq('status', 'approved')
+      .eq('is_active', true)
       .maybeSingle();
 
     return new Response(

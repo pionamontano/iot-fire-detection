@@ -211,6 +211,9 @@ serve(async (req: Request) => {
           .select('contact_number')
           .eq('device_id', device.id)
           .eq('role', 'resident')
+          // Only an approved, active resident may be the SMS recipient.
+          .eq('status', 'approved')
+          .eq('is_active', true)
           .maybeSingle()
       : Promise.resolve({ data: null });
 
@@ -312,11 +315,19 @@ serve(async (req: Request) => {
 
     // 6.5 Send Push Notifications
     try {
-      // Find relevant users to notify
+      // Find relevant users to notify. Roles/tiers are unchanged (admins and
+      // responders always; the device's resident on Tier 2 only), but every
+      // recipient must be an APPROVED, ACTIVE account - pending/rejected/
+      // deactivated profiles are excluded server-side.
+      const recipientRoles = tier === 2
+        ? `role.eq.admin,role.eq.bfp_responder,and(device_id.eq.${device.id},role.eq.resident)`
+        : 'role.eq.admin,role.eq.bfp_responder';
       const { data: usersToNotify } = await supabaseAdmin
         .from('profiles')
         .select('id')
-        .or(`role.eq.admin,role.eq.bfp_responder,${tier === 2 ? `and(device_id.eq.${device.id},role.eq.resident)` : 'id.eq.00000000-0000-0000-0000-000000000000'}`);
+        .eq('status', 'approved')
+        .eq('is_active', true)
+        .or(recipientRoles);
 
       if (usersToNotify && usersToNotify.length > 0) {
         const userIds = usersToNotify.map(u => u.id);

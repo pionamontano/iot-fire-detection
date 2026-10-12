@@ -29,6 +29,23 @@ serve(async (req: Request) => {
     const { action, subscription } = await req.json();
 
     if (action === 'subscribe') {
+      // Only approved, active accounts may register a push endpoint. The
+      // caller's own profile row is readable under RLS regardless of status.
+      const { data: callerProfile, error: profileError } = await supabaseClient
+        .from('profiles')
+        .select('status, is_active')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (profileError) {
+        throw profileError;
+      }
+      if (!callerProfile || callerProfile.status !== 'approved' || callerProfile.is_active !== true) {
+        return new Response(JSON.stringify({ error: 'Forbidden. Your account must be approved and active to enable push notifications.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       const { endpoint, keys } = subscription;
       if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
         return new Response(JSON.stringify({ error: 'Invalid subscription data' }), {
