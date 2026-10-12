@@ -72,9 +72,39 @@ static void test_requeue_budget() {
     SmsResultHolder h; HeldSmsResult r;
     h.hold("owner", "", true, 1, 0);
     int reports = 0;
-    while (h.takeReady(1, ID1, 5 * S, &r)) { ++reports; if (!h.requeue(r, 5 * S)) break; }
+    uint32_t t = 5 * S, last = 0;
+    for (int guard = 0; guard < 100000; ++guard, t += 100) {          // poll every 100 ms
+        if (!h.takeReady(1, ID1, t, &r)) continue;
+        ++reports;
+        if (reports > 1) { uint32_t gap = t - last; CHECK(gap >= 5 * S && gap <= 60 * S + 100, "gap %u ms", gap); }
+        last = t;
+        if (!h.requeue(r, t)) break;
+    }
     CHECK(reports == SmsResultHolder::MAX_FAILED_REPORTS, "reported %d times", reports);
     CHECK(h.count() == 0, "then dropped");
+    CHECK(last - 5 * S >= 5000 + 10000 + 20000 + 40000 + 60000 + 60000 + 60000 - 100 && last - 5 * S < 600 * S, "the 8 attempts span ~4 minutes, inside the 10 minute TTL");
+}
+
+static void test_boundaries_and_duplicates() {
+    printf("TTL boundary with the id arriving just before / just after; duplicates are independent entries\n");
+    SmsResultHolder h; HeldSmsResult r;
+    h.hold("owner", "", true, 1, 1000);
+    CHECK(h.takeReady(1, ID1, 1000 + SmsResultHolder::ttlMs(), &r) && strcmp(r.eventId, ID1) == 0, "id arrives exactly at the limit: reported");
+    h.hold("owner", "", true, 1, 1000);
+    CHECK(h.takeReady(1, ID1, 1000 + SmsResultHolder::ttlMs() - 1, &r), "1 ms before the limit: reported");
+    h.hold("owner", "", true, 1, 1000);
+    CHECK(!h.takeReady(1, ID1, 1000 + SmsResultHolder::ttlMs() + 1, &r) && h.count() == 0, "1 ms after the limit: discarded, never reported");
+    h.hold("owner", ID1, true, 1, 0);
+    CHECK(!h.takeReady(2, ID2, SmsResultHolder::ttlMs() + 1, &r), "an entry that carries its own id also expires");
+    // the same result presented twice: kept as two entries (the server makes duplicate reports harmless)
+    h.hold("owner", ID1, true, 1, 0); h.hold("owner", ID1, true, 1, 0);
+    CHECK(h.count() == 2 && h.takeReady(1, ID1, 1, &r) && h.takeReady(1, ID1, 1, &r) && !h.takeReady(1, ID1, 1, &r), "two identical results -> two reports, not deduplicated on the device");
+    // not-yet-due retry does not block others
+    h.hold("owner", ID1, true, 1, 0); h.hold("bfp", ID1, true, 1, 0);
+    CHECK(h.takeReady(1, ID1, 10, &r) && strcmp(r.role, "owner") == 0);
+    CHECK(h.requeue(r, 10));
+    CHECK(h.takeReady(1, ID1, 11, &r) && strcmp(r.role, "bfp") == 0, "bfp is reported while owner waits out its backoff");
+    CHECK(!h.takeReady(1, ID1, 10 + 4999, &r) && h.takeReady(1, ID1, 10 + 5000, &r) && strcmp(r.role, "owner") == 0, "owner due exactly 5 s after the failure");
 }
 
 static void test_fifo_and_independence() {
@@ -105,6 +135,7 @@ int main() {
     test_ttl();
     test_capacity();
     test_requeue_budget();
+    test_boundaries_and_duplicates();
     test_fifo_and_independence();
     test_null_and_long_inputs();
     printf("\n%d checks, %d failed\n", g_checks, g_fails);

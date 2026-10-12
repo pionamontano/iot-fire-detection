@@ -160,9 +160,11 @@ rejection, so faults are now `500`. `confirm-sms-status` additionally ignores a 
 - **SMS result late-binding**: an SMS result whose `alert_event_id` was unknown at queue time (POST not yet acknowledged) is held (max 4, 10 min) and
   reported once the incident's id is known. Each SMS job carries an incident sequence number; a result is only ever reported against the id of
   the incident it belongs to. Results that never obtain an id (alert never acknowledged, or the incident ended first) are discarded, not
-  guessed. Transient report failures are retried up to 5 times, one failing report per tick.
-- **WDT**: `esp_task_wdt_reset()` is called before each blocking alert / SMS-status POST. In the host model no tick reaches the 30 s WDT limit with or without
-  these calls, so they are precautionary; their effect is **unverified** (hardware only).
+  guessed. A failed status report is retried with backoff 5/10/20/40/60/60/60 s, 8 attempts in total per result (about 4 minutes), then dropped; at most one failing report per tick; every result also expires 10 minutes after it was held.
+- **WDT**: `esp_task_wdt_reset()` is called before each blocking alert POST, telemetry POST and SMS-status POST (added after review: a tick can now chain several
+  blocking requests). The host model, with failing calls blocking 20 s each, shows the gaps stay under 30 s with these feeds and exceed it without the alert/telemetry
+  feeds; the SMS-report feed is redundant in the model (a failed telemetry POST makes the device DEGRADED, which skips reports) and is kept as defence in depth.
+  The model's blocking times are assumptions; real timing is **unverified** (hardware only).
 - **Residual duplicates (at-least-once)**: a lost response makes the server see the alert again (safe, see above). A reboot during a fire repeats the SMS
   pair once (D5.7, accepted pending decision). A new incident within 5 minutes of the previous SMS pair sends no SMS (pre-existing debounce, unchanged).
 - **Behaviour changes vs 5.2**: (1) alert POST is now retried instead of lost; (2) an alert raised while Wi-Fi is down is delivered when it returns
@@ -173,6 +175,35 @@ Not in 5.2/5.3: per-user Telegram (5.4, needs D5.5), the keep-alive re-assert (D
 **Deploy order (when approved):** `20261020000000` (ledger) -> `20261021000000` (lifecycle) -> activation gate satisfied -> `20261020000100`
 (unique index + `raise_alert`) -> `send-push-notification` -> `trigger-alert`. `trigger-alert` tolerates an older `send-push-notification`
 (no per-recipient results) and a missing 5.1 schema (legacy fallback), so a wrong order degrades instead of failing.
+
+### Step 5.3 review (local/test only)
+
+**Defects found and fixed in review**
+1. Status-report retries had no backoff: all attempts were spent in the first ~10 s, so a 1 minute outage of `confirm-sms-status` lost the report. Now backoff 5..60 s, 8 attempts (~4 min), still bounded by the 10 minute expiry.
+2. The watchdog was not fed before the telemetry POST, which can follow a failing alert retry in the same tick (two blocking calls). A feed was added.
+
+**Edge cases (test = `host_tests/test_connectivity_sim.cpp` unless noted)**
+
+| # | Case | Expected behaviour | Demonstrated by |
+|---|------|--------------------|-----------------|
+| 1 | Old SMS result arrives after a new incident began | Never reported against the new incident (job carries its incident number; unbound old results are discarded; bound ones keep their own id) | R01/S18, S16; `test_sms_hold.cpp` never_bind_to_a_later_incident |
+| 2 | Two incidents in sequence, responses delayed/lost | Each result is reported only against its own incident's id; results that never learned an id are discarded | R02, S08 |
+| 3 | Incident id arrives just before / after the 10 minute expiry | Before or exactly at the limit: reported. After: discarded; the alert itself is still delivered | `test_sms_hold.cpp` test_ttl and test_boundaries_and_duplicates (to the millisecond); R03 end-to-end (5 vs 12 minutes) |
+| 4 | Holder at capacity (4) | Oldest dropped, newest kept; never grows | `test_sms_hold.cpp` test_capacity; R04 |
+| 5 | Same delivery result presented more than once | Not deduplicated on the device; the server treats repeats as harmless (below) | `test_sms_hold.cpp` duplicates; R05 (response lost after the server applied it) |
+| 6 | Status report fails until the retry limit | 8 attempts per result with backoff, then dropped, nothing left held; one failing report per tick | R06, R06c, S11, `test_sms_hold.cpp` test_requeue_budget; R06b (60 s outage survived) |
+| 7 | CLEAR while a retry is pending | Retry cancelled, no further alert POST (tier 1 and tier 2) | R07 = S07, S07b; `test_alert_retry.cpp` |
+| 8 | Tier 2 re-asserted after an earlier request failed/timed out | Fresh immediate attempt with tier 2 and reset backoff; SMS debounce unchanged | R08, S05, S06; `test_alert_retry.cpp` test_reassert |
+| 9 | Offline longer than the retry interval, then reconnect | No attempts and no backoff growth while offline; delivered within a few ticks of reconnecting | R09, S09 |
+| 10 | Reboot during an active incident | Alert re-sent (server keeps one open incident); SMS pair may repeat once (D5.7); both runs' results are reported | R10 = S12 |
+
+**Assumptions about the backend (read from the repository code; nothing was applied or deployed)**
+- *Alert POST response fields used for binding:* `alert_event_id` (required), plus `owner_contact`, `bfp_contact`, `address_resolved`, `triggered_at` (optional). `trigger-alert` (5.2) returns `alert_event_id` on both the `raise_alert` path and the legacy persistence path, and answers `500 persist_failed` (retryable) when the incident could not be recorded.
+- *2xx without a usable `alert_event_id`* (e.g. an older deployed function, or an unparsable body): the firmware treats 2xx as delivered and does **not** retry; the SMS results can then never be bound and expire unreported. SMS themselves are unaffected. Test: R11.
+- *Backend commits but the device loses the response:* the device retries; the server finds the open incident (`created:false`) and the ledger suppresses duplicate notifications for the same (incident, tier, channel, recipient). Tests: S13, R02 (server-side model only; real SQL behaviour is covered by the 5.1/5.2 suites).
+- *Status-report retries under repeated requests:* `confirm-sms-status` is idempotent for `success:true`, and a later `success:false` never overwrites a recorded success. A `success:true` after a recorded `false` does overwrite it (intended: a late success wins). An unknown id returns 404, which the device treats as permanent and drops.
+- *Depends on migrations/functions that are not activated:* (a) the one-open-incident guarantee under concurrent requests needs `raise_alert()` and the unique index (5.1b); with the legacy select-then-insert path a retry that overlaps a slow original request could create a second open incident, and the device would bind to whichever response it receives; (b) duplicate-notification suppression needs the `alert_notifications` ledger (fail-open: without it a retried POST can notify again, by design of the emergency-first policy); (c) retryable `500`s for database faults exist only once the 5.2 `trigger-alert` is deployed. **A pre-5.2 deployed `trigger-alert` reports database faults as 401/400, which the firmware classifies as permanent and gives up on after 3 attempts. Deploy 5.2 before any firmware that includes 5.3.**
+- *Not changed:* `confirm-sms-status` still maps database faults to 401/400, so a transient fault there is treated by the device as permanent and that result is dropped (the SMS itself was already sent). Left as an open risk.
 
 ## 4. Activation gate (required before 5.1b is applied anywhere shared, or before any code calls `raise_alert`)
 

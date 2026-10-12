@@ -618,6 +618,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
         const char* phaseStr = (mq7GetPhase() == MQ7Phase::MEASURING)
                                ? "measuring" : "heating";
         if (ctx->deviceState == DeviceState::ONLINE) {
+            esp_task_wdt_reset();
             int code = postTelemetry(sd, fix, ctx->batteryMv, ctx->rssi, phaseStr);
             if (code != 200 && code != 201) {
                 CLOG("Telemetry POST failed (code=%d) → DEGRADED", code);

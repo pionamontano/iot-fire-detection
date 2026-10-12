@@ -4,7 +4,13 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 W="${TMPDIR:-/tmp}/agap_mut"; rm -rf "$W"; mkdir -p "$W"
-build() { g++ -std=c++17 -w -O1 -I"$W/src" -Istubs test_connectivity_sim.cpp "$W/src/connectivity.cpp" "$W/src/gsm.cpp" -o "$W/sim" 2>"$W/err" || { echo "BUILD ERROR"; cat "$W/err" | head; return 2; }; "$W/sim" >"$W/out" 2>&1; }
+build() {
+  g++ -std=c++17 -w -O1 -I"$W/src" -Istubs test_connectivity_sim.cpp "$W/src/connectivity.cpp" "$W/src/gsm.cpp" -o "$W/sim" 2>"$W/err" || { echo "BUILD ERROR"; head "$W/err"; return 2; }
+  "$W/sim" >"$W/out" 2>&1 || return 1
+  mkdir -p "$W/host_tests"; cp test_sms_hold.cpp "$W/host_tests/"   # its "../src/..." include then resolves to the mutated copy
+  g++ -std=c++17 -w -O1 "$W/host_tests/test_sms_hold.cpp" -o "$W/hold" 2>"$W/err" || { echo "BUILD ERROR"; head "$W/err"; return 2; }
+  "$W/hold" >"$W/out" 2>&1
+}
 mutant() { # name, file, python-regex-from, to
   rm -rf "$W/src"; cp -r ../src "$W/src"
   python3 - "$W/src/$2" "$3" "$4" <<'PY'
@@ -52,13 +58,13 @@ mutant "WDT not fed before SMS report"         connectivity.cpp "        esp_tas
         int code = postSmsStatus" "        int code = postSmsStatus"
 mutant "gsm seq snapshot removed"              gsm.cpp "job->incidentSeq = s_incidentSeq;" "job->incidentSeq = 0;"
 mutant "gsm result loses seq"                  gsm.cpp "res->incidentSeq = incidentSeq;" "res->incidentSeq = 0;"
-# Combined WDT mutant (both precautionary feeds removed)
-rm -rf "$W/src"; cp -r ../src "$W/src"
-python3 - "$W/src/connectivity.cpp" <<'PY'
-import sys
-p=sys.argv[1]; s=open(p,encoding='utf-8').read()
-s=s.replace("    esp_task_wdt_reset();\n    int code = postAlert","    int code = postAlert",1).replace("        esp_task_wdt_reset();\n        int code = postSmsStatus","        int code = postSmsStatus",1)
-open(p,'w',encoding='utf-8').write(s)
-PY
-if build; then echo "SURVIVED  both WDT feeds removed (model cannot reach a 30 s gap; hardware-only concern)"; else echo "killed    both WDT feeds removed"; fi
-echo "survivors: $SURV (see README: 'no reset at new incident' is redundant with the CLEAR reset; single WDT feeds are redundant with each other)"
+mutant "WDT not fed before telemetry"         connectivity.cpp "            esp_task_wdt_reset();
+            int code = postTelemetry" "            int code = postTelemetry"
+mutant "report retry without backoff"          sms_result_hold.h "r.notBeforeMs = nowMs + delay;" "r.notBeforeMs = nowMs;"
+mutant "holder ignores backoff when taking"    sms_result_hold.h "const bool due = static_cast<int32_t>(nowMs - e.notBeforeMs) >= 0;" "const bool due = true;"
+mutant "holder never expires"                  sms_result_hold.h "if (expired || orphaned) removeAt(i); else ++i;" "if (orphaned) removeAt(i); else ++i;"
+mutant "holder keeps orphans"                  sms_result_hold.h "if (expired || orphaned) removeAt(i); else ++i;" "if (expired) removeAt(i); else ++i;"
+mutant "holder TTL off by one (>=)"            sms_result_hold.h "nowMs - e.heldSinceMs) > ttlMs()" "nowMs - e.heldSinceMs) >= ttlMs()"
+mutant "holder attempt budget +1"              sms_result_hold.h "if (r.failedReports + 1 >= MAX_FAILED_REPORTS) return false;" "if (r.failedReports + 1 > MAX_FAILED_REPORTS) return false;"
+mutant "holder drops NEWEST when full"         sms_result_hold.h "if (n_ == CAPACITY) { removeAt(0); dropped = true; }" "if (n_ == CAPACITY) { return true; }"
+echo "survivors: $SURV (see README: expected survivors are equivalent/redundant mutants)"

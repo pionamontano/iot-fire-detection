@@ -29,11 +29,12 @@ struct HeldSmsResult {
     uint32_t incidentSeq;
     uint32_t heldSinceMs;
     uint8_t  failedReports;  // failed attempts to report this result
+    uint32_t notBeforeMs;    // do not report before this time (backoff after a failed report)
 };
 
 class SmsResultHolder {
 public:
-    enum { CAPACITY = 4, MAX_FAILED_REPORTS = 5 };
+    enum { CAPACITY = 4, MAX_FAILED_REPORTS = 8 };   // 8 failed reports in total, then dropped
     static uint32_t ttlMs() { return 600000UL; }   // 10 minutes
 
     SmsResultHolder() { clear(); }
@@ -50,6 +51,7 @@ public:
         e.success = success;
         e.incidentSeq = incidentSeq;
         e.heldSinceMs = nowMs;
+        e.notBeforeMs = nowMs;
         return push(e);
     }
 
@@ -69,7 +71,8 @@ public:
         const bool haveCurrent = currentEventId != 0 && currentEventId[0] != '\0';
         for (int i = 0; i < n_; ++i) {
             HeldSmsResult& e = items_[i];
-            const bool ready = e.eventId[0] != '\0' || (e.incidentSeq == currentSeq && haveCurrent);
+            const bool due = static_cast<int32_t>(nowMs - e.notBeforeMs) >= 0;
+            const bool ready = due && (e.eventId[0] != '\0' || (e.incidentSeq == currentSeq && haveCurrent));
             if (!ready) continue;
             *out = e;
             if (out->eventId[0] == '\0') copy(out->eventId, sizeof(out->eventId), currentEventId);
@@ -80,10 +83,16 @@ public:
     }
 
     // Put an entry back after a TRANSIENT report failure. Returns false if its attempts are used up (dropped).
-    bool requeue(const HeldSmsResult& e, uint32_t /*nowMs*/) {
+    // The next report is delayed 5,10,20,40,60,60,60 s (so a ~4 minute outage is survived instead of burning
+    // every attempt in the first seconds). The entry still expires after ttlMs() from when it was held.
+    bool requeue(const HeldSmsResult& e, uint32_t nowMs) {
         HeldSmsResult r = e;
         if (r.failedReports + 1 >= MAX_FAILED_REPORTS) return false;
         r.failedReports = static_cast<uint8_t>(r.failedReports + 1);
+        uint32_t delay = 5000UL;
+        for (int i = 1; i < r.failedReports && delay < 60000UL; ++i) delay *= 2;
+        if (delay > 60000UL) delay = 60000UL;
+        r.notBeforeMs = nowMs + delay;
         push(r);
         return true;
     }

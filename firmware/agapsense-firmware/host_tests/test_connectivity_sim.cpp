@@ -37,6 +37,9 @@ struct Server {
     std::vector<int> alertTiers;    // tier of every trigger-alert request that REACHED the server
     struct Rep { std::string id, role; bool ok; }; std::vector<Rep> reports;   // accepted confirm-sms-status
     int smsCalls = 0;
+    bool noIdInAlertReply = false;   // 200 OK but no alert_event_id (e.g. an old deployed function)
+    int smsLostResponses = 0;        // next N confirm-sms-status are APPLIED but the response is lost
+    uint32_t latencyOnFail = 10000;  // how long a failing call blocks the device
     void closeIncident() { openId = 0; maxTier = 0; }
     std::string idStr() const { return "evt-" + std::to_string(openId); }
 };
@@ -49,11 +52,12 @@ static std::string field(const std::string& p, const char* key) {
 }
 static int handle(const std::string& url, const std::string& payload, std::string& body, uint32_t& lat) {
     if (url.find("get-device-config") != std::string::npos) {
+        if (srv.mode == DOWN) { lat = srv.latencyOnFail; return -1; }
         body = "{\"co_alert_ppm\":200,\"temp_alert_c\":70,\"owner_number\":\"+639111111111\",\"bfp_number\":\"+639222222222\"}"; return 200;
     }
     bool isAlert = url.find("trigger-alert") != std::string::npos;
     bool isSms = url.find("confirm-sms-status") != std::string::npos;
-    if (srv.mode == DOWN) { lat = 10000; return -1; }
+    if (srv.mode == DOWN) { lat = srv.latencyOnFail; return -1; }
     if (srv.mode == ERR500 && (isAlert || isSms)) return 500;
     if (srv.mode == BAD400 && isAlert) return 400;
     if (isAlert) {
@@ -62,6 +66,7 @@ static int handle(const std::string& url, const std::string& payload, std::strin
         if (srv.openId == 0) { srv.openId = ++srv.incidents; }
         if (tier > srv.maxTier) srv.maxTier = tier;
         if (srv.mode == LOST) { lat = 10000; return -11; }
+        if (srv.noIdInAlertReply) { body = "{\"success\":true}"; return 200; }
         body = "{\"alert_event_id\":\"" + srv.idStr() + "\",\"owner_contact\":\"+639111111111\",\"bfp_contact\":\"+639222222222\","
                "\"address_resolved\":\"Test Street\",\"triggered_at\":\"2026-10-12T00:00:00Z\"}";
         return 200;
@@ -71,6 +76,7 @@ static int handle(const std::string& url, const std::string& payload, std::strin
         if (srv.smsStatusCode) return srv.smsStatusCode;
         if (srv.smsFailures > 0) { --srv.smsFailures; return 503; }
         srv.reports.push_back({field(payload, "alert_event_id"), field(payload, "role"), field(payload, "success") == "true"});
+        if (srv.smsLostResponses > 0) { --srv.smsLostResponses; lat = srv.latencyOnFail; return -11; }
         return 200;
     }
     return 200;   // ingest-reading
@@ -222,8 +228,9 @@ static void s10_sms_report_transient() {
 static void s11_sms_report_permanent_outage() {
     printf("S11 confirm-sms-status down forever: bounded retries, then dropped\n");
     world(); Dev d; d.boot(); srv.smsStatusCode = 503; d.tier2(); d.run(120);
-    int n = srv.smsCalls; CHECK(n >= 2 && n <= 12, "bounded (%d)", n);
-    d.run(300); CHECK(srv.smsCalls == n, "stopped retrying");
+    d.run(300);
+    int n = srv.smsCalls; CHECK(n == 2 * agap::SmsResultHolder::MAX_FAILED_REPORTS, "bounded (%d)", n);
+    d.run(600); CHECK(srv.smsCalls == n, "stopped retrying");
     auto c = callTimes("confirm-sms-status");
     for (size_t i = 1; i < c.size(); i++) CHECK(c[i] - c[i-1] >= 1500, "at most one failing report per tick (gap %u ms)", c[i] - c[i-1]);
 }
@@ -290,12 +297,135 @@ static void s18_late_gsm_results_after_new_incident() {
     CHECK(srv.reports.empty(), "...but their results are not reported against incident 2 (%zu reports)", srv.reports.size());
 }
 
+// ── Step 5.3 review: targeted edge cases (numbering follows the review request) ──
+static void r01_old_result_after_new_incident() {   // = S18, plus the bound-id variant S16
+    printf("R01 an old SMS result arrives after a new incident started -> never attributed to it (see S16, S18)\n");
+    s18_late_gsm_results_after_new_incident();
+}
+static void r02_two_incidents_lost_or_delayed_responses() {
+    printf("R02 two incidents in sequence, POST responses lost/delayed: each result goes to its own incident\n");
+    world(); Dev d; d.boot(); srv.mode = LOST; d.tier2(); d.run(12);          // incident 1: server records it (evt-1), device never hears
+    CHECK(srv.incidents == 1 && g_hal.smsSent.size() == 2);
+    d.safe(); d.run(6); CHECK(d.ctx.alertTier == AlertTier::CLEAR);
+    srv.closeIncident(); srv.mode = LOST; d.run(320);                          // past the SMS debounce
+    d.tier2(); d.run(12);                                                      // incident 2: server records it (evt-2), response lost again
+    CHECK(srv.incidents == 2 && g_hal.smsSent.size() == 4, "incidents=%d sms=%zu", srv.incidents, g_hal.smsSent.size());
+    srv.mode = OK; d.run(80);
+    CHECK(reportsFor("evt-1", "owner") + reportsFor("evt-1", "bfp") == 0, "incident 1's results (never bound) are not reported against evt-1 or evt-2");
+    CHECK(reportsFor("evt-2", "owner") == 1 && reportsFor("evt-2", "bfp") == 1, "incident 2's own results reported against evt-2 (%zu)", srv.reports.size());
+}
+static void r03_id_arrives_around_ttl() {
+    printf("R03 incident id arrives before / after the ten minute expiry (exact boundary: test_sms_hold.cpp; end-to-end here)\n");
+    for (int downSec : {300, 700}) {
+        world(); Dev d; d.boot(); srv.mode = DOWN; srv.latencyOnFail = 1000; d.tier2(); d.run(downSec);
+        srv.mode = OK; d.run(200);
+        size_t n = srv.reports.size();
+        if (downSec == 300) CHECK(n == 2, "id obtained ~5 min in: both results reported (%zu)", n);
+        else CHECK(n == 0, "id obtained ~12 min in: results expired, nothing reported against the incident (%zu)", n);
+        CHECK(srv.alertTiers.size() == 1, "the alert itself is delivered either way");
+    }
+}
+static void r04_holder_capacity() {
+    printf("R04 holder at capacity: oldest dropped, newest kept (unit: test_sms_hold.cpp); end-to-end 3 SMS pairs while no id\n");
+    world(); Dev d; d.boot(); srv.mode = BAD400; d.tier2(); d.run(12);          // no id will ever arrive (400s)
+    for (int k = 0; k < 2; k++) { d.tier1(); d.run(8); d.run(320); d.tier2(); d.run(8); }
+    CHECK(g_hal.smsSent.size() == 6, "3 pairs sent (%zu)", g_hal.smsSent.size());
+    CHECK(d.ctx.smsHold.count() <= agap::SmsResultHolder::CAPACITY, "holder bounded (%d)", d.ctx.smsHold.count());
+    CHECK(srv.smsCalls == 0, "nothing reported without an id");
+}
+static void r05_duplicate_report_is_harmless() {
+    printf("R05 the same delivery report is presented twice (response lost after the server applied it)\n");
+    world(); Dev d; d.boot(); srv.smsLostResponses = 2; d.tier2(); d.run(60);
+    CHECK(reportsFor("evt-1", "owner") >= 1 && reportsFor("evt-1", "bfp") >= 1);
+    CHECK(srv.reports.size() >= 3 && srv.reports.size() <= 4, "server received %zu reports (>2 = duplicates, by design)", srv.reports.size());
+    for (auto& r : srv.reports) CHECK(r.ok && r.id == "evt-1", "every duplicate says the same thing about the same incident");
+    size_t n = srv.reports.size(); d.run(200); CHECK(srv.reports.size() == n, "and it stops");
+}
+static void r06_report_retry_exhaustion() {
+    printf("R06 status report fails repeatedly: 8 attempts per result with backoff, then dropped\n");
+    world(); Dev d; d.boot(); srv.smsStatusCode = 503; d.tier2(); d.run(600);
+    CHECK(srv.smsCalls == 2 * agap::SmsResultHolder::MAX_FAILED_REPORTS, "calls=%d", srv.smsCalls);
+    auto c = callTimes("confirm-sms-status");
+    CHECK(c.size() >= 8 && c.back() - c[0] >= 150000, "spread over minutes, not burst (span %u ms)", c.size() >= 8 ? c.back() - c[0] : 0);
+    CHECK(d.ctx.smsHold.count() == 0, "nothing left behind");
+}
+static void r06b_report_survives_short_outage() {
+    printf("R06b a 60 s outage of confirm-sms-status does not lose the report\n");
+    world(); Dev d; d.boot(); srv.smsStatusCode = 503; d.tier2(); d.run(60); srv.smsStatusCode = 0; d.run(200);
+    CHECK(reportsFor("evt-1", "owner") == 1 && reportsFor("evt-1", "bfp") == 1, "reports=%zu", srv.reports.size());
+}
+static void r07_clear_while_retry_pending() {   // = S07/S07b
+    printf("R07 CLEAR while a retry is pending (tier 1 and tier 2): see S07, S07b\n");
+    s07_clear_cancels(); s07b_tier1_clear_cancels();
+}
+static void r08_reassert_after_failure() {
+    printf("R08 tier 2 re-asserted after a previous request failed/timed out\n");
+    world(); Dev d; d.boot(); srv.mode = DOWN; d.tier2(); d.run(6);              // attempt 1 times out
+    d.tier1(); d.run(8); CHECK(d.ctx.alertTier == AlertTier::TIER1);
+    srv.mode = OK; d.tier2(); d.run(10);                                         // re-escalation -> immediate fresh attempt with tier 2
+    CHECK(!srv.alertTiers.empty() && srv.alertTiers.front() == 2, "tier 2 delivered at once on re-escalation");
+    size_t n = srv.alertTiers.size(); d.run(120);
+    CHECK(srv.alertTiers.size() == n, "and then no more");
+    CHECK(g_hal.smsSent.size() == 2, "SMS debounce unchanged");
+}
+static void r09_offline_longer_than_interval() {
+    printf("R09 offline for 10 minutes (>> retry interval): no attempts and no backoff growth while offline; immediate attempt on reconnect\n");
+    world(); Dev d; d.boot(); srv.mode = DOWN; d.tier2(); d.run(40);
+    int before = countCalls("trigger-alert");
+    srv.mode = OK; g_hal.wifiUp = false; d.run(600);
+    CHECK(countCalls("trigger-alert") == before, "no alert POST while offline");
+    g_hal.wifiUp = true; d.run(6);
+    CHECK(srv.alertTiers.size() == 1 && srv.alertTiers[0] == 2, "delivered within a few ticks of reconnecting");
+}
+static void r10_reboot_during_incident() {   // = S12
+    printf("R10 reboot during an active incident: one duplicate SMS pair is possible and documented: see S12\n");
+    s12_reboot_during_fire();
+}
+static void r11_200_without_usable_id() {
+    printf("R11 2xx without alert_event_id: treated as delivered (no retry), results can never be bound, nothing bogus is reported\n");
+    world(); Dev d; d.boot(); srv.noIdInAlertReply = true; d.tier2(); d.run(60);
+    CHECK(countCalls("trigger-alert") == 1, "not retried: the server answered success");
+    CHECK(g_hal.smsSent.size() == 2 && srv.smsCalls == 0, "SMS sent, no report without an id");
+}
+static void r12_wdt_with_slow_failures() {
+    printf("R12 failing calls that block 20 s each (connect + request timeouts): feeds keep every gap < 30 s\n");
+    world(); Dev d; d.boot(); srv.mode = DOWN; srv.latencyOnFail = 20000; d.tier2(); d.run(900);
+    CHECK(maxWdtGap() < (uint32_t)WDT_TIMEOUT_S * 1000, "max gap %u ms", maxWdtGap());
+}
+
+static void r06c_two_ready_results_one_failing_report_per_tick() {
+    printf("R06c two held results become ready in the same tick and the report endpoint fails: one failing report per tick\n");
+    world(); Dev d; d.boot(); srv.mode = DOWN; srv.latencyOnFail = 1000; d.tier2(); d.run(20);
+    srv.mode = OK; srv.smsStatusCode = 503; d.run(60);
+    auto c = callTimes("confirm-sms-status");
+    CHECK(c.size() >= 4, "reports were attempted (%zu)", c.size());
+    for (size_t i = 1; i < c.size(); i++) CHECK(c[i] - c[i-1] >= 1500, "gap %u ms", c[i] - c[i-1]);
+}
+static void r12b_wdt_alert_after_config_and_telemetry_coincide() {
+    printf("R12b config fetch + alert retry + telemetry due in the same tick, each blocking 20 s\n");
+    world(); Dev d; d.boot(); srv.mode = DOWN; srv.latencyOnFail = 20000; d.tier2(); d.tick(); d.tick();
+    d.ctx.lastConfigFetch_ms = g_hal.now - CONFIG_FETCH_INTERVAL_MS; d.ctx.lastTelemetry_ms = g_hal.now - TELEMETRY_INTERVAL_MS;
+    d.tick(); d.run(60);
+    CHECK(maxWdtGap() < (uint32_t)WDT_TIMEOUT_S * 1000, "max gap %u ms", maxWdtGap());
+}
+static void r12c_wdt_telemetry_and_report_coincide() {
+    printf("R12c telemetry + SMS status report due in the same tick, each blocking 20 s\n");
+    world(); Dev d; d.boot(); d.tier2(); d.tick(); d.tick(); d.tick();           // alert acked, SMS queued with id
+    srv.mode = DOWN; srv.latencyOnFail = 20000; d.ctx.lastTelemetry_ms = g_hal.now - TELEMETRY_INTERVAL_MS;
+    g_hal.wdtAt.clear(); d.tick(); d.run(40);
+    CHECK(maxWdtGap() < (uint32_t)WDT_TIMEOUT_S * 1000, "max gap %u ms", maxWdtGap());
+}
+
 int main() {
     s01_normal(); s02_server_down_then_recovers(); s03_5xx_then_ok(); s04_permanent_400(); s05_escalation_while_failing();
     s06_escalation_after_ack(); s07_clear_cancels(); s07b_tier1_clear_cancels(); s08_new_incident_does_not_inherit(); s09_offline_then_online();
     s10_sms_report_transient(); s11_sms_report_permanent_outage(); s12_reboot_during_fire(); s13_lost_response();
     s14_one_post_per_tick_and_wdt(); s15_cap_on_attempts_over_an_hour();
     s16_bound_id_is_honoured(); s17_offline_across_sms_debounce(); s18_late_gsm_results_after_new_incident();
+    r01_old_result_after_new_incident(); r02_two_incidents_lost_or_delayed_responses(); r03_id_arrives_around_ttl(); r04_holder_capacity();
+    r05_duplicate_report_is_harmless(); r06_report_retry_exhaustion(); r06b_report_survives_short_outage(); r07_clear_while_retry_pending();
+    r08_reassert_after_failure(); r09_offline_longer_than_interval(); r10_reboot_during_incident(); r11_200_without_usable_id(); r12_wdt_with_slow_failures();
+    r06c_two_ready_results_one_failing_report_per_tick(); r12b_wdt_alert_after_config_and_telemetry_coincide(); r12c_wdt_telemetry_and_report_coincide();
     printf("\n%d checks, %d failed\n", g_checks, g_fails);
     return g_fails ? 1 : 0;
 }
