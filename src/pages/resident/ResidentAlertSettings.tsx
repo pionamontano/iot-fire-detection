@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { Device } from '../../lib/supabase';
 import { Thermometer, Wind, MessageSquare, CheckCircle2, HelpCircle, AlertTriangle, Save, Send, X } from 'lucide-react';
 import { AlertSettingsSkeleton } from '../../components/SkeletonLoaders';
-import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError } from '../../lib/pushNotifications';
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
 import { startTelegramLink } from '../../lib/telegramLink';
 import { Bell, BellOff } from 'lucide-react';
 
@@ -87,7 +87,7 @@ export const ResidentAlertSettings = () => {
       }
     } catch (e: any) {
       console.error(e);
-      setErrorMsg(describePushError(e));
+      setErrorMsg(describePushError(e, await isBraveBrowser()));
       setTimeout(() => setErrorMsg(''), 5000);
     } finally {
       setPushLoading(false);

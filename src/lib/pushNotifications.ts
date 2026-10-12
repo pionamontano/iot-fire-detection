@@ -15,10 +15,23 @@ const urlB64ToUint8Array = (base64String: string) => {
   return outputArray;
 };
 
+/** True when running in Brave, which blocks Google's push service by default. */
+export const isBraveBrowser = async (): Promise<boolean> => {
+  try {
+    const brave = (navigator as unknown as { brave?: { isBrave: () => Promise<boolean> } }).brave;
+    return !!(brave && (await brave.isBrave()));
+  } catch {
+    return false;
+  }
+};
+
 /** Turns a push subscription failure into a message a user can act on. */
-export const describePushError = (e: unknown): string => {
+export const describePushError = (e: unknown, isBrave = false): string => {
   const name = (e as { name?: string } | null)?.name;
   if (name === 'AbortError') {
+    if (isBrave) {
+      return 'Brave blocks push notifications by default. Enable "Use Google services for push messaging" in brave://settings/privacy, then try again.';
+    }
     return "Your browser's push service is unavailable. Try Chrome or Edge, check your connection, and make sure browser push services are enabled.";
   }
   if (name === 'NotAllowedError') {
