@@ -10,12 +10,7 @@ import { ResponderDashboardSkeleton } from '../../components/SkeletonLoaders';
 import {
   AlertTriangle,
   Wifi,
-  WifiOff,
   Clock,
-  Search,
-  MapPin,
-  Filter,
-  Loader2,
   PhoneCall,
   Navigation,
   Volume2,
@@ -309,14 +304,6 @@ export const ResponderDashboard = () => {
     return { ...d, latitude: location.lat, longitude: location.lng, location };
   }), [devices, now]);
   const devicesWithoutLocation = mapDevices.filter(d => d.location.kind === 'unavailable');
-
-  const mapBounds = useMemo(() => {
-    const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);
-    if (validDevices.length === 0) return null;
-
-    const bounds = L.latLngBounds(validDevices.map(d => [d.latitude as number, d.longitude as number]));
-    return bounds;
-  }, [devices]);
 
   if (loading) {
     return <ResponderDashboardSkeleton />;

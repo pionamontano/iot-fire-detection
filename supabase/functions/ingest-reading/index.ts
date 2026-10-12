@@ -144,7 +144,6 @@ serve(async (req: Request) => {
       gps_valid = false,
       on_battery = false,
       sensor_ready = true,
-      local_ip,
     } = body;
 
     // 3. Validate required numeric fields before any DB writes

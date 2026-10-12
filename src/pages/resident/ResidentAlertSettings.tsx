@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Device } from '../../lib/supabase';
-import { Thermometer, Wind, MessageSquare, CheckCircle2, ShieldAlert, HelpCircle, AlertTriangle, Save, Send, X } from 'lucide-react';
+import { Thermometer, Wind, MessageSquare, CheckCircle2, HelpCircle, AlertTriangle, Save, Send, X } from 'lucide-react';
 import { AlertSettingsSkeleton } from '../../components/SkeletonLoaders';
 import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription } from '../../lib/pushNotifications';
 import { Bell, BellOff } from 'lucide-react';

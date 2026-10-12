@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { registerServiceWorker } from './lib/pushNotifications';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
 import { AuthGuard } from './components/AuthGuard';
