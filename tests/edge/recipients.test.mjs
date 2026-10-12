@@ -127,7 +127,7 @@ test('send-push-notification: only approved+active users\' subscriptions are use
   const webpush = { setVapidDetails() {}, sendNotification: async (sub) => { sent.push(sub.endpoint); } };
   const subs = profiles.map(p => ({ user_id: p.id, endpoint: 'ep-' + p.id, p256dh: 'p', auth: 'a' }));
   const db = new FakeDb({ profiles, push_subscriptions: subs });
-  const handler = loadHandler('send-push-notification', { db, webpush, env: { SUPABASE_URL: 'x', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 'srv' } });
+  const handler = loadHandler('send-push-notification', { db, webpush, env: { SUPABASE_URL: 'x', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 'srv', VAPID_PUBLIC_KEY: 'pub', VAPID_PRIVATE_KEY: 'priv' } });
   const res = await handler(req({ userIds: profiles.map(p => p.id), title: 't', body: 'b' }, { Authorization: 'Bearer srv' }));
   assert.equal(res.status, 200);
   assert.deepEqual(sent.sort(), ['ep-admin-ok', 'ep-res-ok', 'ep-res-other-dev', 'ep-resp-ok']);
@@ -137,7 +137,7 @@ test('send-push-notification: all-ineligible list sends nothing', async () => {
   const sent = [];
   const webpush = { setVapidDetails() {}, sendNotification: async (s) => { sent.push(s.endpoint); } };
   const db = new FakeDb({ profiles, push_subscriptions: [{ user_id: 'resp-pending', endpoint: 'e', p256dh: 'p', auth: 'a' }] });
-  const handler = loadHandler('send-push-notification', { db, webpush, env: { SUPABASE_URL: 'x', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 'srv' } });
+  const handler = loadHandler('send-push-notification', { db, webpush, env: { SUPABASE_URL: 'x', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 'srv', VAPID_PUBLIC_KEY: 'pub', VAPID_PRIVATE_KEY: 'priv' } });
   const res = await handler(req({ userIds: ['resp-pending', 'resp-rejected'], title: 't', body: 'b' }, { Authorization: 'Bearer srv' }));
   assert.equal((await res.json()).sentCount, 0);
   assert.equal(sent.length, 0);
