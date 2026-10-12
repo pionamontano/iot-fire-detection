@@ -33,6 +33,8 @@ static uint8_t           resultHead  = 0;   // next slot to dequeue
 static uint8_t           resultTail  = 0;   // next free slot to enqueue
 static uint8_t           resultCount = 0;   // results currently queued
 
+static uint32_t          s_incidentSeq = 0;   // set by gsmSetIncidentSeq(); snapshotted into each queued job
+
 static SemaphoreHandle_t smsMutex = nullptr;   // guards both queues above
 
 // ── Internal: drain UART until OK / ERROR / > or timeout ──
@@ -215,6 +217,8 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
 // ── Async queue (ring buffer, SMS_QUEUE_SIZE slots) ─────────
 // Tier 2 always queues two jobs back to back (owner + BFP), so the
 // queue must hold at least 2 without dropping either one.
+void gsmSetIncidentSeq(uint32_t seq) { s_incidentSeq = seq; }
+
 void gsmQueueSms(const char* number, const char* message,
                  const char* role, const char* alertEventId) {
     if (!smsMutex) return;
@@ -229,6 +233,7 @@ void gsmQueueSms(const char* number, const char* message,
             job->role[sizeof(job->role) - 1] = '\0';
             strncpy(job->alertEventId, alertEventId, sizeof(job->alertEventId) - 1);
             job->alertEventId[sizeof(job->alertEventId) - 1] = '\0';
+            job->incidentSeq = s_incidentSeq;
             job->pending = true;
             smsTail = (smsTail + 1) % SMS_QUEUE_SIZE;
             smsCount++;
@@ -251,6 +256,7 @@ void gsmProcessQueue() {
     char msg[220]         = {0};
     char role[8]          = {0};
     char alertEventId[40] = {0};
+    uint32_t incidentSeq  = 0;
     bool haveJob          = false;
 
     if (xSemaphoreTake(smsMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -260,6 +266,7 @@ void gsmProcessQueue() {
             strncpy(msg, job->message, sizeof(msg) - 1);
             strncpy(role, job->role,   sizeof(role) - 1);
             strncpy(alertEventId, job->alertEventId, sizeof(alertEventId) - 1);
+            incidentSeq = job->incidentSeq;
             job->pending = false;
             smsHead = (smsHead + 1) % SMS_QUEUE_SIZE;
             smsCount--;
@@ -279,6 +286,7 @@ void gsmProcessQueue() {
             res->role[sizeof(res->role) - 1] = '\0';
             strncpy(res->alertEventId, alertEventId, sizeof(res->alertEventId) - 1);
             res->alertEventId[sizeof(res->alertEventId) - 1] = '\0';
+            res->incidentSeq = incidentSeq;
             res->success = sent;
             resultTail = (resultTail + 1) % SMS_QUEUE_SIZE;
             resultCount++;
@@ -293,7 +301,7 @@ void gsmProcessQueue() {
 // task loop until it returns false, draining everything from one tick.
 bool gsmPopSmsResult(char* role, size_t roleLen,
                      char* alertEventId, size_t alertEventIdLen,
-                     bool* success) {
+                     bool* success, uint32_t* incidentSeq) {
     if (!smsMutex) return false;
 
     bool got = false;
@@ -305,6 +313,7 @@ bool gsmPopSmsResult(char* role, size_t roleLen,
             strncpy(alertEventId, res->alertEventId, alertEventIdLen - 1);
             alertEventId[alertEventIdLen - 1] = '\0';
             *success = res->success;
+            *incidentSeq = res->incidentSeq;
             resultHead = (resultHead + 1) % SMS_QUEUE_SIZE;
             resultCount--;
             got = true;

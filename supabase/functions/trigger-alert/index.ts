@@ -78,37 +78,206 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
   }
 }
 
-async function sendTelegram(token: string, chatId: string, text: string): Promise<boolean> {
-  if (!token || !chatId) return false;
+// =============================================================
+// Delivery (Step 5.2).
+//
+// Order of operations - PERSIST FIRST, THEN NOTIFY:
+//   1. raise_alert() atomically creates / updates the single open incident for the device (idempotent: a retried
+//      or replayed request returns the same incident). The incident is recorded BEFORE any provider is called, so a
+//      slow or failing Telegram/push service can never delay or lose the alert record.
+//   2. Each notification is claimed in the alert_notifications ledger before it is sent
+//      (claim_notification), so a replay/retry does not send the same (incident, tier, channel, recipient) again.
+//   3. Every external call has a timeout and the whole dispatch has a budget, so the response (which carries the
+//      SMS contacts the firmware needs) is never held hostage by a provider.
+//
+// DELIVERY IS AT-LEAST-ONCE, NOT EXACTLY-ONCE. If a provider accepts a message but this function dies or times out
+// before recording "sent", the claim goes stale and a later request can send again => a recipient may rarely get a
+// duplicate. That is deliberate (a duplicate fire alert beats a lost one). See
+// docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md.
+//
+// Emergency-first failure policy ("fail open"): if the ledger is unavailable the notification is sent anyway; if
+// the incident cannot be recorded at all the station Telegram/push are still attempted (best effort, de-duplicated
+// in memory) before the function reports a 500 so the device retries.
+// Rolling out before the 5.1 migrations exist degrades to the previous select-then-insert persistence (the
+// response says persistence:"legacy"); set ALERT_STRICT_DB=1 to refuse that and fail with 500 instead.
+// =============================================================
+
+const DISPATCH_BUDGET_MS = Number(Deno.env.get('ALERT_DISPATCH_BUDGET_MS')) || 4000;
+const PROVIDER_TIMEOUT_MS = Number(Deno.env.get('ALERT_PROVIDER_TIMEOUT_MS')) || 3500;
+const STRICT_DB = Deno.env.get('ALERT_STRICT_DB') === '1';
+
+interface SendResult {
+  ok: boolean;
+  status: string;
+  ref?: string;
+  error?: string;
+  retryable: boolean;
+}
+
+async function sendTelegram(token: string, chatId: string, text: string): Promise<SendResult> {
+  if (!token || !chatId) {
+    return { ok: false, status: 'not_configured', error: 'Telegram is not configured', retryable: false };
+  }
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-      }),
+      body: JSON.stringify({ chat_id: chatId, text }),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
-    return res.ok;
+    if (res.ok) {
+      let ref: string | undefined;
+      try {
+        const j = await res.json();
+        if (j?.result?.message_id != null) ref = String(j.result.message_id);
+      } catch { /* the body is informational only */ }
+      return { ok: true, status: String(res.status), ref, retryable: true };
+    }
+    // 400/401/403/404: wrong chat, blocked bot, bad token - retrying cannot help. 429/5xx are transient.
+    return { ok: false, status: String(res.status), error: `Telegram HTTP ${res.status}`, retryable: res.status === 429 || res.status >= 500 };
   } catch (e) {
-    console.error('Telegram error:', e);
-    return false;
+    const err = e as Error;
+    console.error('Telegram error:', err?.name);
+    return { ok: false, status: 'network', error: err?.name === 'TimeoutError' ? 'timeout' : 'network error', retryable: true };
   }
 }
+
+const isMissingFunction = (e: { code?: string; message?: string } | null | undefined): boolean =>
+  !!e && (e.code === 'PGRST202' || e.code === '42883' || /could not find the function/i.test(e.message ?? ''));
+
+// Fail-open claim: only an explicit "false" from the ledger suppresses a send.
+async function claim(admin: any, alertId: string | null, tier: number, channel: string, recipient: string): Promise<boolean> {
+  if (!alertId) return true;   // unrecorded mode: no incident id, so no ledger
+  try {
+    const { data, error } = await admin.rpc('claim_notification', { p_alert: alertId, p_tier: tier, p_channel: channel, p_recipient: recipient });
+    if (error) {
+      console.error('claim_notification unavailable, sending anyway:', error.code);
+      return true;
+    }
+    return data !== false;
+  } catch (e) {
+    console.error('claim_notification failed, sending anyway:', (e as Error)?.name);
+    return true;
+  }
+}
+
+async function complete(
+  admin: any, alertId: string | null, tier: number, channel: string, recipient: string,
+  status: 'sent' | 'failed' | 'skipped', providerStatus: string | null, providerRef: string | null,
+  error: string | null, retryable = true,
+): Promise<void> {
+  if (!alertId) return;
+  try {
+    await admin.rpc('complete_notification', {
+      p_alert: alertId, p_tier: tier, p_channel: channel, p_recipient: recipient,
+      p_status: status, p_provider_status: providerStatus, p_provider_ref: providerRef, p_error: error, p_retryable: retryable,
+    });
+  } catch (e) {
+    console.error('complete_notification failed:', (e as Error)?.name);
+  }
+}
+
+// Best-effort in-memory de-duplication used ONLY when the incident could not be recorded (no ledger available).
+const recentUnrecorded = new Map<string, number>();
+const UNRECORDED_WINDOW_MS = 5 * 60 * 1000;
+
+async function dispatchNotifications(p: {
+  admin: any; alertId: string | null; tier: number; device: any; locationString: string; tgText: string;
+}): Promise<void> {
+  const { admin, alertId, tier, device, locationString, tgText } = p;
+
+  const telegram = (async () => {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
+    const chatId = Deno.env.get('TELEGRAM_CHAT_ID') || '';
+    if (!token || !chatId) return;
+    if (!(await claim(admin, alertId, tier, 'telegram_station', 'station'))) return;
+    const r = await sendTelegram(token, chatId, tgText);
+    await complete(admin, alertId, tier, 'telegram_station', 'station', r.ok ? 'sent' : 'failed', r.status, r.ref ?? null, r.error ?? null, r.retryable);
+    if (r.ok && alertId) {
+      await admin.from('alert_events').update({ telegram_sent: true }).eq('id', alertId);
+    }
+  })();
+
+  const push = (async () => {
+    // Recipients: roles and tiers unchanged (admins and responders always; the device's resident on Tier 2 only),
+    // but every recipient must be an APPROVED, ACTIVE account.
+    const recipientRoles = tier === 2
+      ? `role.eq.admin,role.eq.bfp_responder,and(device_id.eq.${device.id},role.eq.resident)`
+      : 'role.eq.admin,role.eq.bfp_responder';
+    const { data: usersToNotify } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('status', 'approved')
+      .eq('is_active', true)
+      .or(recipientRoles);
+    const userIds: string[] = (usersToNotify ?? []).map((u: { id: string }) => u.id);
+    if (userIds.length === 0) return;
+
+    const claimed: string[] = [];
+    await Promise.all(userIds.map(async (id) => { if (await claim(admin, alertId, tier, 'push', id)) claimed.push(id); }));
+    if (claimed.length === 0) return;
+
+    let results: Array<{ userId: string; status: 'sent' | 'failed' | 'skipped'; provider_status?: string; error?: string; retryable?: boolean }> | null = null;
+    let reached = false;
+    let failStatus = 'network';
+    let failError = 'push service unreachable';
+    try {
+      const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-push-notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
+        body: JSON.stringify({
+          userIds: claimed,
+          title: tier === 1 ? 'WARNING - Tier 1 Alert' : 'FIRE ALERT - Tier 2',
+          body: `Device: ${device.device_code}\nLocation: ${locationString}`,
+          // Lets a push service replace an undelivered duplicate of the same alert+tier (partial duplicate mitigation).
+          topic: alertId ? `a${alertId.replace(/-/g, '').slice(0, 24)}t${tier}` : undefined,
+        }),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      });
+      if (res.ok) {
+        reached = true;
+        const j = await res.json().catch(() => null);
+        results = Array.isArray(j?.results) ? j.results : null;
+      } else {
+        failStatus = String(res.status);
+        failError = `send-push-notification HTTP ${res.status}`;
+      }
+    } catch (e) {
+      failError = (e as Error)?.name === 'TimeoutError' ? 'timeout' : 'network error';
+    }
+
+    for (const id of claimed) {
+      if (!reached) {
+        await complete(admin, alertId, tier, 'push', id, 'failed', failStatus, null, failError, true);
+      } else if (results) {
+        const r = results.find((x) => x.userId === id);
+        if (r) await complete(admin, alertId, tier, 'push', id, r.status, r.provider_status ?? null, null, r.error ?? null, r.retryable !== false);
+        else await complete(admin, alertId, tier, 'push', id, 'failed', null, null, 'no result returned for recipient', true);
+      } else {
+        // older send-push-notification without per-recipient results: the call succeeded, individual outcomes unknown
+        await complete(admin, alertId, tier, 'push', id, 'sent', 'unknown', null, null, true);
+      }
+    }
+  })();
+
+  await Promise.allSettled([telegram, push]);
+}
+
+const fmtTime = (d: Date): string => d.toISOString().replace('T', ' ').substring(0, 19);
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  const reply = (status: number, body: Record<string, unknown>) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
   try {
     // 1. Authenticate device
     const deviceKey = req.headers.get('x-device-key');
     if (!deviceKey) {
-      return new Response(JSON.stringify({ error: 'Missing x-device-key' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return reply(401, { error: 'Missing x-device-key' });
     }
 
     const supabaseAdmin = createClient(
@@ -120,13 +289,15 @@ serve(async (req: Request) => {
       .from('devices')
       .select('id, device_code, location_desc, is_active, co_threshold, temp_threshold, bfp_contact')
       .eq('api_key', deviceKey)
-      .single();
+      .maybeSingle();
 
-    if (deviceError || !device || !device.is_active) {
-      return new Response(JSON.stringify({ error: 'Unauthorized or inactive device' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // A database FAULT is not an authentication failure: report it as a (retryable) 500, not a 401.
+    if (deviceError) {
+      console.error('device lookup failed:', deviceError.code);
+      return reply(500, { error: 'Temporary server error', code: 'device_lookup_failed' });
+    }
+    if (!device || !device.is_active) {
+      return reply(401, { error: 'Unauthorized or inactive device' });
     }
 
     // 2. Parse body safely
@@ -134,34 +305,24 @@ serve(async (req: Request) => {
     try {
       body = await req.json();
     } catch {
-      return new Response(JSON.stringify({ error: 'Invalid JSON payload' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return reply(400, { error: 'Invalid JSON payload', code: 'invalid_payload' });
     }
 
-    // [FIX #2] Fallback destructuring for legacy vs fixed firmware field names
-    const reqTier = body.tier ?? body.alert_tier; // Firmware tier provided but overridden by server
+    // Fallback destructuring for legacy vs fixed firmware field names
     const temp_celsius = body.temp_celsius ?? body.temperature_c;
     const latitude = body.latitude ?? body.lat;
     const longitude = body.longitude ?? body.lng;
     const co_ppm = body.co_ppm;
     const gps_valid = body.gps_valid ?? false;
 
-    // 3. [FIX #3] Input validation before database touches
+    // 3. Input validation before database touches
     const isValidNumber = (val: unknown): boolean => typeof val === 'number' && Number.isFinite(val);
 
     if (!isValidNumber(co_ppm) || !isValidNumber(temp_celsius)) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid payload: co_ppm and temp_celsius must be finite numbers' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return reply(400, { error: 'Invalid payload: co_ppm and temp_celsius must be finite numbers', code: 'invalid_payload' });
     }
 
-    // 3.5 Recalculate tier based on server-side thresholds to ensure backend authority
+    // 3.5 Recalculate tier from server-side thresholds: the backend is authoritative (unchanged rules).
     const coThreshold = device.co_threshold ?? Infinity;
     const tempThreshold = device.temp_threshold ?? Infinity;
 
@@ -174,28 +335,18 @@ serve(async (req: Request) => {
     } else if (coExceeded || tempExceeded) {
       tier = 1;
     } else {
-      return new Response(JSON.stringify({ error: 'Sensor readings do not exceed thresholds; alert rejected.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return reply(400, { error: 'Sensor readings do not exceed thresholds; alert rejected.', code: 'below_threshold' });
     }
 
     if (gps_valid && (!isValidNumber(latitude) || !isValidNumber(longitude))) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid payload: latitude and longitude must be finite numbers when gps_valid is true' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return reply(400, { error: 'Invalid payload: latitude and longitude must be finite numbers when gps_valid is true', code: 'invalid_payload' });
     }
 
-    // (0, 0) is the firmware's "no fix ever acquired" sentinel (gps.cpp lastFix
-    // init), not a real cached location — treat it the same as missing coords.
+    // (0, 0) is the firmware's "no fix ever acquired" sentinel, not a real cached location.
     const hasCachedCoords =
       isValidNumber(latitude) && isValidNumber(longitude) && !(latitude === 0 && longitude === 0);
 
-    // 4. Run concurrent background operations
+    // 4. Concurrent preparation (no alert_events read any more: raise_alert() does the deduplication atomically)
     const updateLastSeenPromise = supabaseAdmin
       .from('devices')
       .update({ last_seen_at: new Date().toISOString() })
@@ -211,159 +362,159 @@ serve(async (req: Request) => {
           .select('contact_number')
           .eq('device_id', device.id)
           .eq('role', 'resident')
+          // Only an approved, active resident may be the SMS recipient.
+          .eq('status', 'approved')
+          .eq('is_active', true)
           .maybeSingle()
       : Promise.resolve({ data: null });
 
-    // [FIX #6] Query for open alert to perform deduplication
-    // NOTE: alert_events has no `created_at` column — only `triggered_at`.
-    // Ordering by a nonexistent column made this query error on every call,
-    // which silently degraded to "always insert a new row" instead of
-    // escalating the existing open alert.
-    const openAlertPromise = supabaseAdmin
-      .from('alert_events')
-      .select('id, alert_tier')
-      .eq('device_id', device.id)
-      .is('resolved_at', null)
-      .order('triggered_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const [_, address_resolved, profileResult, openAlertResult] = await Promise.all([
+    const [_, address_resolved, profileResult] = await Promise.all([
       updateLastSeenPromise,
       geocodePromise,
       ownerContactPromise,
-      openAlertPromise,
     ]);
 
     const ownerContact = profileResult?.data?.contact_number || '';
-    const locationString = address_resolved || device.location_desc || 'Unknown Location';
-    const timeString = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const existingOpenAlert = openAlertResult?.data;
+    const now = new Date();
 
-    // 5. Send Telegram Notification
-    const tgToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
-    const tgChatId = Deno.env.get('TELEGRAM_CHAT_ID') || '';
+    // 5. PERSIST the incident first (idempotent, atomic).
+    let incident: { alert_id: string; created: boolean; tier: number; triggered_at: string } | null = null;
+    let persistence: 'raise_alert' | 'legacy' = 'raise_alert';
+    let persistFailure: string | null = null;
+
+    const { data: raised, error: raiseError } = await supabaseAdmin.rpc('raise_alert', {
+      p_device_id: device.id,
+      p_tier: tier,
+      p_co: co_ppm,
+      p_temp: temp_celsius,
+      p_lat: hasCachedCoords ? latitude : null,
+      p_lng: hasCachedCoords ? longitude : null,
+      p_gps_valid: gps_valid === true,
+      p_address: address_resolved || null,
+    });
+
+    if (!raiseError && Array.isArray(raised) && raised[0]) {
+      incident = raised[0];
+    } else if (raiseError && isMissingFunction(raiseError) && !STRICT_DB) {
+      // Rolled out before migration 20261020000100: use the previous select-then-insert persistence.
+      console.error('raise_alert missing - using legacy persistence');
+      persistence = 'legacy';
+      incident = await legacyPersist(supabaseAdmin, device, tier, co_ppm, temp_celsius, hasCachedCoords, latitude, longitude, gps_valid === true, address_resolved);
+      if (!incident) persistFailure = 'legacy persistence failed';
+    } else {
+      persistFailure = raiseError ? `raise_alert failed (${raiseError.code ?? 'error'})` : 'raise_alert returned no incident';
+    }
+
+    // The effective tier is the tier now in force for the incident (never lower than an earlier, higher tier).
+    const effectiveTier = incident?.tier ?? tier;
+    const locationString = address_resolved || device.location_desc || 'Unknown Location';
+    const timeString = fmtTime(now);
 
     let tgText = '';
-    if (tier === 1) {
+    if (effectiveTier === 1) {
       tgText = `WARNING — Tier 1\n\nDevice: ${device.device_code}\nLocation: ${locationString}\nTime: ${timeString}\n\nElevated reading detected:\n- CO: ${co_ppm} ppm (threshold: ${device.co_threshold} ppm)\n- Temp: ${temp_celsius}°C (threshold: ${device.temp_threshold}°C)\n\nMonitor the area. No SMS dispatched at this level.`;
     } else {
       const gpsString = hasCachedCoords
         ? `GPS: ${latitude}, ${longitude}${gps_valid ? '' : ' (estimated — last known)'}\nNavigate: https://maps.google.com/?q=${latitude},${longitude}\n\n`
         : `GPS: Unavailable\n\n`;
-      
+
       tgText = `FIRE ALERT — Tier 2\n\nDevice: ${device.device_code}\nLocation: ${locationString}\nTime: ${timeString}\n\nSensor readings:\n- CO: ${co_ppm} ppm (threshold: ${device.co_threshold} ppm)\n- Temp: ${temp_celsius}°C (threshold: ${device.temp_threshold}°C)\n\n${gpsString}SMS alerts have been dispatched.`;
     }
 
-    const telegramSent = await sendTelegram(tgToken, tgChatId, tgText);
-
-    let alertEventId: string;
-
-    // 6. [FIX #6] Deduplication & Escalation Logic
-    if (existingOpenAlert) {
-      alertEventId = existingOpenAlert.id;
-      const newTier = Math.max(existingOpenAlert.alert_tier, tier);
-
-      const { error: updateError } = await supabaseAdmin
-        .from('alert_events')
-        .update({
-          alert_tier: newTier,
-          co_ppm,
-          temp_celsius,
-          latitude: hasCachedCoords ? latitude : undefined,
-          longitude: hasCachedCoords ? longitude : undefined,
-          gps_valid: gps_valid ?? false,
-          address_resolved: address_resolved || undefined,
-          ...(telegramSent && { telegram_sent: true }),
-        })
-        .eq('id', alertEventId);
-
-      if (updateError) {
-        throw new Error(`Failed to update open alert event: ${updateError.message}`);
-      }
-    } else {
-      // [FIX #1] Only insert into alert_events (sensor_readings insert omitted)
-      // [FIX #4] sms_sent_owner/bfp pre-set to false
-      const { data: newAlert, error: insertError } = await supabaseAdmin
-        .from('alert_events')
-        .insert({
-          device_id: device.id,
-          alert_tier: tier,
-          co_ppm,
-          temp_celsius,
-          latitude: hasCachedCoords ? latitude : null,
-          longitude: hasCachedCoords ? longitude : null,
-          gps_valid: gps_valid ?? false,
-          address_resolved,
-          telegram_sent: telegramSent,
-          sms_sent_owner: false,
-          sms_sent_bfp: false,
-        })
-        .select('id')
-        .single();
-
-      if (insertError || !newAlert) {
-        throw new Error(`Failed to insert alert event: ${insertError?.message}`);
-      }
-
-      alertEventId = newAlert.id;
+    // 6. NOTIFY, bounded. If the incident could not be recorded, still make a best-effort station notification.
+    let skipDispatch = false;
+    if (!incident) {
+      const key = `${device.id}:${effectiveTier}`;
+      const last = recentUnrecorded.get(key) ?? 0;
+      if (Date.now() - last < UNRECORDED_WINDOW_MS) skipDispatch = true;
+      else recentUnrecorded.set(key, Date.now());
+    }
+    if (!skipDispatch) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const budget = new Promise<void>((resolve) => { timer = setTimeout(resolve, DISPATCH_BUDGET_MS); });
+      await Promise.race([
+        dispatchNotifications({
+          admin: supabaseAdmin, alertId: incident?.alert_id ?? null, tier: effectiveTier,
+          device, locationString, tgText,
+        }).catch((e) => console.error('dispatch failed:', (e as Error)?.name)),
+        budget,
+      ]);
+      clearTimeout(timer);
     }
 
-
-    // 6.5 Send Push Notifications
-    try {
-      // Find relevant users to notify
-      const { data: usersToNotify } = await supabaseAdmin
-        .from('profiles')
-        .select('id')
-        .or(`role.eq.admin,role.eq.bfp_responder,${tier === 2 ? `and(device_id.eq.${device.id},role.eq.resident)` : 'id.eq.00000000-0000-0000-0000-000000000000'}`);
-
-      if (usersToNotify && usersToNotify.length > 0) {
-        const userIds = usersToNotify.map(u => u.id);
-        const pushTitle = tier === 1 ? 'WARNING - Tier 1 Alert' : 'FIRE ALERT - Tier 2';
-        const pushBody = `Device: ${device.device_code}\nLocation: ${locationString}`;
-
-        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-push-notification`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
-          },
-          body: JSON.stringify({
-            userIds,
-            title: pushTitle,
-            body: pushBody
-          })
-        }).catch(e => console.error("Error triggering push notification func:", e));
-      }
-    } catch (pushErr) {
-      console.error('Failed to prepare push notifications:', pushErr);
+    if (!incident) {
+      console.error('alert NOT recorded:', persistFailure);
+      return reply(500, { error: 'Failed to record the alert; please retry', code: 'persist_failed' });
     }
 
-    // 7. [FIX #5] Return response containing alert_event_id
-    // address_resolved and triggered_at are threaded back to the firmware
-    // so the SMS bodies can include them (spec SW-2.2.2) — the device has
-    // no other way to get a reverse-geocoded address, and no RTC/NTP of
-    // its own for a trustworthy timestamp.
-    return new Response(
-      JSON.stringify({
-        success: true,
-        alert_event_id: alertEventId,
-        owner_contact: ownerContact,
-        bfp_contact: device.bfp_contact || '',
-        address_resolved: address_resolved || '',
-        triggered_at: timeString,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    );
-  } catch (err) {
-    const error = err as Error;
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+    // 7. Response. Existing fields are unchanged (the firmware parses them); `created`, `tier` and `persistence` are additive.
+    // address_resolved and triggered_at are threaded back so the SMS bodies can include them (spec SW-2.2.2).
+    return reply(200, {
+      success: true,
+      alert_event_id: incident.alert_id,
+      owner_contact: ownerContact,
+      bfp_contact: device.bfp_contact || '',
+      address_resolved: address_resolved || '',
+      triggered_at: fmtTime(new Date(incident.triggered_at)),
+      created: incident.created,
+      tier: effectiveTier,
+      persistence,
     });
+  } catch (err) {
+    console.error('trigger-alert internal error:', (err as Error)?.name, (err as Error)?.message);
+    return reply(500, { error: 'Internal error', code: 'internal' });
   }
 });
+
+// Previous persistence (select-then-insert). Used ONLY while migration 20261020000100 is not applied.
+async function legacyPersist(
+  admin: any, device: any, tier: number, co_ppm: number, temp_celsius: number, hasCachedCoords: boolean,
+  latitude: number, longitude: number, gps_valid: boolean, address_resolved: string | null,
+): Promise<{ alert_id: string; created: boolean; tier: number; triggered_at: string } | null> {
+  const { data: existing } = await admin
+    .from('alert_events')
+    .select('id, alert_tier, triggered_at')
+    .eq('device_id', device.id)
+    .is('resolved_at', null)
+    .order('triggered_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    const newTier = Math.max(existing.alert_tier, tier);
+    const { error } = await admin
+      .from('alert_events')
+      .update({
+        alert_tier: newTier,
+        co_ppm,
+        temp_celsius,
+        latitude: hasCachedCoords ? latitude : undefined,
+        longitude: hasCachedCoords ? longitude : undefined,
+        gps_valid,
+        address_resolved: address_resolved || undefined,
+      })
+      .eq('id', existing.id);
+    if (error) return null;
+    return { alert_id: existing.id, created: false, tier: newTier, triggered_at: existing.triggered_at ?? new Date().toISOString() };
+  }
+
+  const { data: inserted, error } = await admin
+    .from('alert_events')
+    .insert({
+      device_id: device.id,
+      alert_tier: tier,
+      co_ppm,
+      temp_celsius,
+      latitude: hasCachedCoords ? latitude : null,
+      longitude: hasCachedCoords ? longitude : null,
+      gps_valid,
+      address_resolved,
+      telegram_sent: false,
+      sms_sent_owner: false,
+      sms_sent_bfp: false,
+    })
+    .select('id, triggered_at')
+    .single();
+  if (error || !inserted) return null;
+  return { alert_id: inserted.id, created: true, tier, triggered_at: inserted.triggered_at ?? new Date().toISOString() };
+}

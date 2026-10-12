@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
+import { LoadErrorBanner } from '../../components/LoadErrorBanner';
+import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device } from '../../lib/supabase';
 import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check } from 'lucide-react';
 import { CardListSkeleton } from '../../components/SkeletonLoaders';
@@ -19,6 +22,7 @@ export const Devices = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
   // device_id -> latest on_battery (spec HW-1.5.2/SW-2.4.4)
   const [batteryByDevice, setBatteryByDevice] = useState<Record<string, boolean>>({});
 
@@ -50,7 +54,7 @@ export const Devices = () => {
   const fetchDevices = useCallback(async () => {
     setLoading(true);
     const [devicesRes, batteryRes] = await Promise.all([
-      supabase.from('devices').select('*').order('created_at', { ascending: false }),
+      supabase.from('devices').select<string, Device>(DEVICE_COLUMNS).order('created_at', { ascending: false }),
       // Latest readings across devices, to derive each device's current
       // on_battery state (no per-device "latest reading" view exists, so
       // the most recent batch is reduced client-side below).
@@ -60,6 +64,8 @@ export const Devices = () => {
         .limit(300),
     ]);
 
+    // A failed read must be visible, not look like an empty fleet.
+    setLoadError(devicesRes.error ? { message: devicesRes.error.message, code: devicesRes.error.code } : null);
     if (!devicesRes.error && devicesRes.data) {
       setDevices(devicesRes.data);
     }
@@ -174,6 +180,9 @@ export const Devices = () => {
 
   return (
     <div className="space-y-10">
+      {loadError && (
+        <LoadErrorBanner what="devices" error={loadError} onRetry={fetchDevices} />
+      )}
       {/* Page Header */}
       <div>
         <h2 className="text-[#1C1B1B] font-extrabold text-[40px] leading-9 tracking-[-0.019em]">

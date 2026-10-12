@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
+import { LoadErrorBanner } from '../../components/LoadErrorBanner';
+import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device, AlertEvent } from '../../lib/supabase';
 import {
   Users,
@@ -43,6 +46,7 @@ export const Dashboard = () => {
   const [fireEvents24h, setFireEvents24h] = useState(0);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
   const navigate = useNavigate();
   const now = useNowTick();
 
@@ -71,8 +75,8 @@ export const Dashboard = () => {
   const fetchData = async () => {
     try {
       const [devicesRes, alertsRes, profilesRes, fireEvents24hRes, recentAlertsRes, batteryRes] = await Promise.all([
-        supabase.from('devices').select('*').order('created_at', { ascending: true }),
-        supabase.from('alert_events').select('*, devices(*)').is('resolved_at', null),
+        supabase.from('devices').select<string, Device>(DEVICE_COLUMNS).order('created_at', { ascending: true }),
+        supabase.from('alert_events').select(`*, devices(${DEVICE_COLUMNS})`).is('resolved_at', null),
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         // Fire events in last 24 hours
         supabase.from('alert_events')
@@ -91,6 +95,10 @@ export const Dashboard = () => {
           .order('recorded_at', { ascending: false })
           .limit(300)
       ]);
+
+      // A failed read must be visible, not look like an empty fleet.
+      const readError = devicesRes.error ?? alertsRes.error;
+      setLoadError(readError ? { message: readError.message, code: readError.code } : null);
 
       if (devicesRes.data) setDevices(devicesRes.data);
       if (batteryRes.data) {
@@ -136,6 +144,10 @@ export const Dashboard = () => {
   return (
     <div className="w-full mx-auto pb-[63px]">
       
+      {loadError && (
+        <div className="mb-6 pl-[30px]"><LoadErrorBanner what="dashboard data" error={loadError} onRetry={fetchData} /></div>
+      )}
+
       {/* Top Header Area */}
       <div className="flex flex-col gap-1 mb-10 pl-[30px]">
         <h2 className="text-[#1C1B1B] font-extrabold text-[40px] leading-[36px] tracking-[-0.0187em]">

@@ -10,6 +10,8 @@ import {
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { ResidentHomeSkeleton } from '../../components/SkeletonLoaders';
+import { resolveDeviceLocation, markerOpacity } from '../../lib/location';
+import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
 
 // Icons
 const markerIcon = new L.Icon({
@@ -21,8 +23,6 @@ const markerIcon = new L.Icon({
   popupAnchor: [1, -34],
   shadowSize: [41, 41]
 });
-
-const DEFAULT_CENTER: [number, number] = [14.8527, 120.8160];
 
 // Components
 const StatCard = ({ title, value, subtitle, icon: Icon, active = false }: any) => (
@@ -292,21 +292,13 @@ export const ResidentHome = () => {
     return `${Math.floor(diff / 60)}m AGO`;
   };
 
-  // Determine Map Coordinates
-  let displayLat = latestReading?.latitude;
-  let displayLng = latestReading?.longitude;
-
-  if (!displayLat || !displayLng) {
-    let hash = 0;
-    for (let j = 0; j < device.id.length; j++) {
-      hash = ((hash << 5) - hash) + device.id.charCodeAt(j);
-      hash |= 0;
-    }
-    const latOffset = ((hash & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
-    const lngOffset = (((hash >> 16) & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
-    displayLat = DEFAULT_CENTER[0] + latOffset;
-    displayLng = DEFAULT_CENTER[1] + lngOffset;
-  }
+  // Where to show the device. Live GPS / last-known GPS / registered install coordinates / unavailable -
+  // never an invented position. Re-evaluated on each render (30 s poll), so a fix older than 15 minutes
+  // stops being labelled live. Newest-first: the realtime reading, then the recent history window.
+  const location = resolveDeviceLocation({
+    readings: [latestReading, ...recentReadings],
+    device,
+  });
 
   const handleDiscrepancyResolution = async (status: 'approved' | 'rejected') => {
     if (!discrepancy) return;
@@ -580,25 +572,31 @@ export const ResidentHome = () => {
           <div className="bg-white rounded-lg p-6 border border-[#E4E4E7]">
             <h2 className="text-lg font-black tracking-tight text-[#18181B]">Deployment Node</h2>
             <span className="text-[10px] font-bold text-[#A1A1AA] uppercase tracking-wider block mb-4">Unit ID: #{device.device_code}</span>
-            <div className="h-48 rounded bg-gray-200 mb-4 overflow-hidden z-0 relative">
-              <MapContainer 
-                center={[displayLat, displayLng]} 
-                zoom={14} 
-                style={{ height: '100%', width: '100%' }}
-                zoomControl={false}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                <Marker position={[displayLat, displayLng]} icon={markerIcon}>
-                  <Popup>
-                    <strong>{device.device_code}</strong><br />
-                    {device.location_desc}
-                  </Popup>
-                </Marker>
-              </MapContainer>
-            </div>
+            {location.lat !== null && location.lng !== null ? (
+              <div className="h-48 rounded bg-gray-200 mb-1 overflow-hidden z-0 relative">
+                <MapContainer
+                  key={`${location.lat},${location.lng}`}
+                  center={[location.lat, location.lng]}
+                  zoom={14}
+                  style={{ height: '100%', width: '100%' }}
+                  zoomControl={false}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <Marker position={[location.lat, location.lng]} icon={markerIcon} opacity={markerOpacity(location.kind)}>
+                    <Popup>
+                      <strong>{device.device_code}</strong><br />
+                      {device.location_desc}
+                    </Popup>
+                  </Marker>
+                </MapContainer>
+              </div>
+            ) : (
+              <LocationUnavailablePanel heightClass="h-48" />
+            )}
+            <div className="mb-4"><LocationBadge location={location} /></div>
             <div className="flex gap-3 items-start">
               <MapPin size={16} className="text-[#52525B] mt-0.5" />
               <span className="text-xs font-bold text-[#18181B] uppercase">{device.location_desc}</span>

@@ -51,6 +51,7 @@
 #include <WiFiManager.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <esp_task_wdt.h>
 
 #if DEBUG_MODE
   #define CLOG(fmt, ...) Serial.printf("[CONN] " fmt "\n", ##__VA_ARGS__)
@@ -80,6 +81,8 @@ const char* alertTierStr(AlertTier t) {
 // ── Internal forward declarations ──────────────────────────
 static void fireTier1Warning(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix);
 static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix);
+static void attemptAlertPost(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix);
+static void serviceSmsReports(ConnectivityCtx* ctx);
 
 // ── Indicator helpers ──────────────────────────────────────
 static void indicatorsOff() {
@@ -397,6 +400,10 @@ void connectivityInit(ConnectivityCtx* ctx) {
     memset(ctx->lastAlertEventId, 0, sizeof(ctx->lastAlertEventId));
     memset(ctx->lastAddressResolved, 0, sizeof(ctx->lastAddressResolved));
     memset(ctx->lastTriggeredAt, 0, sizeof(ctx->lastTriggeredAt));
+    ctx->alertRetry.reset();
+    ctx->smsHold.clear();
+    ctx->incidentSeq = 0;
+    gsmSetIncidentSeq(0);
     strncpy(ctx->ownerNumber, OWNER_SMS_NUMBER_DEFAULT, sizeof(ctx->ownerNumber) - 1);
     strncpy(ctx->bfpNumber,   BFP_SMS_NUMBER_DEFAULT,   sizeof(ctx->bfpNumber)   - 1);
 
@@ -517,6 +524,9 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                         // id from a previous, already-resolved alert so
                         // it can never leak into this one's SMS reports.
                         memset(ctx->lastAlertEventId, 0, sizeof(ctx->lastAlertEventId));
+                        ctx->alertRetry.reset();
+                        ctx->incidentSeq++;
+                        gsmSetIncidentSeq(ctx->incidentSeq);
                         if (tier2Now) {
                             ctx->alertTier      = AlertTier::TIER2;
                             ctx->alertRiseCount = 0;
@@ -556,6 +566,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                     CLOG("Tier 1 fall count %d/%d", ctx->alertFallCount, ALERT_RESOLUTION_COUNT);
                     if (ctx->alertFallCount >= ALERT_RESOLUTION_COUNT) {
                         CLOG("TIER 1 resolved → CLEAR");
+                        ctx->alertRetry.reset();
                         ctx->alertTier      = AlertTier::CLEAR;
                         ctx->alertRiseCount = 0;
                         ctx->alertFallCount = 0;
@@ -574,6 +585,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                     CLOG("Tier 2 fall count %d/%d", ctx->alertFallCount, ALERT_RESOLUTION_COUNT);
                     if (ctx->alertFallCount >= ALERT_RESOLUTION_COUNT) {
                         CLOG("TIER 2 resolved → CLEAR");
+                        ctx->alertRetry.reset();
                         ctx->alertTier      = AlertTier::CLEAR;
                         ctx->alertRiseCount = 0;
                         ctx->alertFallCount = 0;
@@ -595,12 +607,18 @@ void connectivityUpdate(ConnectivityCtx* ctx,
         }
     }
 
+    // ── Step 4b: Retry an unacknowledged alert POST ─────────
+    // The first attempt is made synchronously at the transition (fireTier*). If it failed, the scheduler
+    // (alert_retry.h) says when to try again. At most one alert POST per tick. Skipped unless ONLINE.
+    attemptAlertPost(ctx, sd, fix);
+
     // ── Step 5: Periodic telemetry POST ─────────────────────
     if (now - ctx->lastTelemetry_ms >= TELEMETRY_INTERVAL_MS) {
         ctx->lastTelemetry_ms = now;
         const char* phaseStr = (mq7GetPhase() == MQ7Phase::MEASURING)
                                ? "measuring" : "heating";
         if (ctx->deviceState == DeviceState::ONLINE) {
+            esp_task_wdt_reset();
             int code = postTelemetry(sd, fix, ctx->batteryMv, ctx->rssi, phaseStr);
             if (code != 200 && code != 201) {
                 CLOG("Telemetry POST failed (code=%d) → DEGRADED", code);
@@ -611,41 +629,8 @@ void connectivityUpdate(ConnectivityCtx* ctx,
         }
     }
 
-    // ── Step 6: Drain SMS delivery results → confirm-sms-status ──
-    // [20] GSM task records +CMGS outcome in its result queue — pick
-    // up here and POST to backend so sms_sent_owner / sms_sent_bfp
-    // reflect real delivery. alert_event_id links to the exact row.
-    //
-    // The drain itself always runs, regardless of connectivity: the
-    // result queue is a fixed SMS_QUEUE_SIZE ring buffer, and leaving it
-    // undrained while OFFLINE (e.g. a busy stretch with repeated Tier 2
-    // re-triggers, each sent over the cellular modem independent of
-    // WiFi) would permanently overflow it. Only the confirm-sms-status
-    // POST itself needs the network, so that part alone is skipped
-    // (not retried) while not ONLINE — same as an empty alert_event_id,
-    // which means this SMS's alert never reached the backend in the
-    // first place, so there's nothing to attach the result to.
-    {
-        char role[8];
-        char alertEventId[40];
-        bool success;
-        for (int i = 0; i < SMS_QUEUE_SIZE; i++) {
-            if (!gsmPopSmsResult(role, sizeof(role),
-                                 alertEventId, sizeof(alertEventId), &success)) break;
-
-            if (ctx->deviceState != DeviceState::ONLINE) {
-                CLOG("SMS result role=%s success=%d dropped — offline",
-                     role, (int)success);
-            } else if (alertEventId[0] == '\0') {
-                CLOG("SMS result role=%s success=%d dropped — no alert_event_id",
-                     role, (int)success);
-            } else {
-                int code = postSmsStatus(role, success, alertEventId);
-                CLOG("SMS status reported: role=%s success=%d event=%s → code=%d",
-                     role, (int)success, alertEventId, code);
-            }
-        }
-    }
+    // ── Step 6: SMS delivery results → confirm-sms-status ────
+    serviceSmsReports(ctx);
 
     // ── Periodic state log ───────────────────────────────────
     static uint32_t lastLog = 0;
@@ -662,25 +647,21 @@ void connectivityUpdate(ConnectivityCtx* ctx,
 
 // ── Tier 1: yellow LED + trigger-alert POST (no SMS) ───────
 static void fireTier1Warning(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
-    if (ctx->deviceState == DeviceState::ONLINE) {
-        int code = postAlert(ctx, sd, fix, 1);
-        CLOG("Tier 1 alert POST: code=%d", code);
-    }
+    ctx->alertRetry.onTierEntered(1, millis());
+    attemptAlertPost(ctx, sd, fix);
 }
 
 // ── Tier 2: trigger-alert POST + owner SMS + BFP SMS ───────
 static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
     // 1. POST to trigger-alert — updates ctx->lastAlertEventId,
     //    ownerNumber, bfpNumber from response
-    if (ctx->deviceState == DeviceState::ONLINE) {
-        int code = postAlert(ctx, sd, fix, 2);
-        CLOG("Tier 2 alert POST: code=%d", code);
-    }
+    ctx->alertRetry.reassert(2, millis());
+    attemptAlertPost(ctx, sd, fix);
 
-    // 2. Queue SMS using freshest contacts — non-blocking. Snapshot
-    //    ctx->lastAlertEventId into the job now: it reflects this call's
-    //    own postAlert() result above (or stays empty if we're offline
-    //    or the POST failed). Callers reset it to empty on every
+    // 2. Queue SMS using freshest contacts — non-blocking, immediately and regardless of the POST result
+    //    (GSM fallback). Snapshot ctx->lastAlertEventId into the job now: it reflects this call's own
+    //    postAlert() result above (or stays empty if we're offline or the POST failed — then the result is
+    //    bound LATER, see serviceSmsReports()). Callers reset it to empty on every
     //    CLEAR→TIERx transition (see connectivityUpdate()), so it can
     //    never carry a stale, unrelated alert's id into this SMS.
     uint32_t now = millis();
@@ -696,5 +677,65 @@ static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const Gps
              ctx->lastAlertEventId[0] ? ctx->lastAlertEventId : "(none)");
     } else {
         CLOG("SMS debounced — %lu ms since last send", now - ctx->lastSmsSent_ms);
+    }
+}
+
+// ── Alert POST attempt (Step 5.3) ───────────────────────────
+// Makes one trigger-alert attempt if the retry scheduler says one is due and we are ONLINE. Not being
+// ONLINE does not consume an attempt or advance the backoff: the alert stays pending until a link exists.
+// The WDT is fed first because a failing POST can block for HTTP_TIMEOUT_MS plus connect time.
+static void attemptAlertPost(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
+    uint32_t now = millis();
+    if (ctx->deviceState != DeviceState::ONLINE) return;
+    if (!ctx->alertRetry.shouldAttempt(now)) return;
+
+    uint8_t tier = ctx->alertRetry.beginAttempt(now);
+    esp_task_wdt_reset();
+    int code = postAlert(ctx, sd, fix, tier);
+    agap::PostOutcome outcome = agap::classifyAlertHttp(code);
+    ctx->alertRetry.onResult(outcome, millis());
+    CLOG("Tier %d alert POST: code=%d outcome=%d attempts=%lu%s", (int)tier, code, (int)outcome,
+         (unsigned long)ctx->alertRetry.attemptsTotal(),
+         ctx->alertRetry.gaveUp() ? " GAVE UP" : "");
+}
+
+// ── SMS result reporting (Step 5.3) ─────────────────────────
+// 1. Always drain the GSM result queue into ctx->smsHold (the GSM queue is a small ring buffer and must
+//    never back up, online or not).
+// 2. When ONLINE, report whatever is ready: results that carry their own alert_event_id, and results of
+//    the CURRENT incident whose id only became known after the SMS was queued (late binding). A result is
+//    never bound to a different incident's id.
+// 3. A transient report failure is requeued (bounded); a permanent one is dropped.
+static void serviceSmsReports(ConnectivityCtx* ctx) {
+    char role[8];
+    char alertEventId[40];
+    bool success;
+    uint32_t seq;
+    for (int i = 0; i < SMS_QUEUE_SIZE; i++) {
+        if (!gsmPopSmsResult(role, sizeof(role), alertEventId, sizeof(alertEventId), &success, &seq)) break;
+        if (ctx->smsHold.hold(role, alertEventId, success, seq, millis())) {
+            CLOG("SMS hold full — oldest result dropped");
+        }
+    }
+
+    if (ctx->deviceState != DeviceState::ONLINE) return;
+
+    agap::HeldSmsResult e;
+    for (int i = 0; i < SMS_QUEUE_SIZE; i++) {
+        if (!ctx->smsHold.takeReady(ctx->incidentSeq, ctx->lastAlertEventId, millis(), &e)) break;
+        const char* id = e.eventId[0] ? e.eventId : ctx->lastAlertEventId;
+        esp_task_wdt_reset();
+        int code = postSmsStatus(e.role, e.success, id);
+        agap::PostOutcome outcome = agap::classifyAlertHttp(code);
+        CLOG("SMS status reported: role=%s success=%d event=%s → code=%d", e.role, (int)e.success, id, code);
+        if (outcome == agap::PostOutcome::Transient) {
+            // keep it bound to the id we just used so it cannot drift to a later incident
+            if (e.eventId[0] == '\0') {
+                strncpy(e.eventId, id, sizeof(e.eventId) - 1);
+                e.eventId[sizeof(e.eventId) - 1] = '\0';
+            }
+            if (!ctx->smsHold.requeue(e, millis())) CLOG("SMS result role=%s dropped — retries exhausted", e.role);
+            break;  // do not hammer a failing server within one tick
+        }
     }
 }

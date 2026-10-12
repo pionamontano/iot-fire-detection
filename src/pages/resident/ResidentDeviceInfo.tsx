@@ -6,8 +6,8 @@ import type { Device, SensorReading } from '../../lib/supabase';
 import { MapPin, Thermometer, Wind, Clock, Wifi, WifiOff, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
-
-const DEFAULT_CENTER: [number, number] = [14.8527, 120.8160];
+import { resolveDeviceLocation, markerOpacity } from '../../lib/location';
+import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
 
 const markerIcon = new L.Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -57,20 +57,10 @@ export const ResidentDeviceInfo = () => {
   if (!device) return <div className="p-8 font-bold text-[#DC2626]">No device registered to your account.</div>;
 
   const isOnline = device.last_seen_at && (Date.now() - new Date(device.last_seen_at).getTime() < 5 * 60 * 1000);
-  const latestReading = readings[0] || null;
 
-  // Deterministic fallback coordinates
-  let displayLat = latestReading?.latitude;
-  let displayLng = latestReading?.longitude;
-  if (!displayLat || !displayLng) {
-    let hash = 0;
-    for (let j = 0; j < device.id.length; j++) {
-      hash = ((hash << 5) - hash) + device.id.charCodeAt(j);
-      hash |= 0;
-    }
-    displayLat = DEFAULT_CENTER[0] + ((hash & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
-    displayLng = DEFAULT_CENTER[1] + (((hash >> 16) & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
-  }
+  // Live GPS / last-known GPS / registered install coordinates / unavailable - never an invented position.
+  // `readings` is newest first (the 20 most recent), so a last-known position can come from an earlier one.
+  const location = resolveDeviceLocation({ readings, device });
 
   return (
     <div className="flex flex-col gap-8 pb-12">
@@ -175,17 +165,22 @@ export const ResidentDeviceInfo = () => {
           {/* Map */}
           <div className="bg-white border border-[#E4E4E7] rounded-lg p-4">
             <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-[#52525B] mb-3">Device Location</h3>
-            <div className="h-56 rounded overflow-hidden relative z-0">
-              <MapContainer center={[displayLat, displayLng]} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                <Marker position={[displayLat, displayLng]} icon={markerIcon}>
-                  <Popup><strong>{device.device_code}</strong><br />{device.location_desc}</Popup>
-                </Marker>
-              </MapContainer>
-            </div>
+            {location.lat !== null && location.lng !== null ? (
+              <div className="h-56 rounded overflow-hidden relative z-0">
+                <MapContainer key={`${location.lat},${location.lng}`} center={[location.lat, location.lng]} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <Marker position={[location.lat, location.lng]} icon={markerIcon} opacity={markerOpacity(location.kind)}>
+                    <Popup><strong>{device.device_code}</strong><br />{device.location_desc}</Popup>
+                  </Marker>
+                </MapContainer>
+              </div>
+            ) : (
+              <LocationUnavailablePanel heightClass="h-56" />
+            )}
+            <LocationBadge location={location} />
           </div>
 
           {/* Device Specs */}

@@ -31,6 +31,8 @@
 #include "config.h"
 #include "sensors.h"
 #include "gps.h"
+#include "alert_retry.h"
+#include "sms_result_hold.h"
 
 // ── Device State ───────────────────────────────────────────
 enum class DeviceState { ONLINE, DEGRADED, OFFLINE };
@@ -72,6 +74,15 @@ struct ConnectivityCtx {
     // or RTC/NTP of its own. Included in the Tier 2 SMS bodies (SW-2.2.2).
     char        lastAddressResolved[100];
     char        lastTriggeredAt[24];
+    // Step 5.3: retry/backoff for the trigger-alert POST (alert_retry.h). One instance per incident; reset
+    // when the FSM returns to CLEAR.
+    agap::AlertRetryScheduler alertRetry;
+    // Step 5.3: SMS delivery results waiting for the incident's alert_event_id (or for connectivity) so they
+    // can be reported late (sms_result_hold.h).
+    agap::SmsResultHolder     smsHold;
+    // Incremented on every CLEAR -> TIERx transition; tags SMS jobs so a result is only ever bound to the
+    // incident it belongs to.
+    uint32_t    incidentSeq;
 };
 
 // ── Public API ─────────────────────────────────────────────

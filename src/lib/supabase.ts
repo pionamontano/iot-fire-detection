@@ -93,8 +93,10 @@ export interface AlertEvent {
   sms_sent_bfp: boolean;
   resolved_at: string | null;
   triggered_at: string;
-  incident_status?: 'active' | 'acknowledged' | 'resolved' | 'false_alarm';
+  incident_status?: 'active' | 'acknowledged' | 'responding' | 'resolved' | 'false_alarm';
   acknowledged_by?: string | null;
+  resolved_by?: string | null;
+  resolution_source?: 'device' | 'responder' | 'admin' | 'legacy' | null;
   acknowledged_at?: string | null;
   outcome_notes?: string | null;
   devices?: Device; // For joined queries
