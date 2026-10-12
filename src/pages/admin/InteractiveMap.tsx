@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
+import { LoadErrorBanner } from '../../components/LoadErrorBanner';
+import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device, AlertEvent } from '../../lib/supabase';
 import { 
   Search, 
@@ -89,6 +92,7 @@ export const InteractiveMap = () => {
   const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
+  const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
     const now = useNowTick();
 
   // Controls
@@ -117,11 +121,15 @@ export const InteractiveMap = () => {
     try {
       // Fetch devices and all recent alerts for the feed (limit 50)
       const [devicesRes, alertsRes] = await Promise.all([
-        supabase.from('devices').select('*, sensor_readings(latitude, longitude, recorded_at)')
+        supabase.from('devices').select<string, Device & { sensor_readings?: { latitude: number | null; longitude: number | null; recorded_at: string }[] }>(`${DEVICE_COLUMNS}, sensor_readings(latitude, longitude, recorded_at)`)
           .order('recorded_at', { foreignTable: 'sensor_readings', ascending: false })
           .limit(1, { foreignTable: 'sensor_readings' }),
         supabase.from('alert_events').select('*, devices(device_code, location_desc)').order('triggered_at', { ascending: false }).limit(50)
       ]);
+
+      // A failed read must be visible, not look like a map with no devices.
+      const readError = devicesRes.error ?? alertsRes.error;
+      setLoadError(readError ? { message: readError.message, code: readError.code } : null);
 
       if (devicesRes.data) {
         // Only devices with a real install location (devices.latitude/
@@ -174,6 +182,11 @@ export const InteractiveMap = () => {
 
   return (
     <div className="flex w-full h-full relative overflow-hidden bg-[#E5E2E1]" style={{ isolation: 'isolate' }}>
+      {loadError && (
+        <div className="absolute left-1/2 top-4 z-[1100] w-[min(92%,640px)] -translate-x-1/2">
+          <LoadErrorBanner what="devices and alerts" error={loadError} onRetry={fetchData} />
+        </div>
+      )}
       {/* ─── MAP LAYER ─── */}
       <div className="flex-1 h-full relative" style={{ zIndex: 0 }}>
         <MapContainer 

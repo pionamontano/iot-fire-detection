@@ -1,5 +1,9 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
+import type { Device } from '../../lib/supabase';
+import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
+import { LoadErrorBanner } from '../../components/LoadErrorBanner';
+import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import { Download, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Zap, History, Filter,  } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
 
@@ -34,6 +38,7 @@ export const Logs = () => {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const itemsPerPage = 25;
+  const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
 
   useEffect(() => {
     fetchLogs();
@@ -58,11 +63,14 @@ export const Logs = () => {
         .limit(50);
 
       // 3. Fetch Device Registrations
-      const { data: devices } = await supabase
+      const { data: devices, error: devicesError } = await supabase
         .from('devices')
-        .select('*')
+        .select<string, Device>(DEVICE_COLUMNS)
         .order('created_at', { ascending: false })
         .limit(50);
+
+      // A failed read must be visible: otherwise device-registration entries silently disappear.
+      setLoadError(devicesError ? { message: devicesError.message, code: devicesError.code } : null);
 
       const allLogs: LogEvent[] = [];
 
@@ -171,6 +179,9 @@ export const Logs = () => {
 
   return (
     <div className="space-y-8 pb-10">
+      {loadError && (
+        <LoadErrorBanner what="device registration entries" error={loadError} onRetry={fetchLogs} />
+      )}
       {/* ─── Page Header ─── */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="flex flex-col gap-1">

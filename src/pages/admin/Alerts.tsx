@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
+import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
+import { LoadErrorBanner } from '../../components/LoadErrorBanner';
+import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device, AlertEvent } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
@@ -51,6 +54,7 @@ export const Alerts = () => {
   const [rawDevices, setRawDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
   const now = useNowTick();
   // device_id -> latest on_battery (spec HW-1.5.2/SW-2.4.4 — previously
   // this indicator existed only on Resident/Responder views, never Admin)
@@ -68,7 +72,7 @@ export const Alerts = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [devicesRes, alertsRes, batteryRes] = await Promise.all([
-      supabase.from('devices').select('*').order('created_at', { ascending: false }),
+      supabase.from('devices').select<string, Device>(DEVICE_COLUMNS).order('created_at', { ascending: false }),
       supabase.from('alert_events').select('*, devices(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
       // Latest readings across devices, to derive each device's current
       // on_battery state (no per-device "latest reading" view exists, so
@@ -79,6 +83,9 @@ export const Alerts = () => {
         .limit(300),
     ]);
 
+    // A failed read must be visible, not look like an empty fleet.
+    const readError = devicesRes.error ?? alertsRes.error;
+    setLoadError(readError ? { message: readError.message, code: readError.code } : null);
     setRawDevices(devicesRes.data || []);
     setAlerts((alertsRes.data || []) as unknown as AlertEvent[]);
     if (batteryRes.data) {
@@ -196,6 +203,9 @@ export const Alerts = () => {
 
   return (
     <div className="space-y-8">
+      {loadError && (
+        <LoadErrorBanner what="devices and alerts" error={loadError} onRetry={fetchData} />
+      )}
       {/* ─── Page Header & Stats Summary ─── */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="flex flex-col gap-1">

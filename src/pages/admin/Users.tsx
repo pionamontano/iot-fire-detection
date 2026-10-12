@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
+import { LoadErrorBanner } from '../../components/LoadErrorBanner';
+import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Profile, RegistrationRequest, Device } from '../../lib/supabase';
 import { 
   UserPlus, Smartphone,
@@ -29,6 +32,7 @@ export const Users = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [devices, setDevices] = useState<Device[]>([]);
+  const [deviceLoadError, setDeviceLoadError] = useState<LoadErrorInfo | null>(null);
 
   // Approval/Rejection Modals
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -97,9 +101,11 @@ export const Users = () => {
       setRequests(formattedRequests);
 
       // Fetch unassigned devices (by filtering against profiles)
-      const { data: devicesData } = await supabase
+      const { data: devicesData, error: devicesError } = await supabase
         .from('devices')
-        .select('*');
+        .select<string, Device>(DEVICE_COLUMNS);
+      // A failed read must be visible: otherwise the assign-device list silently looks empty.
+      setDeviceLoadError(devicesError ? { message: devicesError.message, code: devicesError.code } : null);
       
       if (devicesData && usersData) {
         const assignedIds = new Set(usersData.map(u => u.device_id).filter(Boolean));
@@ -316,6 +322,9 @@ export const Users = () => {
         </header>
 
         <main className="p-8 max-w-7xl mx-auto">
+          {deviceLoadError && (
+            <div className="mb-6"><LoadErrorBanner what="the device list (needed for device assignment)" error={deviceLoadError} onRetry={fetchData} /></div>
+          )}
           {/* Tabs */}
           <div className="flex space-x-1 bg-white p-1 rounded-lg border border-[#E5E2E1] shadow-sm mb-6 inline-flex">
             <button
