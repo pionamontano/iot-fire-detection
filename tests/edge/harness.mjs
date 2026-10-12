@@ -25,7 +25,14 @@ function evalCond(cond, row) { // supports  col.eq.val  and  and(...)/or(...)
 }
 
 export class FakeDb {
-  constructor(tables) { this.tables = structuredClone(tables); this.log = []; }
+  // opts.rpc(fn, args) -> { data, error }. Without it every rpc behaves like a function that does not exist
+  // (PostgREST PGRST202), i.e. a database where the Step 5.1 migrations have not been applied.
+  constructor(tables, opts = {}) { this.tables = structuredClone(tables); this.log = []; this.rpcImpl = opts.rpc ?? null; }
+  async rpc(fn, args) {
+    this.log.push({ rpc: fn, args });
+    if (this.rpcImpl) return this.rpcImpl(fn, args, this);
+    return { data: null, error: { code: 'PGRST202', message: `Could not find the function public.${fn} in the schema cache` } };
+  }
   from(table) {
     const db = this; const state = { table, filters: [], op: 'select', payload: null };
     const rows = () => (db.tables[table] ?? []).filter(r => state.filters.every(f => f(r)));

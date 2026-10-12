@@ -89,6 +89,30 @@ serve(async (req: Request) => {
 
     const updateColumn = role === 'owner' ? 'sms_sent_owner' : 'sms_sent_bfp';
 
+    // A failure report must never overwrite a success that was already recorded (a retry/duplicate report could
+    // otherwise turn "delivered" back into "not sent").
+    if (success === false) {
+      const { data: current, error: currentError } = await supabaseAdmin
+        .from('alert_events')
+        .select(`id, ${updateColumn}`)
+        .eq('id', alert_event_id)
+        .eq('device_id', device.id)
+        .maybeSingle();
+      if (currentError) throw currentError;
+      if (!current) {
+        return new Response(JSON.stringify({ error: 'alert_event_id not found for this device' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (current[updateColumn] === true) {
+        return new Response(JSON.stringify({ success: true, unchanged: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+    }
+
     const { data: updated, error: updateError } = await supabaseAdmin
       .from('alert_events')
       .update({ [updateColumn]: success })

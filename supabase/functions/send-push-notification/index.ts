@@ -67,7 +67,7 @@ serve(async (req: Request) => {
       callerIsAdmin = profile?.role === 'admin' && profile?.status === 'approved';
     }
 
-    const { userIds, title, body, icon } = await req.json();
+    const { userIds, title, body, icon, topic } = await req.json();
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
       return new Response(JSON.stringify({ error: 'Missing or invalid userIds array' }), {
@@ -99,8 +99,17 @@ serve(async (req: Request) => {
     }
 
     const eligibleIds = (eligibleProfiles ?? []).map((p: { id: string }) => p.id);
+
+    // One result per REQUESTED recipient, so the caller (trigger-alert's delivery ledger) can record what really happened
+    // instead of assuming success. status: 'sent' (at least one endpoint accepted), 'failed', or 'skipped' (nothing to send to).
+    type Outcome = { userId: string; status: 'sent' | 'failed' | 'skipped'; provider_status?: string; error?: string; retryable?: boolean };
+    const results: Outcome[] = [];
+    for (const id of requestedIds) {
+      if (!eligibleIds.includes(id)) results.push({ userId: id, status: 'skipped', error: 'recipient not eligible', retryable: false });
+    }
+
     if (eligibleIds.length === 0) {
-      return new Response(JSON.stringify({ success: true, sentCount: 0 }), {
+      return new Response(JSON.stringify({ success: true, sentCount: 0, attempted: 0, results }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -116,7 +125,12 @@ serve(async (req: Request) => {
     }
 
     const payload = JSON.stringify({ title, body, icon });
-    const sendPromises = subscriptions.map(sub => {
+    // A timeout stops one slow push service from holding the whole alert; `topic` (<= 32 URL-safe chars) lets the push
+    // service replace an undelivered duplicate of the same alert. Expired endpoints are REPORTED, never deleted here.
+    const sendOptions: Record<string, unknown> = { timeout: 3000 };
+    if (typeof topic === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(topic)) sendOptions.topic = topic;
+
+    const outcomes = await Promise.all(subscriptions.map(async (sub: any) => {
       const pushSubscription = {
         endpoint: sub.endpoint,
         keys: {
@@ -124,15 +138,35 @@ serve(async (req: Request) => {
           auth: sub.auth,
         },
       };
-      return webpush.sendNotification(pushSubscription, payload).catch(err => {
-          console.error(`Failed to send push to endpoint ${sub.endpoint}:`, err);
-          // Optional: Remove stale subscriptions if err.statusCode === 410 or 404
-      });
-    });
+      try {
+        const res = await webpush.sendNotification(pushSubscription, payload, sendOptions);
+        return { userId: sub.user_id as string, ok: true, statusCode: res?.statusCode as number | undefined };
+      } catch (err: any) {
+        // log the push service HOST and status only: the endpoint URL itself is a bearer-like secret
+        let host = 'unknown';
+        try { host = new URL(sub.endpoint).host; } catch { /* keep 'unknown' */ }
+        console.error(`Failed to send push via ${host}: status ${err?.statusCode ?? 'n/a'}`);
+        return { userId: sub.user_id as string, ok: false, statusCode: err?.statusCode as number | undefined };
+      }
+    }));
 
-    await Promise.all(sendPromises);
+    for (const id of eligibleIds) {
+      const mine = outcomes.filter((o) => o.userId === id);
+      if (mine.length === 0) {
+        results.push({ userId: id, status: 'skipped', error: 'no push subscription', retryable: false });
+      } else if (mine.some((o) => o.ok)) {
+        results.push({ userId: id, status: 'sent', provider_status: String(mine.find((o) => o.ok)?.statusCode ?? 'ok') });
+      } else {
+        const allExpired = mine.every((o) => o.statusCode === 404 || o.statusCode === 410);
+        results.push({
+          userId: id, status: 'failed', provider_status: String(mine[mine.length - 1].statusCode ?? 'error'),
+          error: allExpired ? 'all endpoints expired' : 'push service rejected or unreachable', retryable: !allExpired,
+        });
+      }
+    }
 
-    return new Response(JSON.stringify({ success: true, sentCount: subscriptions.length }), {
+    const sentUsers = results.filter((r) => r.status === 'sent').length;
+    return new Response(JSON.stringify({ success: true, sentCount: sentUsers, attempted: subscriptions.length, results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: any) {

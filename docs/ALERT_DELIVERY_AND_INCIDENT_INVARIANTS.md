@@ -1,9 +1,9 @@
 # Alert delivery semantics and incident invariants
 
-Status: **design + local/test implementation (Steps 5.1 and 6.1).** Nothing in this document is deployed. The migrations
+Status: **design + local/test implementation (Steps 5.1, 5.2, 6.1 and 6.2).** Nothing in this document is deployed. The migrations
 `20261020000000_alert_notification_ledger.sql`, `20261020000100_alert_open_incident_uniqueness.sql` (gated) and
 `20261021000000_incident_lifecycle.sql` have only been exercised on a throwaway local PostgreSQL (`supabase/tests/local/`).
-No edge function calls the new database functions yet, and the UI is unchanged.
+The edge-function changes (Step 5.2) and the UI (6.2) have only been tested locally; nothing is deployed.
 
 ## 1. Delivery semantics: at-least-once, not exactly-once
 
@@ -119,6 +119,43 @@ The responder dashboard and the admin manual-resolve button now change incidents
 * Not in 6.2: the "device readings back to normal" badge (needs `device_cleared_at`, decision D6.1), revoking direct `UPDATE` (6c), and the
   other responder/admin screens, which read `resolved_at` and need no change.
 
+### Edge functions (Step 5.2, local/test only)
+
+`trigger-alert` now works in this order: validate (unchanged rules) -> **`raise_alert()` records the incident** -> notify through the ledger ->
+respond. The incident is persisted before any provider is contacted, so a slow or failing Telegram/push service can never delay or lose the record.
+
+* **Idempotent.** Replaying or retrying the same alert returns the same incident (`created:false`) and sends nothing twice; an escalation (tier 1 -> 2) is
+  announced once; a late tier-1 retry on a tier-2 incident neither downgrades nor re-sends. Verified with 20 racing requests against the real SQL.
+* **Bounded.** Every provider call has a timeout (`ALERT_PROVIDER_TIMEOUT_MS`, default 3500) and the whole dispatch has a budget
+  (`ALERT_DISPATCH_BUDGET_MS`, default 4000), so the response carrying the SMS contacts stays prompt (the firmware's HTTP timeout is 10 s).
+* **Recorded, not assumed.** Telegram and push outcomes (status, provider reference, error, retryable) are written to `alert_notifications`.
+  `send-push-notification` returns a result per recipient (`sent` / `failed` / `skipped`). Failed retryable notifications are retried by a *later*
+  request for the same incident (up to 3 attempts); permanent errors (Telegram 403/400, expired push endpoints) are not. Nothing is deleted:
+  expired push subscriptions are reported only (decision D5.3 default).
+* **Fail-open for emergencies.** If the ledger errors, the notification is sent anyway (a duplicate beats a lost alert). If the incident cannot be
+  recorded at all, the station Telegram/push are still attempted once (de-duplicated in memory for 5 minutes) before a retryable `500` is returned.
+* **Rollout-tolerant.** Before migration `20261020000100` exists, `raise_alert` is "not found" and the function falls back to the previous
+  select-then-insert persistence (response `persistence:"legacy"`, no notification dedupe). Set `ALERT_STRICT_DB=1` to refuse that and fail with `500`.
+  Missing ledger functions degrade to the old "always send" behaviour.
+* **Unchanged:** thresholds, tiers, recipients (approved + active only), the notification texts, and the response fields the firmware parses.
+  Added (additive): `created`, `tier` (the tier now in force), `persistence`. `triggered_at` is now the incident's own time (UTC).
+
+| Status | When | `code` |
+|---|---|---|
+| 200 | incident recorded (whatever the notification outcome) | - |
+| 400 | bad JSON / non-numeric readings / invalid coordinates / readings below thresholds | `invalid_payload`, `below_threshold` |
+| 401 | missing, unknown or inactive device key | - |
+| 500 | **server fault**, safe to retry: device lookup failed, incident could not be recorded, unexpected error | `device_lookup_failed`, `persist_failed`, `internal` |
+
+Previously a database fault during the device lookup surfaced as `401` and internal errors as `400`; a retrying client cannot tell those from a permanent
+rejection, so faults are now `500`. `confirm-sms-status` additionally ignores a late failure report for an SMS already recorded as sent.
+
+Not in 5.2: firmware retry wiring (5.3), per-user Telegram (5.4, needs D5.5), the keep-alive re-assert (D5.2), the UTC label on message times (D5.6).
+
+**Deploy order (when approved):** `20261020000000` (ledger) -> `20261021000000` (lifecycle) -> activation gate satisfied -> `20261020000100`
+(unique index + `raise_alert`) -> `send-push-notification` -> `trigger-alert`. `trigger-alert` tolerates an older `send-push-notification`
+(no per-recipient results) and a missing 5.1 schema (legacy fallback), so a wrong order degrades instead of failing.
+
 ## 4. Activation gate (required before 5.1b is applied anywhere shared, or before any code calls `raise_alert`)
 
 - [ ] Review sign-off on this document, both migrations and the tests.
@@ -129,7 +166,7 @@ The responder dashboard and the admin manual-resolve button now change incidents
       (before the Step 1 profiles migration the repository's migrations did not rebuild a working database, and the live
       definition of `get_auth_role()` has still not been inspected).
 - [ ] Writer #7 fixed: apply `20261021000000_incident_lifecycle.sql` (guard trigger) **before** the 5.1b index becomes authoritative, or explicitly accept the `raise_alert` stopgap.
-- [ ] All local suites pass: `supabase/tests/local/*.test.sql`, `alert_migration_precheck.sh`, `alert_concurrency.sh`, `incident_concurrency.sh`, the Node edge tests, and the firmware host tests.
+- [ ] All local suites pass: `supabase/tests/local/*.test.sql`, `alert_migration_precheck.sh`, `alert_concurrency.sh`, `incident_concurrency.sh`, the Node tests (`npm test`), `tests/edge/run_integration.sh` (real SQL), and the firmware host tests.
 - [ ] Before applying 6.1 anywhere shared: run `supabase/maintenance/incident_lifecycle_dry_run.sql` (read-only) and review; decide on the backfill separately.
 - [ ] Rollback prepared (drop function `raise_alert`, drop the index; drop the ledger objects).
 
