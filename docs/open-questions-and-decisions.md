@@ -51,7 +51,7 @@ These labels come from `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`, `docs/C
 | D6.3 | Backfill of legacy incident rows (3 rows in production per CHANGELOG §11) | Validating `alert_events_lifecycle_sync` | P2 | Yes (blocks the lifecycle migration going live cleanly) | Production has 3 incidents that are closed by `resolved_at` but still show an open status. Simplest default: set them to `resolved`. They may be test data; confirm. |
 | D6.4 | Admin reopen of closed incidents (currently impossible by design) | Step 6.3 | P2 | Optional | The lifecycle guard forbids reopening. Needed only if closing by mistake is a real operational risk. A cheaper alternative is to raise a new incident. |
 | D6.5 | **Referenced in CHANGELOG §11 and the runbook, but not defined in any inspected document** | Production deployment | P2 — owner to state its subject | Yes | The code tolerates some wrong orders (`trigger-alert` falls back to legacy persistence; the guard and uniqueness migration are independent), but the firmware order is a hard dependency. Document the rule and stop. |
-| Step 6c | Revoke direct `UPDATE` on `alert_events` (#97) | After 6.1/6.2 are live | P1 | Not assessed in this pass | — |
+| Step 6c | Revoke direct `UPDATE` on `alert_events` (#97) | After 6.1/6.2 are live | P1 | Done (code, `20261022000000`); deploy once 6.1/6.2 are live | — |
 | — | Fix for `get_auth_role()` ignoring `status` ("none yet", CHANGELOG §12) | Needs OQ-03 | P1 | Not assessed in this pass | — |
 
 ## E. Findings from implementation review (new)

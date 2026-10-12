@@ -145,7 +145,7 @@ Separate axes are always kept apart: **Implemented (in repo)** ≠ **Tested** �
 | C3 | Fabricated display metrics (resident "System Uptime 99.98%", responder "connectivity %") | Hard-coded values | KI-01, KI-02 |
 | C4 | `station_settings` UI vs schema mismatch | UI reads/writes `station_name`, `email`; migrations define `team_name`, `commander_name` … | KI-07 |
 | C5 | Auto-resolution policy and device-clear display | Owner decision D6.1 pending (Step 6.3) | KI-13, issue #96 |
-| C6 | Direct `UPDATE` on `alert_events` still granted (Step 6c) | Pending | issue #97 |
+| C6 | Direct `UPDATE` on `alert_events` still granted (Step 6c) | Revoke migration written (`20261022000000`), not deployed; apply only after 6.1/6.2 are live | issue #97 |
 | C7 | Stale-sensor detection in firmware | `last_co_ms`/`last_temp_ms` written, never read | KI-17 |
 | C8 | Support e-mail `profiles.email` read | Column absent from migrations | KI-08 |
 
@@ -442,7 +442,7 @@ Not specified (FR-ALERT-006). `registration_requests`/`profiles` removed by auth
 | BR-10 Communication fallback | Alert POST: retry/backoff [R]; SMS is parallel, not conditional (§5.7) | |
 | BR-11 Error handling | Backend DB faults → 500 retryable (`trigger-alert`); other functions return 400/401 for many fault types (KI-12) | |
 | BR-12 Administrative operations | Approve/reject/delete users; create pre-approved users; assign device; regenerate API key; unlock login; edit settings | Edge/RPC |
-| BR-13 Responder handling | Via `transition_incident` only (UI); direct column UPDATE still granted until Step 6c | |
+| BR-13 Responder handling | Via `transition_incident` only (UI); direct column UPDATE still granted in production until Step 6c (`20261022000000`) is deployed | |
 | BR-14 Resident operations | Link device, edit thresholds, resolve drift prompt, edit own contact, push/Telegram preferences | |
 
 **Intended vs implemented where they differ** — documented in the Known Issues (§5.15): DB `approved` default for profiles vs "pending" workflow (only enforced because `register` always sets `pending`); tier computed by two parties with potentially different thresholds; auto-resolve closing responder-owned incidents; per-user Telegram promised in UI copy but not delivered.
@@ -596,7 +596,7 @@ Every requirement is therefore **Not Tested** in this review; the traceability m
 | KI-08 | `admin-support-request` selects `profiles.email` (no such column in migrations ⇒ would 500 "Failed to fetch user profile"); caller role/status unchecked; free-text interpolated unescaped into HTML e-mail; recipient hard-coded | Feature may be broken; minor injection into one mailbox | `admin-support-request/index.ts:44-48,71,82` | Existing | Verify live; correct if broken |
 | KI-09 | Repo `get_auth_role()` ignores `profiles.status`; every `get_auth_role()`-based policy (devices, sensor_readings, alert_events, settings, station_settings…) therefore admits **pending/rejected** accounts holding a role. Contradicted by older migration comments and by a live RBAC test that observed immediate revocation | If live = repo: a self-registered responder (pending) could read all incidents/devices, edit `station_settings` and update incident columns before approval | `init.sql:192-195`; `20261019000000` header; `LIVE_RBAC_VERIFICATION.md` row 38; `CHANGELOG §12` ("none yet") | Security — **Conflicting** | **Owner clarification + live inspection first** (OQ-03); no redesign authorised |
 | KI-10 | `protect_profile_fields` protects only `role,status,device_id` | A user can alter own `is_active`, `setup_complete`, `telegram_chat_id` via PostgREST; no UI to deactivate users was found, so practical risk depends on operations | `init.sql:236-261`; `Users.tsx` (no `is_active`) | Existing | Clarify intent for `is_active` |
-| KI-11 | Responder role has `FOR ALL` on `station_settings` and direct column UPDATE on `alert_events` (pending Step 6c) | Wider than the UI exposes | `init.sql:341-342`; `20261012000001` | Existing, tracked #97 | Per plan |
+| KI-11 | Responder role has `FOR ALL` on `station_settings` and (in production, until Step 6c is deployed) direct column UPDATE on `alert_events` | Wider than the UI exposes | `init.sql:341-342`; `20261012000001`; revoke migration `20261022000000` | Fixed in code (#97), not yet deployed | Deploy after 6.1/6.2 |
 | KI-12 | Error-code hygiene: `ingest-reading` and `confirm-sms-status` map DB faults to 401/400; firmware treats 4xx as permanent for `confirm-sms-status` ⇒ dropped report | Lost delivery reports on transient faults | `ingest-reading:272-277`; `confirm-sms-status:137-143`; CHANGELOG §9 | Known/accepted risk | Owner decision |
 | KI-13 | Auto-resolve closes acknowledged/responding incidents without a responder | Responder work may vanish from the live feed | `ingest-reading:180-196` | Pending D6.1 | Owner decision |
 | KI-14 | Dead code: `<= 100` geocode shortcut inside a `> 100` branch | None functionally | `ingest-reading:239` | Existing | Optional |
@@ -607,7 +607,8 @@ Every requirement is therefore **Not Tested** in this review; the traceability m
 | KI-24 | Telegram account linking stores `telegram_chat_id`; no sender uses it; webhook says "You will receive fire alerts here" | User expectation not met | grep: only `telegram-webhook:76-79` writes it | Incomplete (#95) | Owner D5.4/D5.5 |
 
 ### Incomplete requirements (tracked by the repository)
-Step 5.4 (per-user Telegram, #95) · Step 6.3 (auto-resolve/device-clear/admin reopen, #96) · Step 6c (revoke direct `UPDATE` on `alert_events`, #97) · keep-alive re-assert (D5.2) · UTC label on message times (D5.6) · backfill of legacy incidents (D6.3).
+Step 5.4 (per-user Telegram, #95) · Step 6.3 (auto-resolve/device-clear/admin reopen, #96) · keep-alive re-assert (D5.2) · UTC label on message times (D5.6) · backfill of legacy incidents (D6.3).
+Step 6c (revoke direct `UPDATE` on `alert_events`, #97) is implemented in code (`20261022000000`) but not yet deployed.
 
 ### Conflicting implementations
 KI-03, KI-06, KI-07, KI-09; `FEATURES.md` vs code (§5.1); `devices_safe` has been redefined seven times after `init.sql` (`20260917020000`, `…070000`, `20260924060000`, `20261011…`, `20261013…`, `20261014…`, final `20261015…`) — final definition governs (Verified), earlier ones are superseded.

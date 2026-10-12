@@ -24,7 +24,7 @@ Companion to [`system-specification.md`](system-specification.md) §5.3 (baselin
 | Incident lifecycle (`transition_incident`, guard trigger) | A (remediation) | Verified (code), `R` | `20261021000000` | Included | Deployment approval; D6.3 backfill |
 | Auto-resolve on normal readings | C | Verified (code); policy undecided | `ingest-reading:180-196`; KI-13 | **Hold** | OQ-07 |
 | Admin reopen of closed incident | D | Not implemented (blocked by design) | guard trigger | Excluded | D6.4 |
-| Revoking direct `UPDATE` on `alert_events` | D | Planned | issue #97 | Excluded until 6.1/6.2 live | Approval at 6c |
+| Revoking direct `UPDATE` on `alert_events` | A (remediation) | Verified (code), `R` | `20261022000000`; issue #97 | Included — deploy only after 6.1/6.2 are live | Deployment approval |
 | Registration with admin approval | A | Verified (code), `L` | `register`, `manage-registration` | Included | — |
 | Backend enforcement of approval (RLS) | C | **Conflicting** | KI-09 | **Hold** — no RLS change before live inspection | OQ-03 |
 | Roles: admin, bfp_responder, resident | A | Verified | `init.sql:29` | Included; **no new roles** | Any new role |
