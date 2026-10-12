@@ -55,6 +55,16 @@ stop and report; the migrations may need adapting to the live schema before the 
    (re-run Phase 0.2-0.4 on staging and diff against production's output).
 4. Record the baseline: run Phase 0.3 on staging and save it as `baseline_grants.txt`.
 
+### Phase 1 alternative: build staging from the repo (no dump, no CLI)
+`supabase/staging/` holds ready-made SQL for the NEW project's SQL editor (regenerate with `supabase/staging/build.sh`):
+1. `staging_setup.sql` - every migration before `20261019` (the schema the repo describes). Refuses to run if `public.profiles`/`devices` already exist
+   (so it cannot be applied to production by mistake), and creates a `_staging_marker` schema.
+2. Then, one at a time, each followed by the Phase 3 checks: `01_profile_reads.sql`, `02_notification_ledger.sql`, `03_incident_lifecycle.sql`,
+   gate, `04_open_incident_uniqueness.sql`. Each refuses to run unless the staging marker exists.
+The SQL editor runs a pasted script as one implicit transaction, so an error means nothing from that file was applied; fix and re-run.
+This tests the migrations on a real Supabase Postgres with the **repo's** schema, not production's drifted one; combine it with the Phase 0 comparison.
+Verified locally only (a plain Postgres with a Supabase stub): all five files apply cleanly in order and both guards refuse as intended.
+
 If the live schema cannot be dumped, fall back to the repo's migrations on staging, but then the result only covers the
 repo's schema, **not** production; write that in the sign-off.
 
