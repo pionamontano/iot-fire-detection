@@ -21,6 +21,6 @@ if [ "${ORIG:-0}" = "1" ]; then
   O="$OUT/orig_src"; rm -rf "$O"; mkdir -p "$O"
   for f in connectivity.cpp connectivity.h gsm.cpp gsm.h sensors.h gps.h config.example.h; do git show "${ORIG_REF:-HEAD}:firmware/agapsense-firmware/src/$f" > "$O/$f"; done
   sed 's#"../../src/config.example.h"#"config.example.h"#' stubs/config.h > "$O/config.h"
-  g++ -std=c++17 -w -O1 -I"$O" -Istubs test_connectivity_sim.cpp "$O/connectivity.cpp" "$O/gsm.cpp" -o "$OUT/sim_orig"
+  g++ -std=c++17 -w -O1 -DORIGINAL_FIRMWARE -I"$O" -Istubs test_connectivity_sim.cpp "$O/connectivity.cpp" "$O/gsm.cpp" -o "$OUT/sim_orig"
   "$OUT/sim_orig" | tail -1 || true
 fi

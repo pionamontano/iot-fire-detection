@@ -15,6 +15,15 @@
 #include <esp_task_wdt.h>
 
 SimHal g_hal; FakeUart Serial1; FakeUart Serial2; FakeSerial Serial; FakeWiFi WiFi;
+#ifdef ORIGINAL_FIRMWARE   // negative control against the pre-5.3 sources: they have no SMS holder
+static const int kMaxReports = 8;
+static int heldCount(const ConnectivityCtx&) { return 0; }
+static const int kHoldCapacity = 4;
+#else
+static const int kMaxReports = agap::SmsResultHolder::MAX_FAILED_REPORTS;
+static int heldCount(const ConnectivityCtx& c) { return c.smsHold.count(); }
+static const int kHoldCapacity = agap::SmsResultHolder::CAPACITY;
+#endif
 MQ7Phase mq7GetPhase() { return MQ7Phase::MEASURING; }
 
 static int g_checks = 0, g_fails = 0;
@@ -229,7 +238,7 @@ static void s11_sms_report_permanent_outage() {
     printf("S11 confirm-sms-status down forever: bounded retries, then dropped\n");
     world(); Dev d; d.boot(); srv.smsStatusCode = 503; d.tier2(); d.run(120);
     d.run(300);
-    int n = srv.smsCalls; CHECK(n == 2 * agap::SmsResultHolder::MAX_FAILED_REPORTS, "bounded (%d)", n);
+    int n = srv.smsCalls; CHECK(n == 2 * kMaxReports, "bounded (%d)", n);
     d.run(600); CHECK(srv.smsCalls == n, "stopped retrying");
     auto c = callTimes("confirm-sms-status");
     for (size_t i = 1; i < c.size(); i++) CHECK(c[i] - c[i-1] >= 1500, "at most one failing report per tick (gap %u ms)", c[i] - c[i-1]);
@@ -330,7 +339,7 @@ static void r04_holder_capacity() {
     world(); Dev d; d.boot(); srv.mode = BAD400; d.tier2(); d.run(12);          // no id will ever arrive (400s)
     for (int k = 0; k < 2; k++) { d.tier1(); d.run(8); d.run(320); d.tier2(); d.run(8); }
     CHECK(g_hal.smsSent.size() == 6, "3 pairs sent (%zu)", g_hal.smsSent.size());
-    CHECK(d.ctx.smsHold.count() <= agap::SmsResultHolder::CAPACITY, "holder bounded (%d)", d.ctx.smsHold.count());
+    CHECK(heldCount(d.ctx) <= kHoldCapacity, "holder bounded (%d)", heldCount(d.ctx));
     CHECK(srv.smsCalls == 0, "nothing reported without an id");
 }
 static void r05_duplicate_report_is_harmless() {
@@ -344,10 +353,10 @@ static void r05_duplicate_report_is_harmless() {
 static void r06_report_retry_exhaustion() {
     printf("R06 status report fails repeatedly: 8 attempts per result with backoff, then dropped\n");
     world(); Dev d; d.boot(); srv.smsStatusCode = 503; d.tier2(); d.run(600);
-    CHECK(srv.smsCalls == 2 * agap::SmsResultHolder::MAX_FAILED_REPORTS, "calls=%d", srv.smsCalls);
+    CHECK(srv.smsCalls == 2 * kMaxReports, "calls=%d", srv.smsCalls);
     auto c = callTimes("confirm-sms-status");
     CHECK(c.size() >= 8 && c.back() - c[0] >= 150000, "spread over minutes, not burst (span %u ms)", c.size() >= 8 ? c.back() - c[0] : 0);
-    CHECK(d.ctx.smsHold.count() == 0, "nothing left behind");
+    CHECK(heldCount(d.ctx) == 0, "nothing left behind");
 }
 static void r06b_report_survives_short_outage() {
     printf("R06b a 60 s outage of confirm-sms-status does not lose the report\n");
