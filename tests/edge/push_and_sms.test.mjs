@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FakeDb, loadHandler, req } from './harness.mjs';
 
-const ENV = { SUPABASE_URL: 'http://local', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 'srv' };
+const ENV = { SUPABASE_URL: 'http://local', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 'srv', VAPID_PUBLIC_KEY: 'pub', VAPID_PRIVATE_KEY: 'priv' };
 const profiles = [
   { id: 'u-ok',      role: 'bfp_responder', status: 'approved', is_active: true },
   { id: 'u-nosub',   role: 'bfp_responder', status: 'approved', is_active: true },

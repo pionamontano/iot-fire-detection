@@ -195,7 +195,9 @@ export const ResidentHome = () => {
           try {
             const errData = await error.context.json();
             throw new Error(errData.error || "Failed to link device.");
-          } catch (e) {}
+          } catch {
+            // Error body wasn't JSON; fall through to the generic message
+          }
         }
         throw new Error(error.message);
       }

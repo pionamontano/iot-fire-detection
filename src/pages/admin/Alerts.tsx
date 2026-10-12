@@ -4,7 +4,6 @@ import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device, AlertEvent } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import {
   XCircle,
@@ -127,7 +126,6 @@ export const Alerts = () => {
 
   const activeAlertCount = devices.filter(d => d.status === 'critical').length;
   const operationalCount = devices.filter(d => d.status === 'operational').length;
-  const totalDevices = devices.length;
 
   const handleTogglePower = async (device: DeviceWithStatus) => {
     try {

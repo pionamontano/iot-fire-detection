@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { SystemLogSkeleton } from '../../components/SkeletonLoaders';
 import type { AlertEvent } from '../../lib/supabase';
-import { FileText, AlertTriangle, CheckCircle2, Filter, RefreshCw, Flame, ThermometerSun } from 'lucide-react';
+import { FileText, RefreshCw, Flame, ThermometerSun } from 'lucide-react';
 
 type FilterStatus = 'all' | 'active' | 'resolved';
 

@@ -84,6 +84,16 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * c;
 }
 
+const IP_RE = /^[0-9a-fA-F:.]{3,45}$/;
+
+// Client IP as seen by the platform proxy. x-forwarded-for may be a client-supplied,
+// comma-separated list; the last hop is the one our own proxy appended.
+function clientIp(req: Request): string | null {
+  const xff = req.headers.get('x-forwarded-for');
+  const candidate = (xff ? xff.split(',').pop() : req.headers.get('x-real-ip'))?.trim() ?? '';
+  return IP_RE.test(candidate) ? candidate : null;
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -134,7 +144,6 @@ serve(async (req: Request) => {
       gps_valid = false,
       on_battery = false,
       sensor_ready = true,
-      local_ip,
     } = body;
 
     // 3. Validate required numeric fields before any DB writes
@@ -174,7 +183,7 @@ serve(async (req: Request) => {
         sensor_ready,
       }),
       // Touch last_seen_at
-      supabaseAdmin.from('devices').update({ last_seen_at: nowIso, local_ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') }).eq('id', device.id),
+      supabaseAdmin.from('devices').update({ last_seen_at: nowIso, local_ip: clientIp(req) }).eq('id', device.id),
     ];
 
     // 5. Auto-resolution check (strictly below threshold to avoid boundary flapping)
@@ -189,7 +198,8 @@ serve(async (req: Request) => {
       writePromises.push(
         supabaseAdmin
           .from('alert_events')
-          .update({ resolved_at: nowIso })
+          // Set both sides of the lifecycle explicitly; the lifecycle guard trigger also normalises them.
+          .update({ resolved_at: nowIso, incident_status: 'resolved' })
           .eq('device_id', device.id)
           .is('resolved_at', null)
       );
@@ -265,6 +275,11 @@ serve(async (req: Request) => {
 
     if (insertResult.error) throw insertResult.error;
 
+    // Secondary writes must not fail the reading, but they must not vanish silently either.
+    results.slice(1).forEach((r, i) => {
+      if (r?.error) console.error(`ingest-reading secondary write #${i + 1} failed:`, r.error);
+    });
+
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
@@ -273,7 +288,7 @@ serve(async (req: Request) => {
     const error = err as Error;
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+      status: 500,
     });
   }
 });

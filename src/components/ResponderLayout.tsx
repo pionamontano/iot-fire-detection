@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FileText, Users, Cpu, Settings, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FileText, Settings, LogOut, Menu, X } from 'lucide-react';
 import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';

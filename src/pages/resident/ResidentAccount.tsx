@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Cpu } from 'lucide-react';
+import { Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Cpu } from 'lucide-react';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
 
 export const ResidentAccount = () => {

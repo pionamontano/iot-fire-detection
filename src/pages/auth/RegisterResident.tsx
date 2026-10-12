@@ -55,7 +55,7 @@ export const RegisterResident = () => {
           try {
             const errData = await registerError.context.json();
             throw new Error(errData.error || "Registration failed. Please try again.");
-          } catch (e) {
+          } catch {
             // Ignore parse error and fall through
           }
         }
