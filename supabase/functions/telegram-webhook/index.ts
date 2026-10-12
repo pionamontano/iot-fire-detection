@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TOKEN_RE = /^[0-9a-f]{64}$/;
 
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder();
@@ -31,9 +31,9 @@ serve(async (req) => {
       const chatId = update.message.chat.id;
       const textParts = update.message.text.split(' ');
 
-      const userId = textParts.length > 1 ? textParts[1] : null;
+      const token = textParts.length > 1 ? textParts[1] : null;
 
-      if (userId && UUID_RE.test(userId)) {
+      if (token && TOKEN_RE.test(token)) {
         const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
@@ -44,27 +44,46 @@ serve(async (req) => {
 
         const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
+        // Consume the one-time token atomically: delete-and-return so it can't be replayed.
+        const { data: consumed, error: tokenError } = await supabaseAdmin
+          .from('telegram_link_tokens')
+          .delete()
+          .eq('token', token)
+          .gt('expires_at', new Date().toISOString())
+          .select('user_id')
+          .maybeSingle();
+
+        if (tokenError) {
+           console.error("Error consuming link token:", tokenError);
+           return new Response("Database Error", { status: 500 });
+        }
+
+        const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
+        const reply = async (text: string) => {
+          if (!botToken) return;
+          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text })
+          });
+        };
+
+        if (!consumed) {
+          await reply('⚠️ This link is invalid or has expired. Please generate a new one from AgapSense settings.');
+          return new Response("OK", { status: 200 });
+        }
+
         const { error } = await supabaseAdmin
           .from('profiles')
           .update({ telegram_chat_id: chatId.toString() })
-          .eq('id', userId);
+          .eq('id', consumed.user_id);
 
         if (error) {
            console.error("Error updating profile:", error);
            return new Response("Database Error", { status: 500 });
         }
 
-        const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
-        if (botToken) {
-            await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: chatId,
-                text: '✅ Your Telegram account is now successfully linked to AgapSense! You will receive fire alerts here.'
-              })
-            });
-        }
+        await reply('✅ Your Telegram account is now successfully linked to AgapSense! You will receive fire alerts here.');
       }
     }
     return new Response("OK", { status: 200 });
