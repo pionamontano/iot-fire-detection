@@ -105,6 +105,7 @@ const timeAgo = (dateStr: string) => {
 
 
 export const ResponderDashboard = () => {
+  const { profile } = useAuth();
   const [devices, setDevices] = useState<DeviceWithStatus[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
