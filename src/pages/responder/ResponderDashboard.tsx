@@ -523,7 +523,7 @@ export const ResponderDashboard = () => {
                             {acknowledging === alert.id ? 'Updating...' : 'Dispatch Unit'}
                           </button>
                         )}
-                        {(alert.incident_status === 'acknowledged' || alert.incident_status === 'responding') && (
+                        {alert.incident_status === 'acknowledged' && (
                           <>
                             <button
                               onClick={() => handleUpdateStatus(alert.id, 'resolved')}

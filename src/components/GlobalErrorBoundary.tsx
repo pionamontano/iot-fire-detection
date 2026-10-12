@@ -1,9 +1,9 @@
 import React from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
+import { ErrorBoundary, type FallbackProps } from 'react-error-boundary';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Home, RefreshCw } from 'lucide-react';
 
-function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const navigate = useNavigate();
 
   return (
@@ -38,7 +38,7 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
         </button>
       </div>
 
-      {import.meta.env?.DEV && error && (
+      {import.meta.env?.DEV && error instanceof Error && (
         <details className="mt-4 w-full max-w-2xl bg-gray-50 border border-gray-200 rounded-lg p-4 text-left overflow-hidden">
           <summary className="font-mono text-xs text-red-500 cursor-pointer mb-2 font-semibold select-none">
             Developer Details: {error.message}

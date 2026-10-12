@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Filter } from 'lucide-react';
@@ -26,15 +26,7 @@ export const ResidentAlerts = () => {
   const [toDate, setToDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [tierFilter, setTierFilter] = useState<string>('All');
 
-  useEffect(() => {
-    if (profile?.device_id) {
-      fetchLogs();
-    } else {
-      setLoading(false);
-    }
-  }, [profile?.device_id, fromDate, toDate, tierFilter, fetchLogs]);
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     if (!profile?.device_id) return;
     setLoading(true);
 
@@ -68,7 +60,15 @@ export const ResidentAlerts = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [profile?.device_id, fromDate, toDate, tierFilter]);
+
+  useEffect(() => {
+    if (profile?.device_id) {
+      fetchLogs();
+    } else {
+      setLoading(false);
+    }
+  }, [profile?.device_id, fromDate, toDate, tierFilter, fetchLogs]);
 
   const getTierBadge = (tier: number) => {
     if (tier === 1) {
