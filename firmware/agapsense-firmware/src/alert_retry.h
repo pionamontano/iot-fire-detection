@@ -6,8 +6,7 @@
 // millis() in, so the same code runs on the ESP32 and in the host-side tests (host_tests/).
 // C++11-compatible (arduino-esp32 toolchains differ).
 //
-// NOT YET WIRED INTO connectivity.cpp (Step 5.3). Until then nothing includes this header, so the
-// firmware's behaviour is unchanged.
+// Wired into connectivity.cpp in Step 5.3 (attemptAlertPost()).
 //
 // What it decides (and what it deliberately does not):
 //   * WHEN to (re)send the alert POST and WHICH tier to send: the highest tier entered since the
@@ -75,6 +74,19 @@ public:
         wantedTier_ = tier;
         transientFails_ = 0; permanentFails_ = 0; gaveUp_ = false;
         nextAttemptMs_ = nowMs;  // attempt immediately
+    }
+
+    // The state machine re-entered `tier` (e.g. TIER2 -> TIER1 -> TIER2 within one incident). Unlike
+    // onTierEntered() this forces a fresh send even if that tier was already acknowledged, preserving the
+    // firmware's pre-5.3 behaviour of re-POSTing on every escalation (the server treats it as an update of
+    // the same open incident; the notification ledger prevents duplicate sends for the same tier).
+    void reassert(uint8_t tier, uint32_t nowMs) {
+        if (tier == 0 || tier > 2) return;
+        if (tier > wantedTier_) { onTierEntered(tier, nowMs); return; }
+        if (tier < wantedTier_) return;   // never lowers what is wanted
+        if (ackedTier_ >= tier) ackedTier_ = static_cast<uint8_t>(tier - 1);
+        transientFails_ = 0; permanentFails_ = 0; gaveUp_ = false;
+        nextAttemptMs_ = nowMs;
     }
 
     // True when the caller should POST now. Poll as often as you like; it never causes an attempt by itself.

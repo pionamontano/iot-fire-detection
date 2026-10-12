@@ -239,7 +239,40 @@ static void test_random_gap_invariant() {
     }
 }
 
+static void test_reassert() {
+    printf("reassert(): re-entering an acknowledged tier forces a fresh send\n");
+    AlertRetryScheduler s;
+    s.onTierEntered(2, 0); attempt(s, 0, PostOutcome::Success);
+    CHECK(!s.pending() && !s.shouldAttempt(1 * S));
+    s.onTierEntered(2, 10 * S);
+    CHECK(!s.shouldAttempt(10 * S), "onTierEntered on an acked tier is still a no-op");
+    s.reassert(2, 10 * S);
+    CHECK(s.pending() && s.shouldAttempt(10 * S), "reassert makes it due immediately");
+    CHECK(attempt(s, 10 * S, PostOutcome::Success) == 2 && !s.pending(), "re-sent as tier 2 and acked again");
+    s.reassert(1, 20 * S);
+    CHECK(!s.shouldAttempt(20 * S), "reassert never lowers the wanted tier");
+    s.reassert(0, 20 * S); s.reassert(3, 20 * S);
+    CHECK(!s.shouldAttempt(20 * S), "invalid tiers ignored");
+    AlertRetryScheduler f;
+    f.onTierEntered(2, 0); attempt(f, 0, PostOutcome::Transient); attempt(f, 5 * S, PostOutcome::Transient);
+    CHECK(!f.shouldAttempt(6 * S));
+    f.reassert(2, 6 * S);
+    CHECK(f.shouldAttempt(6 * S), "reassert while failing resets backoff and tries now");
+    attempt(f, 6 * S, PostOutcome::Transient);
+    CHECK(f.nextAttemptMs() == 6 * S + 5 * S, "backoff restarted from the initial delay");
+    AlertRetryScheduler g;
+    g.onTierEntered(1, 0); attempt(g, 0, PostOutcome::Success);
+    g.reassert(2, 30 * S);
+    CHECK(g.shouldAttempt(30 * S) && g.beginAttempt(30 * S) == 2, "reassert of a higher tier behaves like escalation");
+    AlertRetryScheduler d;
+    d.onTierEntered(1, 0); for (int i = 0; i < 3; ++i) attempt(d, i * S, PostOutcome::Permanent);
+    CHECK(d.gaveUp());
+    d.reassert(1, 100 * S);
+    CHECK(!d.gaveUp() && d.shouldAttempt(100 * S), "reassert clears give-up");
+}
+
 int main() {
+    test_reassert();
     test_classify();
     test_idle_and_first_attempt();
     test_backoff_sequence();

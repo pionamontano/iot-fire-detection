@@ -27,12 +27,15 @@ struct SmsJob {
     char alertEventId[40]; // snapshot of the alert this SMS belongs to, captured
                             // at queue time — NOT re-read from ctx at drain time,
                             // since ctx's copy can change before delivery completes
+    uint32_t incidentSeq;  // which incident this SMS belongs to (see gsmSetIncidentSeq()) — lets a result whose
+                           // alertEventId was still unknown at queue time be bound LATER, and only to ITS incident
     bool pending;
 };
 
 struct SmsResult {
     char role[8];
     char alertEventId[40];
+    uint32_t incidentSeq;
     bool success;
 };
 
@@ -97,6 +100,11 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
                    const char* bfpNumber,
                    const char* alertEventId);
 
+/** Tell the GSM layer which incident subsequent SMS jobs belong to. Call from the same task that queues SMS
+ *  whenever the alert state machine starts a NEW incident (CLEAR -> TIER1/TIER2). Each job snapshots the value
+ *  at queue time, so a later incident can never claim an earlier incident's delivery result. */
+void gsmSetIncidentSeq(uint32_t seq);
+
 /** Queue an SMS job for async processing by the GSM task. Holds up to
  *  SMS_QUEUE_SIZE jobs (config.h); logs and drops the message if full.
  *  @param role short tag ("owner"/"bfp") carried through to the result
@@ -117,11 +125,12 @@ void gsmProcessQueue();
  * every tick, regardless of connectivity state (this just empties the
  * fixed-size local queue; the caller decides whether it can reach the
  * network to report each result onward).
+ * @param incidentSeq out: the incident the SMS belonged to when it was queued.
  * @return true if a result was available and popped.
  */
 bool gsmPopSmsResult(char* role, size_t roleLen,
                      char* alertEventId, size_t alertEventIdLen,
-                     bool* success);
+                     bool* success, uint32_t* incidentSeq);
 
 /** @return true if SIM800L is registered on network (home or roaming). */
 bool gsmIsRegistered();

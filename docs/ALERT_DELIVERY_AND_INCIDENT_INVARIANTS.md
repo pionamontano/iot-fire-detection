@@ -41,7 +41,7 @@ Tunables: `p_stale` (default 2 minutes) trades faster recovery against a higher 
 `p_max_attempts` (default 3) bounds retry storms.
 
 ### The firmware alert POST is also at-least-once
-`src/alert_retry.h` (Step 5.0b, not yet wired in) retries the alert POST after a lost response, so the server can see the same alert more
+`src/alert_retry.h` (Step 5.0b; wired into `connectivity.cpp` in Step 5.3) retries the alert POST after a lost response, so the server can see the same alert more
 than once. That is made safe on the server (one open incident per device, ledger claims), not on the device.
 SMS is unchanged: it is queued immediately and independently of the POST, and may repeat once if the device reboots during a fire
 (the debounce timer is volatile).
@@ -150,7 +150,25 @@ respond. The incident is persisted before any provider is contacted, so a slow o
 Previously a database fault during the device lookup surfaced as `401` and internal errors as `400`; a retrying client cannot tell those from a permanent
 rejection, so faults are now `500`. `confirm-sms-status` additionally ignores a late failure report for an SMS already recorded as sent.
 
-Not in 5.2: firmware retry wiring (5.3), per-user Telegram (5.4, needs D5.5), the keep-alive re-assert (D5.2), the UTC label on message times (D5.6).
+### Firmware (Step 5.3, local/test only — compiled firmware and hardware NOT verified)
+- **First attempt unchanged**: the alert POST is still made synchronously at the CLEAR->TIERx / TIER1->TIER2 transition. SMS is still queued
+  immediately afterwards, independent of the POST result and of Wi-Fi (GSM fallback), with the unchanged 5-minute SMS debounce.
+- **Retry**: if that POST does not get a 2xx, `attemptAlertPost()` retries from the connectivity tick (at most one alert POST per tick, only while
+  ONLINE; being offline neither consumes an attempt nor advances the backoff). Transient failures (no response, timeout, 5xx, 408, 429) back off
+  5/10/20/40/60 s (the delay is measured from the end of the failed call). Other 4xx are retried 3 times then abandoned. The tier sent is always the
+  highest tier entered. A return to CLEAR cancels everything. A re-escalation (TIER2->TIER1->TIER2) re-POSTs tier 2, as before 5.3 (`reassert`).
+- **SMS result late-binding**: an SMS result whose `alert_event_id` was unknown at queue time (POST not yet acknowledged) is held (max 4, 10 min) and
+  reported once the incident's id is known. Each SMS job carries an incident sequence number; a result is only ever reported against the id of
+  the incident it belongs to. Results that never obtain an id (alert never acknowledged, or the incident ended first) are discarded, not
+  guessed. Transient report failures are retried up to 5 times, one failing report per tick.
+- **WDT**: `esp_task_wdt_reset()` is called before each blocking alert / SMS-status POST. In the host model no tick reaches the 30 s WDT limit with or without
+  these calls, so they are precautionary; their effect is **unverified** (hardware only).
+- **Residual duplicates (at-least-once)**: a lost response makes the server see the alert again (safe, see above). A reboot during a fire repeats the SMS
+  pair once (D5.7, accepted pending decision). A new incident within 5 minutes of the previous SMS pair sends no SMS (pre-existing debounce, unchanged).
+- **Behaviour changes vs 5.2**: (1) alert POST is now retried instead of lost; (2) an alert raised while Wi-Fi is down is delivered when it returns
+  (previously never posted for that incident); (3) SMS delivery results for such incidents are now reported instead of dropped.
+
+Not in 5.2/5.3: per-user Telegram (5.4, needs D5.5), the keep-alive re-assert (D5.2), the UTC label on message times (D5.6).
 
 **Deploy order (when approved):** `20261020000000` (ledger) -> `20261021000000` (lifecycle) -> activation gate satisfied -> `20261020000100`
 (unique index + `raise_alert`) -> `send-push-notification` -> `trigger-alert`. `trigger-alert` tolerates an older `send-push-notification`
@@ -172,5 +190,6 @@ Not in 5.2: firmware retry wiring (5.3), per-user Telegram (5.4, needs D5.5), th
 
 ## 5. Not verified
 
-Live Supabase (schema, grants, Realtime), deployed edge functions, any real provider (Telegram, Web Push, SMS), the compiled firmware,
-and hardware behaviour. Unit/integration results here cover the database logic and the retry policy only.
+Live Supabase (schema, grants, Realtime), deployed edge functions, any real provider (Telegram, Web Push, SMS), the compiled firmware
+(PlatformIO/ESP32 toolchain, real ArduinoJson/HTTPClient/TLS), FreeRTOS task interleaving, the real SIM800L, and hardware behaviour.
+Host results cover the database logic, the retry policy, and a simulation of the real `connectivity.cpp`/`gsm.cpp` against test doubles.
