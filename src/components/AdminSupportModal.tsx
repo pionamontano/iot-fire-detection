@@ -6,6 +6,7 @@ interface AdminSupportModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: any;
+  userEmail?: string | null;
 }
 
 const CATEGORIES = [
@@ -16,7 +17,7 @@ const CATEGORIES = [
   "Other"
 ];
 
-export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, onClose, profile }) => {
+export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, onClose, profile, userEmail }) => {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -126,7 +127,7 @@ export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, on
                 <div className="col-span-2">
                   <span className="block text-[10px] font-bold uppercase tracking-wider text-text-faint mb-1">Contact / Email</span>
                   <span className="text-sm font-medium text-text-body">
-                    {profile.email || 'No email'} {profile.contact_number ? `• ${profile.contact_number}` : ''}
+                    {userEmail || 'No email'} {profile.contact_number ? `• ${profile.contact_number}` : ''}
                   </span>
                 </div>
               </div>

@@ -14,7 +14,7 @@ Priority: **P1** = safety or security exposure, or it determines what the baseli
 | OQ-04 | P1 | Which `station_settings` shape is intended: migrations (`team_name`, `commander_name`, `contact_number`, `address`, lat/lng, `alert_radius_km`) or UI (`station_name`, `email`, `key_personnel`)? Does the live table have the UI's columns? | Responder "Station Information" cannot work on a DB built from the repo; changing either side is a schema/contract change (rules 5, 9). | KI-07 | Leave both unchanged |
 | OQ-05 | P1 | Is the **baseline the repository (`main`) or production**? Production's migration history differs from the repo, and the audit-remediation work is not deployed. Approve (or reject) the deploy order and staging dry run. | Statuses in this spec are repo-based; production may differ in either direction. | CHANGELOG §11; runbook | Spec describes the repo; deployment status noted per row |
 | OQ-06 | P1 | Should **residents** receive any notification on Tier 1? Today Tier 1 notifies admins/responders only (Telegram station chat + push) and the resident gets nothing; Tier 2 adds resident push and SMS. | A resident not told of a "warning" may be a safety gap or an intentional anti-panic choice (FEATURES.md: "No SMS is sent to avoid panic"). | `trigger-alert/index.ts:204-210`; FEATURES.md | Keep current behaviour |
-| OQ-07 | P1 | **D6.1 — auto-resolution policy.** Should telemetry below thresholds close incidents automatically, including `acknowledged`/`responding` ones, or only flag "readings normal" and leave closing to people? | Today it silently closes responder-owned incidents. | `ingest-reading:180-196`; issue #96 | Unchanged |
+| OQ-07 | P1 | **D6.1 — auto-resolution policy.** Should telemetry below thresholds close incidents automatically, including `acknowledged`/`responding` ones, or only flag "readings normal" and leave closing to people? | Today it silently closes responder-owned incidents. | `ingest-reading:180-196`; issue #96; [finding F1](#f1-auto-resolve-can-close-a-live-incident-on-one-reading) | Unchanged |
 | OQ-08 | P2 | What are the **canonical default thresholds** (DB 60 °C, admin form 65 °C, firmware fallback 70 °C; CO 200 ppm)? May a resident lower thresholds to any value 0–100 / 0–1000? Are the 0–1000 / 0–100 bounds approved? | Wrong default changes when alerts fire if the first config fetch fails or a device is created via the form. | KI-06; `20260917080000`; `20260924050000` | No change |
 | OQ-09 | P1 | How should **stale or failed sensor data** be treated (frozen DS18B20 value, CO value held through heating)? Allowed to add a freshness limit or fault report? | A failed probe can mask a Tier 2. Detection-logic change = rule 8 review and physical retest. | KI-17 | Unchanged |
 | OQ-10 | P1 | When will the **firmware be compiled with PlatformIO and tested on hardware** (Wi-Fi loss, GSM SMS, GPS cold start, watchdog timing, retry logic)? What pass criteria? | All firmware status is "code + host simulation"; no hardware evidence exists. | `CHANGELOG §10`; spec §5.14 | Hardware rows stay *Cannot Verify* |
@@ -38,21 +38,57 @@ Priority: **P1** = safety or security exposure, or it determines what the baseli
 
 These labels come from `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`, `docs/CHANGELOG_AUDIT_REMEDIATION.md` and the runbook. Their full text is *not* in the repository except as summarised below.
 
-| Label | Subject (as described in repo docs) | Blocks | Pri |
-|---|---|---|---|
-| D5.2 | Keep-alive re-assert of an ongoing alert | Not built | P3 |
-| D5.3 | Expired push subscriptions: reported only, never deleted (default applied) | Applied by default | P3 |
-| D5.4, D5.5 | Per-user Telegram design and recipients | Step 5.4 (#95) | P2 → see OQ-23 |
-| D5.6 | Label message times as UTC | Telegram/SMS time text | P3 |
-| D5.7 | SMS pair may repeat once after a reboot during a fire (debounce timer is volatile) | Firmware acceptance | P2 |
-| D6.1 | Auto-resolution / device-clear behaviour | Step 6.3 (#96) | P1 → OQ-07 |
-| D6.3 | Backfill of legacy incident rows (3 rows in production per CHANGELOG §11) | Validating `alert_events_lifecycle_sync` | P2 |
-| D6.4 | Admin reopen of closed incidents (currently impossible by design) | Step 6.3 | P2 |
-| D6.5 | **Referenced in CHANGELOG §11 and the runbook, but not defined in any inspected document** | Production deployment | P2 — owner to state its subject |
-| Step 6c | Revoke direct `UPDATE` on `alert_events` (#97) | After 6.1/6.2 are live | P1 |
-| — | Fix for `get_auth_role()` ignoring `status` ("none yet", CHANGELOG §12) | Needs OQ-03 | P1 |
+`Still needed?` and `Assessment` were added from a later implementation-review pass (see [§E](#e-findings-from-implementation-review-new)); rows not covered by that pass are marked "Not assessed in this pass".
 
-## C. Assumptions made in the specification (to be confirmed)
+| Label | Subject (as described in repo docs) | Blocks | Pri | Still needed? | Assessment |
+|---|---|---|---|---|---|
+| D5.2 | Keep-alive re-assert of an ongoing alert | Not built | P3 | Depends on D6.1 | If auto-resolve stays aggressive ([F1](#f1-auto-resolve-can-close-a-live-incident-on-one-reading)), a re-assert is how a continuing fire reopens visibility; if auto-resolve is made stricter, it is much less needed. |
+| D5.3 | Expired push subscriptions: reported only, never deleted (default applied) | Applied by default | P3 | Not assessed in this pass | — |
+| D5.4, D5.5 | Per-user Telegram design and recipients | Step 5.4 (#95) | P2 → see OQ-23 | Only if the feature is wanted | See Step 5.4 / OQ-23. |
+| D5.6 | Label message times as UTC | Telegram/SMS time text | P3 | Yes, small (P2, but safety-relevant) | See [finding F2](#f2-message-times-are-unlabeled-utc). |
+| D5.7 | SMS pair may repeat once after a reboot during a fire (debounce timer is volatile) | Firmware acceptance | P2 | Yes (blocks firmware sign-off) | Cheaper to accept than to fix: a fix needs the SMS debounce state to survive a reboot (non-volatile storage). A duplicate is considered better than a missed SMS. |
+| D6.1 | Auto-resolution / device-clear behaviour | Step 6.3 (#96) | P1 → OQ-07 | Yes, and it matters more than it looked | See [finding F1](#f1-auto-resolve-can-close-a-live-incident-on-one-reading). |
+| D6.3 | Backfill of legacy incident rows (3 rows in production per CHANGELOG §11) | Validating `alert_events_lifecycle_sync` | P2 | Yes (blocks the lifecycle migration going live cleanly) | Production has 3 incidents that are closed by `resolved_at` but still show an open status. Simplest default: set them to `resolved`. They may be test data; confirm. |
+| D6.4 | Admin reopen of closed incidents (currently impossible by design) | Step 6.3 | P2 | Optional | The lifecycle guard forbids reopening. Needed only if closing by mistake is a real operational risk. A cheaper alternative is to raise a new incident. |
+| D6.5 | **Referenced in CHANGELOG §11 and the runbook, but not defined in any inspected document** | Production deployment | P2 — owner to state its subject | Yes | The code tolerates some wrong orders (`trigger-alert` falls back to legacy persistence; the guard and uniqueness migration are independent), but the firmware order is a hard dependency. Document the rule and stop. |
+| Step 6c | Revoke direct `UPDATE` on `alert_events` (#97) | After 6.1/6.2 are live | P1 | Not assessed in this pass | — |
+| — | Fix for `get_auth_role()` ignoring `status` ("none yet", CHANGELOG §12) | Needs OQ-03 | P1 | Not assessed in this pass | — |
+
+## E. Findings from implementation review (new)
+
+Found while fixing an unrelated bug (the support-request 500, KI-08). These are not new decisions — they sharpen D6.1 and D5.6 above with the exact mechanism and a recommendation. Per change rule 10, nothing below was acted on; owner sign-off is still required.
+
+### F1: Auto-resolve can close a live incident on one reading
+
+**Where:** `supabase/functions/ingest-reading/index.ts`, in the auto-resolution check.
+
+**What it does today:** the device sends a telemetry reading about every 30 seconds. If one reading is marked `sensor_ready` and both values are strictly below the device's thresholds, the function closes every open incident for that device by setting `resolved_at` — whatever the incident's status.
+
+**Why it's a problem:**
+- The firmware's own logic needs two consecutive safe readings (~4 seconds) before it returns to CLEAR. The server needs only one.
+- If a responder has acknowledged an incident, or is en route, one momentary low reading (a smoke dip, a sensor glitch) closes it. It disappears from the active list while the fire may still be burning.
+- After migration 6.1, the same update also sets `incident_status` to `resolved`, so the closure looks identical to a real resolution.
+
+**Options:**
+(a) Accept it and document it.
+(b) Require several consecutive below-threshold readings on the server before closing.
+(c) Never auto-close an incident that is `acknowledged` or `responding` — only a person can close those.
+
+**Recommendation:** (c), possibly combined with (b). This is a safety-behaviour choice — owner decision D6.1, not resolved by this review.
+
+### F2: Message times are unlabeled UTC
+
+**Where:** `trigger-alert`, in `fmtTime`, which formats the time with `toISOString()` cut to `YYYY-MM-DD HH:MM:SS`.
+
+**What it does today:** the time in Telegram alerts and the BFP SMS (`Time: …`) is UTC with no zone marker.
+
+**Why it's a problem:** users are in the Philippines (UTC+8). `Time: 2026-10-12 08:00:00` means 4 pm local. A responder reading it as local time is eight hours off — which matters when judging how old an alert is.
+
+**Options:** add a UTC suffix, or convert to Asia/Manila time and say so in the message. Either is a one-line change in `fmtTime`, deployable alongside other fixes. Converting is more useful to readers; the SMS body is short, so check it still fits after the change.
+
+**Recommendation:** convert to Asia/Manila and label it. Owner decision D5.6, not resolved by this review.
+
+## F. Assumptions made in the specification (to be confirmed)
 
 | # | Assumption | Basis |
 |---|---|---|
@@ -62,7 +98,7 @@ These labels come from `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`, `docs/C
 | AS-4 | Items cited as `SW-x/HW-x` are real owner requirements, but remain *Unconfirmed* until the source is supplied. | OQ-01 |
 | AS-5 | Out-of-scope items E4–E6 (spec §5.3) are exclusions by absence from the brief, not by explicit owner statement. | OQ-01 |
 
-## D. Contradictions found
+## G. Contradictions found
 
 | # | Contradiction | Sources | Resolution owner |
 |---|---|---|---|

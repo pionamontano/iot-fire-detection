@@ -43,7 +43,7 @@ serve(async (req: Request) => {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('full_name, contact_number, role, email')
+      .select('full_name, contact_number, role')
       .eq('id', user.id)
       .single();
 
@@ -62,6 +62,14 @@ serve(async (req: Request) => {
       });
     }
 
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
     const userRole = profile?.role;
     const userEmail = user?.email || 'No email registered';
     const userPhone = user?.phone || user?.user_metadata?.phone || 'No phone registered';
@@ -72,13 +80,13 @@ serve(async (req: Request) => {
       subject: `[Admin Support] ${category} - ${user?.id}`,
       html: `
         <h3>BFP Support Request</h3>
-        <p><strong>Category:</strong> ${category}</p>
+        <p><strong>Category:</strong> ${escapeHtml(category)}</p>
         <p><strong>User ID:</strong> ${user?.id}</p>
         <p><strong>Role:</strong> ${userRole || 'BFP Responder'}</p>
-        <p><strong>Contact Email:</strong> ${userEmail}</p>
-        <p><strong>Contact Phone:</strong> ${userPhone}</p>
+        <p><strong>Contact Email:</strong> ${escapeHtml(userEmail)}</p>
+        <p><strong>Contact Phone:</strong> ${escapeHtml(userPhone)}</p>
         <p><strong>Message:</strong></p>
-        <p>${message}</p>
+        <p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>
       `,
     };
 

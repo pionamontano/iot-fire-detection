@@ -7,7 +7,7 @@ import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTrian
 import { AdminSupportModal } from '../../components/AdminSupportModal';
 
 export const ResponderSettings = () => {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [fullName, setFullName] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [saving, setSaving] = useState(false);
@@ -447,6 +447,7 @@ export const ResponderSettings = () => {
         isOpen={isSupportModalOpen}
         onClose={() => setIsSupportModalOpen(false)}
         profile={profile}
+        userEmail={user?.email}
       />
     </div>
   );
