@@ -111,6 +111,7 @@ const timeAgo = (dateStr: string) => {
 export const ResponderDashboard = () => {
   const [devices, setDevices] = useState<DeviceWithStatus[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
+  const [alertsTodayCount, setAlertsTodayCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [acknowledging, setAcknowledging] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -267,8 +268,13 @@ export const ResponderDashboard = () => {
       return { ...d, status, activeAlert: alert, connectivity };
     });
 
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const triggeredToday = allAlerts.filter(a => new Date(a.triggered_at).getTime() >= todayStart.getTime()).length;
+
     setDevices(enriched);
     setActiveAlerts(unresolvedAlerts);
+    setAlertsTodayCount(triggeredToday);
     setLoading(false);
   }, []);
 
@@ -291,8 +297,15 @@ export const ResponderDashboard = () => {
   const preAlertsCount = devices.filter(d => d.status === 'fault').length;
   const devicesOnline = devices.filter(d => d.status !== 'offline').length;
   const totalDevices = devices.length;
-  const coveragePercent = totalDevices > 0 ? ((devicesOnline / totalDevices) * 100).toFixed(1) : '0.0';
-  const coverageText = `${devicesOnline} / ${totalDevices} Online (${coveragePercent}% Coverage)`;
+  const coveragePercent = totalDevices > 0 ? (devicesOnline / totalDevices) * 100 : 0;
+  const coverageColor =
+    totalDevices === 0 ? '#71717A' : devicesOnline === 0 ? '#DC2626' : coveragePercent < 80 ? '#F59E0B' : '#10B981';
+
+  // A device that has never sent telemetry (last_seen_at is null) has not been provisioned yet — that's
+  // different from a device that WAS reporting and has since gone silent, which is the real outage signal.
+  const everReportedCount = devices.filter(d => d.last_seen_at).length;
+  const awaitingFirstCheckIn = totalDevices > 0 && everReportedCount === 0;
+  const criticalOutage = totalDevices > 0 && devicesOnline === 0 && everReportedCount > 0;
 
   // Live feed alerts (top 5 unresolvedAlerts with device join data)
   const feedAlerts = activeAlerts.slice(0, 5);
@@ -339,11 +352,19 @@ export const ResponderDashboard = () => {
         </button>
       </div>
 
-      {/* Zero Coverage Alert */}
-      {totalDevices > 0 && devicesOnline === 0 && (
+      {/* Outage banner: only shown for devices that WERE reporting and have gone silent */}
+      {criticalOutage && (
         <div className="bg-red-600 text-white font-bold px-4 py-3 rounded-lg flex items-center justify-center gap-2 mb-6">
           <AlertTriangle className="w-5 h-5" />
           CRITICAL: ALL TELEMETRY LOST (0 ONLINE DEVICES)
+        </div>
+      )}
+
+      {/* Softer notice for devices that have never checked in yet (new/unprovisioned deployment) */}
+      {awaitingFirstCheckIn && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-900 font-bold px-4 py-3 rounded-lg flex items-center justify-center gap-2 mb-6">
+          <AlertTriangle className="w-5 h-5" />
+          AWAITING FIRST CHECK-IN: {totalDevices} DEVICE{totalDevices > 1 ? 'S' : ''} REGISTERED, NONE HAVE REPORTED TELEMETRY YET
         </div>
       )}
 
@@ -357,8 +378,14 @@ export const ResponderDashboard = () => {
           highlightClass={activeAlarmCount > 0 ? "ring-2 ring-red-500 bg-red-50 animate-pulse" : ""}
         />
         <StatCard label="Pre-Alerts / Warning" value={String(preAlertsCount)} color="#F59E0B" icon={<AlertTriangle className="w-5 h-5" />} />
-        <StatCard label="Monitored Coverage" value={totalDevices > 0 ? coverageText : "0 / 0 Online (0% Coverage)"} color="#10B981" icon={<Wifi className="w-5 h-5" />} isTextSmall />
-        <StatCard label="Alerts Today" value={String(activeAlerts.length)} color="#DC2626" icon={<Clock className="w-5 h-5" />} />
+        <StatCard
+          label="Monitored Coverage"
+          value={`${devicesOnline} / ${totalDevices}`}
+          subValue={`${coveragePercent.toFixed(1)}% online`}
+          color={coverageColor}
+          icon={<Wifi className="w-5 h-5" />}
+        />
+        <StatCard label="Alerts Today" value={String(alertsTodayCount)} color="#DC2626" icon={<Clock className="w-5 h-5" />} />
       </div>
 
       {/* ─── Map + Live Alert Feed ─── */}
@@ -410,7 +437,7 @@ export const ResponderDashboard = () => {
             <LegendDot color="#DC2626" label="Fire" />
             <LegendDot color="#F59E0B" label="Fault" />
             <LegendDot color="#10B981" label="Normal" />
-            <LegendDot color="#A1A1AA" label="Offline" />
+            <LegendDot color="#71717A" label="Offline" />
           </div>
         </div>
 
@@ -540,13 +567,16 @@ export const ResponderDashboard = () => {
 
 // ─── Helper Components ───
 
-const StatCard = ({ label, value, color, icon, highlightClass = "", isTextSmall = false }: { label: string; value: string; color: string; icon: React.ReactNode; highlightClass?: string; isTextSmall?: boolean }) => (
+const StatCard = ({ label, value, subValue, color, icon, highlightClass = "" }: { label: string; value: string; subValue?: string; color: string; icon: React.ReactNode; highlightClass?: string }) => (
   <div className={`${highlightClass ? highlightClass : 'bg-[#F6F3F2]'} border border-[#E5E2E1] rounded-lg px-5 py-4 flex flex-col gap-1`}>
     <span className="text-[#5B403D] font-bold text-[10px] tracking-[0.1em] uppercase">{label}</span>
     <div className="flex items-end justify-between">
-      <span className={`font-extrabold ${isTextSmall ? 'text-[24px]' : 'text-[36px]'} leading-[40px] tracking-[-0.05em]`} style={{ color }}>
-        {value}
-      </span>
+      <div className="flex flex-col">
+        <span className="font-extrabold text-[36px] leading-[40px] tracking-[-0.05em]" style={{ color }}>
+          {value}
+        </span>
+        {subValue && <span className="text-[11px] font-bold tracking-[0.02em]" style={{ color }}>{subValue}</span>}
+      </div>
       <div className="pb-1" style={{ color }}>{icon}</div>
     </div>
   </div>
