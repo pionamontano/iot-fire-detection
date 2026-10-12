@@ -12,11 +12,16 @@ const corsHeaders = {
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY');
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY');
 
-webpush.setVapidDetails(
-  'mailto:admin@agapsense.com',
-  VAPID_PUBLIC_KEY,
-  VAPID_PRIVATE_KEY
-);
+const vapidConfigured = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+if (vapidConfigured) {
+  webpush.setVapidDetails(
+    Deno.env.get('VAPID_SUBJECT') ?? 'mailto:admin@agapsense.com',
+    VAPID_PUBLIC_KEY!,
+    VAPID_PRIVATE_KEY!
+  );
+} else {
+  console.error('VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY not set; push delivery disabled.');
+}
 
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder();
@@ -29,6 +34,13 @@ function timingSafeEqual(a: string, b: string): boolean {
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (!vapidConfigured) {
+    return new Response(JSON.stringify({ error: 'Push not configured' }), {
+      status: 503,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   try {
