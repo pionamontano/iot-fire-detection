@@ -312,14 +312,11 @@ export const ResidentHome = () => {
     if (!discrepancy) return;
     try {
       setLoading(true);
-      await supabase.from('address_discrepancies').update({ status, resolved_at: new Date().toISOString() }).eq('id', discrepancy.id);
-      if (status === 'approved') {
-         await supabase.from('devices').update({
-           location_desc: discrepancy.gps_derived_address,
-           latitude: discrepancy.latitude,
-           longitude: discrepancy.longitude
-         }).eq('id', device.id);
-      }
+      const { error } = await supabase.rpc('resolve_address_discrepancy', {
+        p_discrepancy_id: discrepancy.id,
+        p_status: status,
+      });
+      if (error) throw error;
       setDiscrepancy(null);
     } catch (e) {
       console.error(e);
