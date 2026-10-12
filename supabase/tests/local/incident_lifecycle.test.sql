@@ -1,4 +1,7 @@
 -- Step 6.1: lifecycle guard trigger, CHECK constraint, transition_incident(), backfill scripts. Local harness only.
+-- Since 6c (20261022000000) revoked authenticated's direct UPDATE grant on alert_events, the "legacy writer"
+-- simulations below run as service_role (the only direct writer left - e.g. a maintenance script); a dedicated
+-- 42501 check for `authenticated` itself lives in alert_events_revoke_update.test.sql.
 create or replace function pg_temp.check(name text, ok boolean) returns void language plpgsql as $$
 begin raise notice '%: %', case when ok then 'PASS' else 'FAIL' end, name; end $$;
 create or replace function pg_temp.fails_with(sql text, state text) returns boolean language plpgsql as $$
@@ -30,21 +33,21 @@ select pg_temp.check('device_readings_clear is NOT part of 6.1', (select count(*
 
 -- ================= guard: every legacy writer, executed as its real role =================
 select pg_temp.mk(1) as g1 \gset
-set role authenticated; select pg_temp.as_user(:'resp');
-update alert_events set incident_status = 'resolved' where id = :'g1';          -- responder handleUpdateStatus('resolved')
+set role service_role; select pg_temp.as_user(:'resp');
+update alert_events set incident_status = 'resolved' where id = :'g1';          -- responder handleUpdateStatus('resolved'), pre-6c path
 reset role;
 select pg_temp.check('[responder resolve, legacy write] resolved_at is now set by the database; closure attributed to the responder; source=legacy',
   (select resolved_at is not null and resolved_by = :'resp'::uuid and resolution_source = 'legacy' and incident_status = 'resolved' from alert_events where id = :'g1'));
 
 select pg_temp.mk(2) as g2 \gset
-set role authenticated; select pg_temp.as_user(:'resp');
+set role service_role; select pg_temp.as_user(:'resp');
 update alert_events set incident_status = 'false_alarm' where id = :'g2';
 reset role;
 select pg_temp.check('[responder false alarm, legacy write] resolved_at set', (select resolved_at is not null and incident_status = 'false_alarm' from alert_events where id = :'g2'));
 
 select pg_temp.mk(3) as g3 \gset
-set role authenticated; select pg_temp.as_user(:'adm');
-update alert_events set resolved_at = now() where id = :'g3';                    -- admin Alerts.handleResolveAlert
+set role service_role; select pg_temp.as_user(:'adm');
+update alert_events set resolved_at = now() where id = :'g3';                    -- admin Alerts.handleResolveAlert, pre-6c path
 reset role;
 select pg_temp.check('[admin resolve, legacy write] status is now normalised to resolved (was stale "active")',
   (select incident_status = 'resolved' and resolved_by = :'adm'::uuid and resolution_source = 'legacy' from alert_events where id = :'g3'));
@@ -58,7 +61,7 @@ select pg_temp.check('[ingest auto-resolve, legacy write] status normalised; no 
   (select incident_status = 'resolved' and resolved_by is null and resolution_source = 'legacy' from alert_events where id = :'g4'));
 
 select pg_temp.mk(5) as g5 \gset
-set role authenticated; select pg_temp.as_user(:'resp');
+set role service_role; select pg_temp.as_user(:'resp');
 update alert_events set incident_status = 'acknowledged', acknowledged_by = :'resp', acknowledged_at = now() where id = :'g5';
 update alert_events set incident_status = 'responding' where id = :'g5';
 reset role;
@@ -231,8 +234,8 @@ select pg_temp.check('the 5.1b unique index treats a transition_incident-closed 
   (select count(*) = 1 from alert_events where device_id = '30000000-0000-0000-0000-000000000080' and resolved_at is null)
   and (select count(*) = 2 from alert_events where device_id = '30000000-0000-0000-0000-000000000080'));
 select pg_temp.mk(90) as r1 \gset
-set role authenticated; select pg_temp.as_user(:'resp');
-update alert_events set incident_status = 'resolved' where id = :'r1';           -- legacy writer #7
+set role service_role; select pg_temp.as_user(:'resp');
+update alert_events set incident_status = 'resolved' where id = :'r1';           -- legacy writer #7, pre-6c path
 reset role;
 select alert_id as r2, created as rc from raise_alert('30000000-0000-0000-0000-000000000090', 2, 410, 85, null, null, false, null) \gset
 select pg_temp.check('a new fire after a LEGACY responder resolve becomes a NEW incident (the guard closes it at write time)', :'rc' = 't' and :'r2' <> :'r1' and (select resolved_at is not null from alert_events where id = :'r1'));

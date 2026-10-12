@@ -8,7 +8,7 @@ Related documents:
 - `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md` - delivery semantics, incident invariants, writer audit, activation gate, firmware and backend assumptions.
 - `docs/STAGING_DRY_RUN_RUNBOOK.md` - how to rehearse the migrations on a separate Supabase project before production.
 - `supabase/staging/` - guarded SQL for a fresh staging project.
-- Follow-up issues for unfinished work: #95 (Step 5.4), #96 (Step 6.3), #97 (Step 6c).
+- Follow-up issues for unfinished work: #95 (Step 5.4), #96 (Step 6.3). #97 (Step 6c) is now implemented (§8a) but not deployed.
 
 ## 1. Summary
 
@@ -24,6 +24,7 @@ Related documents:
 | 5.3 | IOT-002 | Firmware retries the alert POST and binds SMS delivery results to the right incident | firmware |
 | 6.1 | FE-002 | Incident lifecycle guard trigger and `transition_incident()` | database migration |
 | 6.2 | FE-002 | UI closes incidents only through `transition_incident()` | frontend |
+| 6c | FE-002 | Revoked `authenticated`'s direct `UPDATE` on `alert_events`; dropped the admin/responder `UPDATE` policies | database migration (deploy only after 6.1 and 6.2 are live) |
 
 Owner decisions applied: unapproved or rejected residents are never notification recipients (enforced server-side); no change to
 auto-resolution behaviour until documented and approved; no Telegram expansion to residents yet; a GPS fix is "live" for 15 minutes;
@@ -89,6 +90,12 @@ Edge functions:
 - **UI (6.2):** `src/lib/incidents.ts` calls `transition_incident` for Acknowledge / Resolve / False alarm on the admin Alerts page and the responder dashboard; errors show at feed level.
 - **Tests:** `incident_lifecycle.test.sql` (64 checks), `incident_concurrency.sh` (20 racing callers), `tests/incidents.test.ts`.
 
+## 8a. Step 6c - revoke direct UPDATE on `alert_events` (FE-002, issue #97)
+- **Problem:** the column grant and the two `UPDATE` policies from `20261012000001_responder_incident_status.sql` let any admin or responder client send an arbitrary `UPDATE` straight to `alert_events`. The 6.1 guard trigger only keeps `incident_status`/`resolved_at` in agreement and blocks reopening/re-closing a closed incident; it does not enforce the transition table (who may move from which status to which). With the UI (6.2) now exclusive to `transition_incident()`, that direct path was dead code and a lingering privilege-escalation surface (e.g. a crafted `UPDATE` could skip acknowledgement, or set `acknowledged_by`/`resolved_by` to an arbitrary uuid).
+- **Change:** `supabase/migrations/20261022000000_revoke_alert_events_direct_update.sql` drops `"Allow system and admin to update alerts"` and `"BFP Responder can update incident status"`, and revokes the column `UPDATE` grant from `authenticated`. `authenticated` keeps `SELECT` on `alert_events` (it never had `INSERT`, revoked earlier in `20260917010000`) and `EXECUTE` on `transition_incident()` (unaffected - it is `SECURITY DEFINER`). `service_role` is untouched, so `ingest-reading`'s auto-resolve, `trigger-alert`'s `telegram_sent` flag update, and `confirm-sms-status` keep writing directly.
+- **Not deployed:** like every other migration in this document, this is code only (§11). It must be applied strictly after the 6.1 migration and the 6.2 frontend are both live, per its own header comment.
+- **Tests:** `alert_events_revoke_update.test.sql` (grants/policies gone, a direct `UPDATE` as `authenticated` now fails `42501`, `transition_incident()` still works, `service_role` still writes directly). `incident_lifecycle.test.sql`'s "legacy writer" simulations were moved from `authenticated` to `service_role` to match (the only direct writer left).
+
 ## 9. Step 5.3 - firmware retry and SMS result binding (IOT-002)
 Files: `connectivity.cpp/.h`, `gsm.cpp/.h`, `alert_retry.h`, `sms_result_hold.h`.
 - The first alert POST is still made at the transition; SMS is still queued immediately and independently of the POST and of Wi-Fi (same 5-minute debounce, same recipients).
@@ -113,7 +120,7 @@ Playwright E2E ran during earlier steps only.
 - One production read-only result so far: 3 incidents, none open, all 3 with `resolved_at` set but a non-closed status (so a backfill under D6.3 would touch 3 rows).
 - By filename, `20261020000100` (uniqueness) sorts before `20261021000000` (lifecycle); the documented order is ledger -> lifecycle -> gate -> uniqueness, so apply by hand, not with a tool that orders by version.
 - Required before production: staging dry run (`docs/STAGING_DRY_RUN_RUNBOOK.md`), human review of the migrations, a fresh backup, decisions D6.3 / D5.7 / D6.5, and then the deploy order:
-  ledger migration -> lifecycle migration -> activation gate -> uniqueness migration -> `send-push-notification` -> `trigger-alert` -> frontend -> firmware (firmware last, because a pre-5.2 `trigger-alert` makes the 5.3 firmware give up after 3 attempts).
+  ledger migration -> lifecycle migration -> activation gate -> uniqueness migration -> `send-push-notification` -> `trigger-alert` -> frontend -> firmware (firmware last, because a pre-5.2 `trigger-alert` makes the 5.3 firmware give up after 3 attempts) -> only once 6.1 and 6.2 are confirmed live: the 6c migration (`20261022000000`).
 - Keep the Supabase "Deploy to production" integration off and the Vercel ignored-build step on `main` until the plan is approved.
 
 ## 12. Not done
@@ -121,13 +128,12 @@ Playwright E2E ran during earlier steps only.
 |---|---|---|
 | Step 5.4 per-user Telegram for residents | needs D5.4, D5.5 | #95 |
 | Step 6.3 auto-resolution / device-clear, admin reopen | needs D6.1, D6.4 (and D6.3 backfill) | #96 |
-| Step 6c revoke direct UPDATE on `alert_events` | after 6.1 and 6.2 are live | #97 |
 | Keep-alive re-assert of an ongoing alert | D5.2 | none yet |
 | UTC label on message times | D5.6 | none yet |
 | Fix for `get_auth_role()` ignoring `status` | out of scope until its live definition is seen | none yet |
 
 ## 13. Where to find things
-- Migrations: `supabase/migrations/20261019000000`, `20261020000000`, `20261020000100`, `20261021000000`.
+- Migrations: `supabase/migrations/20261019000000`, `20261020000000`, `20261020000100`, `20261021000000`, `20261022000000`.
 - Maintenance (read-only unless stated): `supabase/maintenance/`.
 - SQL tests: `supabase/tests/local/` (run with `run_local_db_tests.sh`, needs a local PostgreSQL).
 - Edge function tests: `tests/edge/`; frontend tests: `tests/*.test.ts` (`npm test`).
