@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Device, AlertEvent } from '../../lib/supabase';
+import { resolveDeviceLocation, describeLocation, isValidCoordinate, markerOpacity } from '../../lib/location';
+import type { ReadingLocationInput, ResolvedLocation } from '../../lib/location';
+import { useNowTick } from '../../hooks/useNowTick';
 import { useAuth } from '../../contexts/AuthContext';
 import { ResponderDashboardSkeleton } from '../../components/SkeletonLoaders';
 import {
@@ -65,7 +68,12 @@ type DeviceWithStatus = Device & {
   status: 'fire' | 'fault' | 'normal' | 'offline';
   activeAlert?: AlertEvent;
   connectivity: number;
+  // Raw readings are kept so the location (and its 15-minute live-fix window) can be re-evaluated on
+  // every clock tick instead of being frozen at fetch time.
+  sensor_readings?: ReadingLocationInput[];
 };
+
+type DeviceOnMap = DeviceWithStatus & { location: ResolvedLocation };
 
 const TickingTimer = ({ triggeredAt }: { triggeredAt: string }) => {
   const [timeText, setTimeText] = React.useState(() => {
@@ -111,6 +119,7 @@ export const ResponderDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [acknowledging, setAcknowledging] = useState<string | null>(null);
   const [klaxonArmed, setKlaxonArmed] = useState(true);
+  const now = useNowTick();
 
   // Klaxon AudioContext ref
   const audioCtxRef = React.useRef<AudioContext | null>(null);
@@ -252,7 +261,7 @@ export const ResponderDashboard = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [devicesRes, alertsRes] = await Promise.all([
-      supabase.from('devices_safe').select('*, sensor_readings(latitude, longitude, recorded_at)')
+      supabase.from('devices_safe').select('*, sensor_readings(latitude, longitude, gps_valid, recorded_at)')
         .order('recorded_at', { foreignTable: 'sensor_readings', ascending: false })
         .limit(1, { foreignTable: 'sensor_readings' })
         .order('created_at', { ascending: false }),
@@ -276,34 +285,12 @@ export const ResponderDashboard = () => {
         status = 'offline';
       }
       
-      let lat = d.latitude;
-      let lng = d.longitude;
-
-      const readings = d.sensor_readings as any[] || [];
-      if (readings.length > 0) {
-        const latest = readings[0];
-        if (latest.latitude != null && latest.longitude != null) {
-          lat = latest.latitude;
-          lng = latest.longitude;
-        }
-      }
-
-      if (!lat || !lng) {
-        let hash = 0;
-        for (let j = 0; j < d.id.length; j++) {
-          hash = ((hash << 5) - hash) + d.id.charCodeAt(j);
-          hash |= 0;
-        }
-        lat = 14.8527 + ((hash & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
-        lng = 120.8160 + (((hash >> 16) & 0xFFFF) / 0xFFFF - 0.5) * 0.01;
-      }
-
       // Simulate connectivity % based on status
       const connectivity = status === 'offline' ? 0 : status === 'fire' ? 98 : status === 'fault' ? 92 : 100;
 
-      const { sensor_readings, ...deviceWithoutReadings } = d;
-
-      return { ...deviceWithoutReadings, status, activeAlert: alert, connectivity, latitude: lat, longitude: lng };
+      // Location is resolved at render time (see mapDevices) from d.sensor_readings + the registered
+      // coordinates. No position is ever invented here.
+      return { ...d, status, activeAlert: alert, connectivity };
     });
 
     setDevices(enriched);
@@ -335,6 +322,14 @@ export const ResponderDashboard = () => {
 
   // Live feed alerts (top 5 unresolvedAlerts with device join data)
   const feedAlerts = activeAlerts.slice(0, 5);
+
+  // Resolve each device's location (live / last-known / registered / unavailable). Re-evaluated on every
+  // 30 s tick so a fix older than 15 minutes stops being shown as live even when no new data arrives.
+  const mapDevices = useMemo<DeviceOnMap[]>(() => devices.map(d => {
+    const location = resolveDeviceLocation({ readings: d.sensor_readings, device: d, now });
+    return { ...d, latitude: location.lat, longitude: location.lng, location };
+  }), [devices, now]);
+  const devicesWithoutLocation = mapDevices.filter(d => d.location.kind === 'unavailable');
 
   const mapBounds = useMemo(() => {
     const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);
@@ -410,16 +405,17 @@ export const ResponderDashboard = () => {
             style={{ height: '100%', width: '100%', minHeight: 420 }}
             className="z-0"
           >
-            <MapUpdater devices={devices} />
+            <MapUpdater devices={mapDevices} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            {devices.map(device => {
-              if (!device.latitude || !device.longitude) return null;
+            {mapDevices.map(device => {
+              if (device.location.kind === 'unavailable' || !isValidCoordinate(device.latitude, device.longitude)) return null;
+              const locInfo = describeLocation(device.location, now);
               const icon = device.status === 'fire' ? fireIcon : device.status === 'fault' ? faultIcon : device.status === 'offline' ? offlineIcon : normalIcon;
               return (
-                <Marker key={device.id} position={[device.latitude as number, device.longitude as number]} icon={icon}>
+                <Marker key={device.id} position={[device.latitude as number, device.longitude as number]} icon={icon} opacity={markerOpacity(device.location.kind)}>
                   <Popup>
                     <div className="font-sans">
                       <strong className="block text-sm font-bold">{device.device_code}</strong>
@@ -427,12 +423,21 @@ export const ResponderDashboard = () => {
                       <span className="text-xs font-bold mt-1 block capitalize" style={{ color: device.status === 'fire' ? '#DC2626' : device.status === 'fault' ? '#F59E0B' : device.status === 'offline' ? '#A1A1AA' : '#10B981' }}>
                         {device.status === 'fire' ? 'FIRE DETECTED' : device.status === 'fault' ? 'HIGH TEMP' : device.status === 'offline' ? 'OFFLINE' : 'HEALTHY'} - {device.last_seen_at ? timeAgo(device.last_seen_at) : 'NO TELEMETRY'}
                       </span>
+                      <span className="text-xs block mt-1" style={{ color: locInfo.approximate ? '#B45309' : '#047857' }}>
+                        <strong>{locInfo.label}</strong> - {locInfo.detail}
+                      </span>
                     </div>
                   </Popup>
                 </Marker>
               );
             })}
           </MapContainer>
+
+          {devicesWithoutLocation.length > 0 && (
+            <div role="status" className="absolute top-4 left-4 right-4 z-[1000] rounded-md bg-amber-50/95 border border-amber-300 px-3 py-2 text-xs text-amber-900">
+              <strong>Location unavailable for {devicesWithoutLocation.length} device{devicesWithoutLocation.length > 1 ? 's' : ''}</strong> (not shown on the map): {devicesWithoutLocation.map(d => d.device_code).join(', ')}
+            </div>
+          )}
 
           {/* Map Legend */}
           <div className="absolute bottom-4 left-4 z-[1000] bg-[#1C1B1B]/80 backdrop-blur-sm rounded-md px-4 py-3 flex flex-col gap-2">
@@ -545,10 +550,10 @@ export const ResponderDashboard = () => {
 
                       <div className="grid grid-cols-2 gap-2 mt-1">
                         <a
-                          href={alert.latitude && alert.longitude ? `https://www.google.com/maps/dir/?api=1&destination=${alert.latitude},${alert.longitude}` : '#'}
+                          href={isValidCoordinate(alert.latitude, alert.longitude) ? `https://www.google.com/maps/dir/?api=1&destination=${alert.latitude},${alert.longitude}` : '#'}
                           target="_blank"
                           rel="noreferrer"
-                          className={`flex items-center justify-center gap-1.5 w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors ${!(alert.latitude && alert.longitude) && 'opacity-50 pointer-events-none'}`}
+                          className={`flex items-center justify-center gap-1.5 w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-[10px] font-bold tracking-[0.05em] uppercase px-3 py-2 rounded transition-colors ${!isValidCoordinate(alert.latitude, alert.longitude) && 'opacity-50 pointer-events-none'}`}
                         >
                           <Navigation className="w-3 h-3" /> Open Navigation
                         </a>
@@ -559,6 +564,11 @@ export const ResponderDashboard = () => {
                           <PhoneCall className="w-3 h-3" /> Call Site Guard / Admin
                         </a>
                       </div>
+                      {!isValidCoordinate(alert.latitude, alert.longitude) ? (
+                        <p className="text-[10px] font-medium text-gray-500">Location unavailable for this alert.</p>
+                      ) : !alert.gps_valid ? (
+                        <p className="text-[10px] font-medium text-amber-700">Navigation target is a last-known position, not a live GPS fix.</p>
+                      ) : null}
                     </div>
                   </div>
                 );

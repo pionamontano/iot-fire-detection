@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
+import { resolveDeviceLocation, describeLocation, isValidCoordinate, markerOpacity } from '../../lib/location';
+import type { ReadingLocationInput, ResolvedLocation } from '../../lib/location';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device, AlertEvent } from '../../lib/supabase';
@@ -88,9 +90,12 @@ const timeAgo = (dateStr: string) => {
   return Math.floor(seconds) + "s ago";
 };
 
+type DeviceWithReadings = Device & { sensor_readings?: ReadingLocationInput[] };
+type DeviceOnMap = DeviceWithReadings & { location: ResolvedLocation };
+
 export const InteractiveMap = () => {
   const navigate = useNavigate();
-  const [devices, setDevices] = useState<Device[]>([]);
+  const [devices, setDevices] = useState<DeviceWithReadings[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
     const now = useNowTick();
@@ -121,7 +126,7 @@ export const InteractiveMap = () => {
     try {
       // Fetch devices and all recent alerts for the feed (limit 50)
       const [devicesRes, alertsRes] = await Promise.all([
-        supabase.from('devices').select<string, Device & { sensor_readings?: { latitude: number | null; longitude: number | null; recorded_at: string }[] }>(`${DEVICE_COLUMNS}, sensor_readings(latitude, longitude, recorded_at)`)
+        supabase.from('devices').select<string, Device & { sensor_readings?: ReadingLocationInput[] }>(`${DEVICE_COLUMNS}, sensor_readings(latitude, longitude, gps_valid, recorded_at)`)
           .order('recorded_at', { foreignTable: 'sensor_readings', ascending: false })
           .limit(1, { foreignTable: 'sensor_readings' }),
         supabase.from('alert_events').select('*, devices(device_code, location_desc)').order('triggered_at', { ascending: false }).limit(50)
@@ -132,22 +137,9 @@ export const InteractiveMap = () => {
       setLoadError(readError ? { message: readError.message, code: readError.code } : null);
 
       if (devicesRes.data) {
-        // Only devices with a real install location (devices.latitude/
-        // longitude) get a marker - previously every device without one
-        // was placed at a fabricated position derived from a hash of its
-        // id, which looked plausible but was entirely fictional and could
-        // mislead a responder relying on this view.
-        const devicesWithLiveLocation = devicesRes.data.map(d => {
-          const readings = d.sensor_readings as any[] || [];
-          if (readings.length > 0) {
-            const latest = readings[0];
-            if (latest.latitude != null && latest.longitude != null) {
-              return { ...d, latitude: latest.latitude, longitude: latest.longitude };
-            }
-          }
-          return d;
-        });
-        setDevices(devicesWithLiveLocation);
+        // Keep the raw readings; each device's location is resolved at render time (see mapDevices) so a
+        // fix older than 15 minutes stops being shown as live without needing new data.
+        setDevices(devicesRes.data);
       }
       if (alertsRes.data) setAlerts(alertsRes.data as unknown as AlertEvent[]);
     } catch (error) {
@@ -162,8 +154,17 @@ export const InteractiveMap = () => {
   // had tier 1 labeled "Fire" and tier 2 labeled "Fault", the reverse.
   const activeFireCount = activeAlerts.filter(a => a.alert_tier === 2).length;
 
+  // Resolve each device's location (live / last-known / registered / unavailable) on every render, so the
+  // 15-minute live-fix window is re-evaluated with the 30 s clock tick. Nothing is invented: a device with
+  // no usable position gets null coordinates and no marker.
+  const mapDevices: DeviceOnMap[] = devices.map(d => {
+    const location = resolveDeviceLocation({ readings: d.sensor_readings, device: d, now });
+    return { ...d, latitude: location.lat, longitude: location.lng, location };
+  });
+  const devicesWithoutLocation = mapDevices.filter(d => d.location.kind === 'unavailable');
+
   // Filter devices to display
-  const displayedDevices = devices.filter(d => {
+  const displayedDevices = mapDevices.filter(d => {
     const status = getDeviceStatus(d, activeAlerts, now);
     if (hideOffline && status === 'offline') return false;
     if (searchQuery) {
@@ -187,6 +188,11 @@ export const InteractiveMap = () => {
           <LoadErrorBanner what="devices and alerts" error={loadError} onRetry={fetchData} />
         </div>
       )}
+      {devicesWithoutLocation.length > 0 && (
+        <div role="status" className="absolute bottom-6 left-1/2 z-[1100] w-[min(92%,640px)] -translate-x-1/2 rounded-md border border-amber-300 bg-amber-50/95 px-3 py-2 text-xs text-amber-900">
+          <strong>Location unavailable for {devicesWithoutLocation.length} device{devicesWithoutLocation.length > 1 ? 's' : ''}</strong> (not shown on the map): {devicesWithoutLocation.map(d => d.device_code).join(', ')}
+        </div>
+      )}
       {/* ─── MAP LAYER ─── */}
       <div className="flex-1 h-full relative" style={{ zIndex: 0 }}>
         <MapContainer 
@@ -203,7 +209,8 @@ export const InteractiveMap = () => {
           <ZoomControl position="bottomright" />
           
           {displayedDevices.map(device => {
-            if (device.latitude == null || device.longitude == null) return null;
+            if (device.location.kind === 'unavailable' || !isValidCoordinate(device.latitude, device.longitude)) return null;
+            const locInfo = describeLocation(device.location, now);
             const status = getDeviceStatus(device, activeAlerts, now);
             const activeAlertForDevice = activeAlerts.find(a => a.device_id === device.id);
 
@@ -212,6 +219,7 @@ export const InteractiveMap = () => {
                 key={device.id} 
                 position={[device.latitude as number, device.longitude as number]}
                 icon={iconCache[status]}
+                opacity={markerOpacity(device.location.kind)}
               >
                 <Popup className="custom-popup" closeButton={false} minWidth={240}>
                   <div className="flex flex-col bg-white/70 backdrop-blur-md rounded-lg overflow-hidden border border-[#DC2626]/30 shadow-xl">
@@ -225,6 +233,9 @@ export const InteractiveMap = () => {
                       <div>
                         <h3 className="font-bold text-sm text-[#18181B]">{device.device_code}</h3>
                         <p className="text-xs text-[#71717A] mt-0.5">{device.location_desc}</p>
+                        <p className="text-[10px] mt-1 font-bold" style={{ color: locInfo.approximate ? '#B45309' : '#047857' }}>
+                          {locInfo.label} - {locInfo.detail}
+                        </p>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-2">
