@@ -138,11 +138,21 @@ export const ResponderSettings = () => {
     }
   };
 
-  const handleConnectTelegram = () => {
+  const handleConnectTelegram = async () => {
     if (!profile) return;
     const botUsername = "AgapSenseAlertBot";
-    const telegramUrl = `https://t.me/${botUsername}?start=${profile.id}`;
-    window.open(telegramUrl, '_blank');
+    // Open the window synchronously so popup blockers allow it, then point it
+    // at the deep link once the one-time token arrives.
+    const win = window.open('', '_blank');
+    const { data: token, error } = await supabase.rpc('create_telegram_link_token');
+    if (error || !token) {
+      win?.close();
+      console.error(error);
+      return;
+    }
+    const telegramUrl = `https://t.me/${botUsername}?start=${token}`;
+    if (win) win.location.href = telegramUrl;
+    else window.location.href = telegramUrl;
   };
 
   if (!profile) return <ProfileSkeleton />;

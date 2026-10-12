@@ -18,33 +18,53 @@ webpush.setVapidDetails(
   VAPID_PRIVATE_KEY
 );
 
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const x = enc.encode(a), y = enc.encode(b);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
+  return diff === 0;
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Only allow service role to call this function (from another Edge Function like trigger-alert)
-    // Or allow authenticated users to send test notifications.
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    // Callers: the service role (trigger-alert) may notify anyone; an
+    // authenticated user may only notify themselves, except admins.
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const isServiceRole = serviceRoleKey !== '' && timingSafeEqual(authHeader, `Bearer ${serviceRoleKey}`);
+
+    const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        serviceRoleKey
     );
 
-    // Verify user is authenticated
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-
-    // If not called by authenticated user, verify it's the service role
-    if (userError || !user) {
-        const authHeader = req.headers.get('Authorization');
-        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-        if (authHeader !== `Bearer ${serviceRoleKey}`) {
-             return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-                status: 401,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
+    let callerId: string | null = null;
+    let callerIsAdmin = false;
+    if (!isServiceRole) {
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      callerId = user.id;
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('role, status')
+        .eq('id', user.id)
+        .maybeSingle();
+      callerIsAdmin = profile?.role === 'admin' && profile?.status === 'approved';
     }
 
     const { userIds, title, body, icon } = await req.json();
@@ -56,10 +76,12 @@ serve(async (req: Request) => {
       });
     }
 
-    const supabaseAdmin = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    if (!isServiceRole && !callerIsAdmin && !userIds.every((id: unknown) => id === callerId)) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Fetch subscriptions for the given user IDs
     const { data: subscriptions, error: subError } = await supabaseAdmin
