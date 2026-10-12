@@ -69,7 +69,7 @@ insert into public.alert_events (device_id, alert_tier, incident_status, resolve
   ('<device-2>', 2, 'active',       now()),               -- legacy: closed by resolved_at only (admin / ingest auto-resolve)
   ('<device-3>', 1, 'active',       null);                -- genuinely open
 ```
-Do not insert two open rows for the same device (that is exactly what the 5.1b precheck must catch; test it separately in 5.5).
+Do not insert two open rows for the same device (that is exactly what the 5.1b precheck must catch; test it separately in 3.5).
 
 ## Phase 3 - apply, one migration at a time, in this order
 The documented order is **ledger -> lifecycle -> gate -> uniqueness**; the Step 1 profile migration is independent and goes first.
