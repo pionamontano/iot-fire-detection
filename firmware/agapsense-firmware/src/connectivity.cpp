@@ -1,5 +1,11 @@
 // ============================================================
-// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM  (v2.3)
+// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM, OTA  (v2.4)
+//
+// Changes from v2.3 (this file):
+//  [23] performOtaUpdate(): HTTPS OTA via Update.h, triggered from
+//       fetchRemoteConfig() when firmware_version differs from the
+//       compiled-in FIRMWARE_VERSION. Wi-Fi only, gated to
+//       alertTier == CLEAR so a live alert is never interrupted.
 //
 // Changes from v2.2 (this file):
 //  [18] alert_event_id parsed from trigger-alert response and stored
@@ -51,6 +57,7 @@
 #include <WiFiManager.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <Update.h>
 #include <esp_task_wdt.h>
 
 #if DEBUG_MODE
@@ -324,6 +331,86 @@ int postSmsStatus(const char* role, bool success, const char* alertEventId) {
     return httpsPost(ENDPOINT_CONFIRM_SMS, payload);
 }
 
+// ── OTA Firmware Update ─────────────────────────────────────
+// Downloads firmware_url (an ESP32 .bin in Supabase Storage) and
+// flashes it via the built-in Update library. Only ever reached
+// from fetchRemoteConfig(), i.e. only over Wi-Fi, never over the
+// SIM800 GSM fallback, and only while alertTier == CLEAR so a
+// live fire alert is never interrupted by a flash/reboot cycle.
+// esp_task_wdt_reset() is fed every chunk since Update.write()
+// does not yield long enough on its own for a multi-hundred-KB
+// image under WDT_TIMEOUT_S. On success this never returns —
+// ESP.restart() reboots into the new image.
+static bool performOtaUpdate(const char* url) {
+    if (!url || !url[0]) return false;
+
+    WiFiClientSecure client;
+    client.setCACert(SUPABASE_ROOT_CA);
+    client.setTimeout(10);
+
+    HTTPClient http;
+    if (!http.begin(client, url)) {
+        CLOG("OTA: http.begin failed");
+        return false;
+    }
+
+    int code = http.GET();
+    int len  = http.getSize();
+    if (code != 200 || len <= 0) {
+        CLOG("OTA: fetch failed (code=%d len=%d)", code, len);
+        http.end();
+        return false;
+    }
+
+    if (!Update.begin(len)) {
+        CLOG("OTA: Update.begin failed: %s", Update.errorString());
+        http.end();
+        return false;
+    }
+
+    CLOG("OTA: downloading %d bytes...", len);
+    WiFiClient* stream = http.getStreamPtr();
+    uint8_t buf[1024];
+    int written = 0;
+    uint32_t lastData = millis();
+
+    while (http.connected() && written < len) {
+        size_t avail = stream->available();
+        if (avail) {
+            int n = stream->readBytes(buf, min(avail, sizeof(buf)));
+            if (n <= 0) break;
+            if (Update.write(buf, n) != (size_t)n) {
+                CLOG("OTA: Update.write failed: %s", Update.errorString());
+                Update.abort();
+                http.end();
+                return false;
+            }
+            written += n;
+            lastData = millis();
+        }
+        esp_task_wdt_reset();
+        if (millis() - lastData > HTTP_TIMEOUT_MS) {
+            CLOG("OTA: stream stalled — aborting");
+            Update.abort();
+            http.end();
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+    http.end();
+
+    if (written != len || !Update.end(true)) {
+        CLOG("OTA: incomplete/invalid (written=%d/%d): %s",
+             written, len, Update.errorString());
+        return false;
+    }
+
+    CLOG("OTA: flashed %d bytes — rebooting", written);
+    delay(500);
+    ESP.restart();
+    return true; // unreachable
+}
+
 // ── Remote Config Fetch ────────────────────────────────────
 bool fetchRemoteConfig(ConnectivityCtx* ctx) {
     WiFiClientSecure client;
@@ -370,6 +457,19 @@ bool fetchRemoteConfig(ConnectivityCtx* ctx) {
     CLOG("Config loaded: CO>=%.0f Temp>=%.0f Owner=%s BFP=%s",
          ctx->co_alert_ppm, ctx->temp_alert_c,
          ctx->ownerNumber, ctx->bfpNumber);
+
+    const char* fwVersion = doc["firmware_version"] | "";
+    const char* fwUrl     = doc["firmware_url"]     | "";
+    if (fwVersion[0] && fwUrl[0] &&
+        strcmp(fwVersion, FIRMWARE_VERSION) != 0 &&
+        ctx->alertTier == AlertTier::CLEAR) {
+        CLOG("OTA: new firmware %s available (current %s)",
+             fwVersion, FIRMWARE_VERSION);
+        performOtaUpdate(fwUrl);
+        // performOtaUpdate() only returns on failure — defaults above
+        // are already applied, so just carry on with this cycle.
+    }
+
     return true;
 }
 

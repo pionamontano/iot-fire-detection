@@ -80,6 +80,10 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 // ΓöÇΓöÇ Device Identity ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 #define DEVICE_ID                "bantay-apoy-node-001"
 
+// Bumped per release. Compared against get-device-config's
+// firmware_version field; a mismatch triggers an OTA download.
+#define FIRMWARE_VERSION          "2.1.0"
+
 // ΓöÇΓöÇ SMS Recipients (fetched from DB at runtime; these are fallbacks) ΓöÇΓöÇ
 // Role-specific numbers per spec:
 //   Owner  ΓÇö plain-language evacuation message
