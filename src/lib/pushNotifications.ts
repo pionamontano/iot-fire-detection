@@ -15,6 +15,21 @@ const urlB64ToUint8Array = (base64String: string) => {
   return outputArray;
 };
 
+/** Turns a push subscription failure into a message a user can act on. */
+export const describePushError = (e: unknown): string => {
+  const name = (e as { name?: string } | null)?.name;
+  if (name === 'AbortError') {
+    return "Your browser's push service is unavailable. Try Chrome or Edge, check your connection, and make sure browser push services are enabled.";
+  }
+  if (name === 'NotAllowedError') {
+    return 'Notifications are blocked. Allow them in your browser site settings and try again.';
+  }
+  if (name === 'NotSupportedError') {
+    return 'Push notifications are not supported by this browser.';
+  }
+  return 'Could not enable push notifications. Please try again later.';
+};
+
 export const registerServiceWorker = async () => {
   if ('serviceWorker' in navigator && 'PushManager' in window) {
     try {

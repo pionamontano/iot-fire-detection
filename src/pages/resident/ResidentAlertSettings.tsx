@@ -4,7 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { Device } from '../../lib/supabase';
 import { Thermometer, Wind, MessageSquare, CheckCircle2, HelpCircle, AlertTriangle, Save, Send, X } from 'lucide-react';
 import { AlertSettingsSkeleton } from '../../components/SkeletonLoaders';
-import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription } from '../../lib/pushNotifications';
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError } from '../../lib/pushNotifications';
+import { startTelegramLink } from '../../lib/telegramLink';
 import { Bell, BellOff } from 'lucide-react';
 
 
@@ -86,7 +87,7 @@ export const ResidentAlertSettings = () => {
       }
     } catch (e: any) {
       console.error(e);
-      setErrorMsg('Push error: ' + (e.message || 'Unknown error'));
+      setErrorMsg(describePushError(e));
       setTimeout(() => setErrorMsg(''), 5000);
     } finally {
       setPushLoading(false);
@@ -95,19 +96,11 @@ export const ResidentAlertSettings = () => {
 
 const handleConnectTelegram = async () => {
     if (!profile) return;
-    const botUsername = "AgapSenseAlertBot";
-    // Open the window synchronously so popup blockers allow it, then point it
-    // at the deep link once the one-time token arrives.
-    const win = window.open('', '_blank');
-    const { data: token, error } = await supabase.rpc('create_telegram_link_token');
-    if (error || !token) {
-      win?.close();
-      console.error(error);
-      return;
+    const message = await startTelegramLink();
+    if (message) {
+      setErrorMsg(message);
+      setTimeout(() => setErrorMsg(''), 5000);
     }
-    const telegramUrl = `https://t.me/${botUsername}?start=${token}`;
-    if (win) win.location.href = telegramUrl;
-    else window.location.href = telegramUrl;
   };
 
   const fetchDevice = async (deviceId: string) => {

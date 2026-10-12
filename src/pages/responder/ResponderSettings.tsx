@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { startTelegramLink } from '../../lib/telegramLink';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
 import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Send, Bell } from 'lucide-react';
@@ -140,19 +141,11 @@ export const ResponderSettings = () => {
 
   const handleConnectTelegram = async () => {
     if (!profile) return;
-    const botUsername = "AgapSenseAlertBot";
-    // Open the window synchronously so popup blockers allow it, then point it
-    // at the deep link once the one-time token arrives.
-    const win = window.open('', '_blank');
-    const { data: token, error } = await supabase.rpc('create_telegram_link_token');
-    if (error || !token) {
-      win?.close();
-      console.error(error);
-      return;
+    const message = await startTelegramLink();
+    if (message) {
+      setErrorMsg(message);
+      setTimeout(() => setErrorMsg(''), 5000);
     }
-    const telegramUrl = `https://t.me/${botUsername}?start=${token}`;
-    if (win) win.location.href = telegramUrl;
-    else window.location.href = telegramUrl;
   };
 
   if (!profile) return <ProfileSkeleton />;
