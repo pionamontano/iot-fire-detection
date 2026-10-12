@@ -105,6 +105,20 @@ Observation (pre-existing, unchanged): `alert_events.acknowledged_by` has no `ON
 incident is blocked by the foreign key. The new `resolved_by` uses `ON DELETE SET NULL`. Changing `acknowledged_by` the same way is a one-line,
 separate decision.
 
+### UI (Step 6.2, local/test only)
+
+The responder dashboard and the admin manual-resolve button now change incidents **only** through `transition_incident`
+(`src/lib/incidents.ts`); the UI no longer writes `alert_events` directly and no longer sends `acknowledged_by` (the server records the actor).
+* Buttons come from the same transition table as the database; a `responding` incident now offers **Resolve** and **False Alarm**.
+* Closing asks for confirmation because a closed incident cannot be reopened.
+* Errors are explained, not swallowed: not authorized (42501), already updated/closed by someone else (55000, list refreshed), not found (P0002).
+  The message is shown at feed level so it survives the refresh that removes a closed incident.
+* **Deploy order matters:** migration `20261021000000` must be applied **before** this UI. If the UI runs first, incident actions fail with a clear
+  "database update pending" message (PostgREST `PGRST202`) and responders cannot acknowledge from the dashboard. There is deliberately no
+  direct-write fallback (a second write path is exactly what Step 6 removes). Direct `UPDATE` remains granted until step 6c, so older clients keep working.
+* Not in 6.2: the "device readings back to normal" badge (needs `device_cleared_at`, decision D6.1), revoking direct `UPDATE` (6c), and the
+  other responder/admin screens, which read `resolved_at` and need no change.
+
 ## 4. Activation gate (required before 5.1b is applied anywhere shared, or before any code calls `raise_alert`)
 
 - [ ] Review sign-off on this document, both migrations and the tests.

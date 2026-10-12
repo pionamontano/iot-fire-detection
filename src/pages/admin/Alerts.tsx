@@ -24,6 +24,7 @@ import {
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
 import { getConnectivityStatus } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
+import { transitionIncident } from '../../lib/incidents';
 
 type DeviceWithStatus = Device & {
   status: 'operational' | 'critical' | 'reconnecting' | 'maintenance' | 'offline';
@@ -166,15 +167,10 @@ export const Alerts = () => {
     if (!window.confirm(`Resolve the active alert for ${device.device_code}? This should only be done once the reported condition is confirmed cleared.`)) {
       return;
     }
-    try {
-      await supabase
-        .from('alert_events')
-        .update({ resolved_at: new Date().toISOString() })
-        .eq('id', device.activeAlert.id);
-      fetchData();
-    } catch (err) {
-      console.error('Error resolving alert:', err);
-    }
+    // Goes through transition_incident: the database validates the change and records who closed it and when.
+    const result = await transitionIncident(supabase, device.activeAlert.id, 'resolved');
+    if (!result.ok) window.alert(result.message);
+    if (result.ok || result.refresh) fetchData();
   };
 
   const filterOptions = [
