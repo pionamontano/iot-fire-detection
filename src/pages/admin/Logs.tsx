@@ -186,7 +186,7 @@ export const Logs = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="flex flex-col gap-1">
           <h2 className="text-[#1C1B1B] font-extrabold text-[40px] leading-9 tracking-[-0.019em]">
-            System Audit Log
+            System Log
           </h2>
           <p className="text-[#5B403D] text-base leading-6 mt-2 max-w-[600px]">
             Track system activity through a chronological record of events, alerts, and user actions.

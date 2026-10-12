@@ -20,7 +20,7 @@ export const ResidentLayout = () => {
   const navItems = [
     { name: 'Dashboard', path: '/home', icon: LayoutDashboard },
     { name: 'Alert Settings', path: '/home/settings', icon: BellRing },
-    { name: 'Device Registration', path: '/home/devices', icon: Cpu },
+    { name: 'Device Information', path: '/home/devices', icon: Cpu },
     { name: 'System Log', path: '/home/logs', icon: FileText },
   ];
 
