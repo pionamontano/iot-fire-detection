@@ -54,66 +54,26 @@ serve(async (req: Request) => {
       });
     }
 
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    if (!resendApiKey) {
-      return new Response(JSON.stringify({ error: 'Email service configuration missing' }), {
+    const { error: insertError } = await supabaseAdmin
+      .from('support_requests')
+      .insert({
+        user_id: user.id,
+        category,
+        message,
+        contact_email: user.email ?? null,
+        contact_phone: user.phone || user.user_metadata?.phone || profile.contact_number || null,
+        role_at_request: profile.role,
+      });
+
+    if (insertError) {
+      console.error('Support request insert error:', insertError);
+      return new Response(JSON.stringify({ error: insertError.message }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
       });
     }
 
-    const escapeHtml = (value: string) =>
-      value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-
-    const userRole = profile?.role;
-    const userEmail = user?.email || 'No email registered';
-    const userPhone = user?.phone || user?.user_metadata?.phone || 'No phone registered';
-
-    const emailPayload: Record<string, unknown> = {
-      from: 'AgapSense Support <onboarding@resend.dev>',
-      to: ['agapsense@gmail.com'],
-      subject: `[Admin Support] ${category} - ${user?.id}`,
-      html: `
-        <h3>BFP Support Request</h3>
-        <p><strong>Category:</strong> ${escapeHtml(category)}</p>
-        <p><strong>User ID:</strong> ${user?.id}</p>
-        <p><strong>Role:</strong> ${userRole || 'BFP Responder'}</p>
-        <p><strong>Contact Email:</strong> ${escapeHtml(userEmail)}</p>
-        <p><strong>Contact Phone:</strong> ${escapeHtml(userPhone)}</p>
-        <p><strong>Message:</strong></p>
-        <p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>
-      `,
-    };
-
-    if (user?.email) {
-      emailPayload.reply_to = user.email;
-    }
-
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${resendApiKey}`
-      },
-      body: JSON.stringify(emailPayload)
-    });
-
-    const resData = await res.json();
-
-    if (!res.ok) {
-      console.error('Resend API error:', resData);
-      return new Response(JSON.stringify({ error: resData }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      });
-    }
-
-    return new Response(JSON.stringify({ success: true, data: resData }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });

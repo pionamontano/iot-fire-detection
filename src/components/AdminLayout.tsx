@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users,  Settings, Cpu, LogOut, Menu, X, BarChart3, FileText } from 'lucide-react';
+import { LayoutDashboard, Users,  Settings, Cpu, LogOut, Menu, X, BarChart3, FileText, LifeBuoy } from 'lucide-react';
 import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
@@ -24,6 +24,7 @@ export const AdminLayout: React.FC = () => {
     { name: 'Device Registration', path: '/admin/devices', icon: Cpu },
     { name: 'System Overview', path: '/admin/alerts', icon: BarChart3 },
     { name: 'System Log', path: '/admin/logs', icon: FileText },
+    { name: 'Support Requests', path: '/admin/support', icon: LifeBuoy },
   ];
 
   const secondaryNavItems = [

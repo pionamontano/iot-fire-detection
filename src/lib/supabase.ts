@@ -47,6 +47,23 @@ export interface RegistrationRequest {
   status: ProfileStatus;
 }
 
+export interface SupportRequest {
+  id: string;
+  user_id: string;
+  category: string;
+  message: string;
+  contact_email: string | null;
+  contact_phone: string | null;
+  role_at_request: Role | null;
+  status: 'open' | 'resolved';
+  admin_notes: string | null;
+  reviewed_by: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  // Merged from profiles join
+  full_name: string;
+}
+
 export interface Device {
   id: string;
   device_code: string;

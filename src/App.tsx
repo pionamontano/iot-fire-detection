@@ -23,6 +23,7 @@ import { Devices } from './pages/admin/Devices';
 import { Users } from './pages/admin/Users';
 import { Alerts } from './pages/admin/Alerts';
 import { Logs } from './pages/admin/Logs';
+import { SupportRequests } from './pages/admin/SupportRequests';
 import { InteractiveMap } from './pages/admin/InteractiveMap';
 import { Settings } from './pages/admin/Settings';
 
@@ -70,6 +71,7 @@ function App() {
               <Route path="/admin/users" element={<Users />} />
               <Route path="/admin/alerts" element={<Alerts />} />
               <Route path="/admin/logs" element={<Logs />} />
+              <Route path="/admin/support" element={<SupportRequests />} />
               <Route path="/admin/settings/security" element={<Settings />} />
             </Route>
           </Route>

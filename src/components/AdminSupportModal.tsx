@@ -43,11 +43,20 @@ export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, on
       });
 
       if (error) {
-        throw error;
+        // supabase-js only gives a generic "non-2xx status code" message here.
+        // The real reason is in the response body, so pull it out if possible.
+        let detail = '';
+        try {
+          const body = await error.context?.json();
+          detail = body?.error?.message || body?.error || '';
+        } catch {
+          // response body wasn't JSON or already consumed; fall back to generic message
+        }
+        throw new Error(detail || error.message);
       }
 
       if (data && data.error) {
-        throw new Error(data.error);
+        throw new Error(data.error?.message || data.error);
       }
 
       setSuccessMsg('Support request sent to the administrator. We will review your account shortly.');
