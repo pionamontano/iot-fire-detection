@@ -1,7 +1,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const x = enc.encode(a), y = enc.encode(b);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
+  return diff === 0;
+}
+
 serve(async (req) => {
+  // verify_jwt is off (Telegram can't send one), so authenticate the caller via
+  // the secret_token registered with setWebhook. Fail closed if it isn't configured.
+  const expectedSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
+  if (!expectedSecret) {
+    console.error("Missing TELEGRAM_WEBHOOK_SECRET.");
+    return new Response("Internal Server Error", { status: 500 });
+  }
+  const providedSecret = req.headers.get('X-Telegram-Bot-Api-Secret-Token') ?? '';
+  if (!timingSafeEqual(providedSecret, expectedSecret)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   try {
     const update = await req.json();
 
@@ -11,7 +33,7 @@ serve(async (req) => {
 
       const userId = textParts.length > 1 ? textParts[1] : null;
 
-      if (userId) {
+      if (userId && UUID_RE.test(userId)) {
         const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
