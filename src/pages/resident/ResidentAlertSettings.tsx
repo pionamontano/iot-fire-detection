@@ -202,7 +202,7 @@ const handleConnectTelegram = async () => {
           <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]"></span>
           <span className="text-[10px] font-bold uppercase tracking-[0.1em]">System Security Configuration</span>
         </div>
-        <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Edit Alert Thresholds</h1>
+        <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Alert Settings</h1>
         <p className="text-sm text-[#52525B] leading-relaxed mt-2">
           Configure precision trigger points for environmental hazards. These parameters define the transition between operational telemetry and emergency protocols.
         </p>
