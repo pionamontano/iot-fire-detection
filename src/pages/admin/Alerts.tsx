@@ -59,6 +59,11 @@ export const Alerts = () => {
   // device_id -> latest on_battery (spec HW-1.5.2/SW-2.4.4 — previously
   // this indicator existed only on Resident/Responder views, never Admin)
   const [batteryByDevice, setBatteryByDevice] = useState<Record<string, boolean>>({});
+  // device_id -> assigned resident's full_name. The "Owner Name" column
+  // used to show devices.label (an admin-set free-text field, editable via
+  // "Rename Device" below) which can drift from the actual resident account
+  // on the device — this is the name the resident portal actually shows.
+  const [residentNameByDevice, setResidentNameByDevice] = useState<Record<string, string>>({});
 
   // New states for functionality
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -71,7 +76,7 @@ export const Alerts = () => {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [devicesRes, alertsRes, batteryRes] = await Promise.all([
+    const [devicesRes, alertsRes, batteryRes, residentsRes] = await Promise.all([
       supabase.from('devices').select<string, Device>(DEVICE_COLUMNS).order('created_at', { ascending: false }),
       supabase.from('alert_events').select('*, devices(device_code, label, location_desc)').order('triggered_at', { ascending: false }),
       // Latest readings across devices, to derive each device's current
@@ -81,6 +86,13 @@ export const Alerts = () => {
         .select('device_id, on_battery, recorded_at')
         .order('recorded_at', { ascending: false })
         .limit(300),
+      // Resident assigned to each device (profiles.device_id is unique per
+      // resident — see 20260917040000_prevent_duplicate_device_assignment.sql —
+      // so there's at most one row per device_id here).
+      supabase.from('profiles')
+        .select('device_id, full_name')
+        .eq('role', 'resident')
+        .not('device_id', 'is', null),
     ]);
 
     // A failed read must be visible, not look like an empty fleet.
@@ -94,6 +106,13 @@ export const Alerts = () => {
         if (!(r.device_id in latestByDevice)) latestByDevice[r.device_id] = r.on_battery;
       }
       setBatteryByDevice(latestByDevice);
+    }
+    if (residentsRes.data) {
+      const nameByDevice: Record<string, string> = {};
+      for (const p of residentsRes.data as { device_id: string; full_name: string }[]) {
+        nameByDevice[p.device_id] = p.full_name;
+      }
+      setResidentNameByDevice(nameByDevice);
     }
     setLoading(false);
   }, []);
@@ -117,10 +136,16 @@ export const Alerts = () => {
     const alertSub = supabase.channel('sysoverview_alerts')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'alert_events' }, fetchData)
       .subscribe();
+    // So a resident's device (re)assignment in admin/Users.tsx is reflected
+    // here without waiting on an unrelated device/alert change.
+    const profileSub = supabase.channel('sysoverview_profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchData)
+      .subscribe();
 
     return () => {
       supabase.removeChannel(deviceSub);
       supabase.removeChannel(alertSub);
+      supabase.removeChannel(profileSub);
     };
   }, [fetchData]);
 
@@ -330,9 +355,25 @@ export const Alerts = () => {
                             </span>
                           </td>
                           <td className="px-5 py-4 align-top">
-                            <span className="text-[#1C1B1B] text-xs font-bold block max-w-[120px] leading-tight">
-                              {device.label}
-                            </span>
+                            {residentNameByDevice[device.id] ? (
+                              <>
+                                <span className="text-[#1C1B1B] text-xs font-bold block max-w-[120px] leading-tight">
+                                  {residentNameByDevice[device.id]}
+                                </span>
+                                <span className="text-[#A1A1AA] text-[10px] block max-w-[120px] leading-tight mt-0.5">
+                                  {device.label}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-[#1C1B1B] text-xs font-bold block max-w-[120px] leading-tight">
+                                  {device.label}
+                                </span>
+                                <span className="text-[#A1A1AA] text-[10px] block max-w-[120px] leading-tight mt-0.5">
+                                  Unassigned
+                                </span>
+                              </>
+                            )}
                           </td>
                           <td className="px-5 py-4 align-top">
                             <span className="text-[#5B403D] text-xs block max-w-[150px] leading-tight">
