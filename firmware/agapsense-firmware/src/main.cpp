@@ -141,7 +141,7 @@ void setup() {
     Serial.begin(DEBUG_BAUD);
     delay(500);
     Serial.println("\n============================================================");
-    Serial.println("  Bantay Apoy — IoT Fire Detection Node  v2.0");
+    Serial.println("  Bantay Apoy — IoT Fire Detection Node  v" FIRMWARE_VERSION);
     Serial.println("============================================================");
 #endif
 
@@ -228,7 +228,7 @@ void loop() {
             LOG("Grace period expired. Launching Config Portal...");
             WiFiManager wm;
             wm.setConfigPortalTimeout(180);
-            if (!wm.startConfigPortal("ESP-Config-AP")) {
+            if (!wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD)) {
                 LOG("Portal failed or timed out. Restarting...");
                 delay(3000);
                 ESP.restart();
