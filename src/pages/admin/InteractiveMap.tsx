@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
@@ -104,6 +104,8 @@ export const InteractiveMap = () => {
   const [hideOffline, setHideOffline] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'fires' | 'faults'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const markerRefs = useRef<Record<string, L.Marker | null>>({});
 
   useEffect(() => {
     fetchData();
@@ -181,6 +183,16 @@ export const InteractiveMap = () => {
     return true;
   });
 
+  // Clicking a feed card locates that device on the map: clear filters that
+  // could be hiding its marker (offline toggle, stale search text), then
+  // hand off to MapFocusController to fly to it and open its popup.
+  const handleFeedCardClick = (deviceId: string | null | undefined) => {
+    if (!deviceId) return;
+    setHideOffline(false);
+    setSearchQuery('');
+    setSelectedDeviceId(deviceId);
+  };
+
   return (
     <div className="flex w-full h-full relative overflow-hidden bg-[#E5E2E1]" style={{ isolation: 'isolate' }}>
       {loadError && (
@@ -202,6 +214,12 @@ export const InteractiveMap = () => {
           zoomControl={false}
         >
           <MapBoundsUpdater devices={displayedDevices} />
+          <MapFocusController
+            selectedDeviceId={selectedDeviceId}
+            devices={displayedDevices}
+            markerRefs={markerRefs}
+            onDone={() => setSelectedDeviceId(null)}
+          />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -215,11 +233,12 @@ export const InteractiveMap = () => {
             const activeAlertForDevice = activeAlerts.find(a => a.device_id === device.id);
 
             return (
-              <Marker 
-                key={device.id} 
+              <Marker
+                key={device.id}
                 position={[device.latitude as number, device.longitude as number]}
                 icon={iconCache[status]}
                 opacity={markerOpacity(device.location.kind)}
+                ref={(el) => { markerRefs.current[device.id] = el; }}
               >
                 <Popup className="custom-popup" closeButton={false} minWidth={240}>
                   <div className="flex flex-col bg-white/70 backdrop-blur-md rounded-lg overflow-hidden border border-[#DC2626]/30 shadow-xl">
@@ -355,8 +374,23 @@ export const InteractiveMap = () => {
               title = 'Resolved';
             }
 
+            const deviceId = alert.device_id;
+            const isSelected = !!deviceId && selectedDeviceId === deviceId;
+
             return (
-              <div key={alert.id} className={`${bgClass} ${borderClass} rounded-lg p-4 shadow-sm relative transition-opacity ${isResolved ? 'opacity-60' : 'opacity-100'}`}>
+              <div
+                key={alert.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleFeedCardClick(deviceId)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleFeedCardClick(deviceId);
+                  }
+                }}
+                className={`${bgClass} ${borderClass} rounded-lg p-4 shadow-sm relative transition-all cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${isResolved ? 'opacity-60' : 'opacity-100'} ${isSelected ? 'ring-2 ring-[#00799C]' : ''}`}
+              >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
                     <Activity className={`w-3 h-3 ${iconClass}`} />
@@ -418,8 +452,49 @@ const FilterBtn = ({ label, active, onClick }: { label: string, active: boolean,
   </button>
 );
 
+// Flies to a device selected from the Live Alert Feed and opens its popup.
+// Runs on the "done" of a transient selection (the caller clears
+// selectedDeviceId after this fires so re-clicking the same card works).
+const MapFocusController = ({
+  selectedDeviceId,
+  devices,
+  markerRefs,
+  onDone,
+}: {
+  selectedDeviceId: string | null;
+  devices: DeviceOnMap[];
+  markerRefs: React.MutableRefObject<Record<string, L.Marker | null>>;
+  onDone: () => void;
+}) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!selectedDeviceId) return;
+    const device = devices.find(d => d.id === selectedDeviceId);
+    if (device && isValidCoordinate(device.latitude, device.longitude)) {
+      map.flyTo([device.latitude as number, device.longitude as number], 17, { duration: 1 });
+      const timer = setTimeout(() => {
+        markerRefs.current[selectedDeviceId]?.openPopup();
+        onDone();
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+    onDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDeviceId]);
+  return null;
+};
+
 const MapBoundsUpdater = ({ devices }: { devices: Device[] }) => {
   const map = useMap();
+  // `devices` is a freshly filtered array on every parent render (e.g. every
+  // useNowTick tick, or the re-render 600ms after a feed-card click), so
+  // depending on it directly re-fits bounds constantly and cancels any
+  // in-progress flyTo from MapFocusController. Depend on a string of actual
+  // positions instead, which only changes when a device's coordinates do.
+  const positionsKey = devices
+    .filter(d => d.latitude != null && d.longitude != null)
+    .map(d => `${d.id}:${d.latitude},${d.longitude}`)
+    .join('|');
   useEffect(() => {
     const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);
     if (validDevices.length > 0) {
@@ -428,6 +503,7 @@ const MapBoundsUpdater = ({ devices }: { devices: Device[] }) => {
     } else {
       map.flyTo(DEFAULT_CENTER, DEFAULT_ZOOM, { duration: 1.5 });
     }
-  }, [devices, map]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positionsKey, map]);
   return null;
 };
