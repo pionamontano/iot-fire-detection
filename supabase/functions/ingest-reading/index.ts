@@ -168,6 +168,26 @@ serve(async (req: Request) => {
     const hasCachedCoords =
       isValidNumber(latitude) && isValidNumber(longitude) && !(latitude === 0 && longitude === 0);
 
+    // Owner decision D6.1: auto-resolve requires 2 consecutive below-threshold readings (matching the
+    // firmware's own CLEAR debounce) and never closes an incident a responder already has in hand.
+    // Fetch the prior reading before inserting the current one so the comparison is "last two readings".
+    const coThreshold   = device.co_threshold   ?? Infinity;
+    const tempThreshold = device.temp_threshold  ?? Infinity;
+    const isBelowThresholds = (co: number, temp: number) => co < coThreshold && temp < tempThreshold;
+
+    const { data: previousReading } = await supabaseAdmin
+      .from('sensor_readings')
+      .select('co_ppm, temp_celsius, sensor_ready')
+      .eq('device_id', device.id)
+      .order('recorded_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const canAutoResolve =
+      sensor_ready && isBelowThresholds(co_ppm, temp_celsius) &&
+      !!previousReading?.sensor_ready &&
+      isBelowThresholds(previousReading.co_ppm, previousReading.temp_celsius);
+
     // 4. Batch async database writes
     const writePromises: Promise<any>[] = [
       // Insert sensor reading — coordinates are stored whenever a real fix (live or
@@ -195,21 +215,16 @@ serve(async (req: Request) => {
       }).eq('id', device.id),
     ];
 
-    // 5. Auto-resolution check (strictly below threshold to avoid boundary flapping)
-    const coThreshold   = device.co_threshold   ?? Infinity;
-    const tempThreshold = device.temp_threshold  ?? Infinity;
-
-    const isStrictlyBelowThresholds =
-      co_ppm   < coThreshold &&
-      temp_celsius < tempThreshold;
-
-    if (sensor_ready && isStrictlyBelowThresholds) {
+    // 5. Auto-resolution check: only an 'active' (unacknowledged) incident may be auto-closed. Once a
+    // responder has acknowledged or is responding, only a person can close it via transition_incident().
+    if (canAutoResolve) {
       writePromises.push(
         supabaseAdmin
           .from('alert_events')
           // Set both sides of the lifecycle explicitly; the lifecycle guard trigger also normalises them.
-          .update({ resolved_at: nowIso, incident_status: 'resolved' })
+          .update({ resolved_at: nowIso, incident_status: 'resolved', resolution_source: 'device' })
           .eq('device_id', device.id)
+          .eq('incident_status', 'active')
           .is('resolved_at', null)
       );
     }
