@@ -80,6 +80,10 @@ export interface Device {
   local_ip: string | null;
   latitude: number | null;
   longitude: number | null;
+  firmware_version: string | null;
+  firmware_url: string | null;
+  firmware_md5: string | null;
+  firmware_version_reported: string | null;
 }
 
 export interface SensorReading {

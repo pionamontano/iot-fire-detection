@@ -15,6 +15,16 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // ?device_id= query param the firmware also sends is informational
 // only (it's actually the human-readable DEVICE_ID string, not the
 // UUID) - it is not used for authentication.
+//
+// Also carries firmware_version/firmware_url/firmware_md5: the
+// firmware compares firmware_version against its compiled-in
+// FIRMWARE_VERSION and, on a mismatch, downloads firmware_url and
+// flashes itself (OTA) over the same HTTPS path. firmware_url
+// should point at a file in Supabase Storage; leave firmware_url
+// and firmware_version null to opt a device out. firmware_md5
+// (hex, 32 chars) is optional — when set, the firmware verifies it
+// before activating the new image, so set it to the .bin's actual
+// MD5 or leave it null to skip that check.
 // =============================================================
 
 const corsHeaders = {
@@ -43,7 +53,7 @@ serve(async (req: Request) => {
 
     const { data: device, error: deviceError } = await supabaseAdmin
       .from('devices')
-      .select('id, co_threshold, temp_threshold, bfp_contact, is_active')
+      .select('id, co_threshold, temp_threshold, bfp_contact, is_active, firmware_version, firmware_url, firmware_md5')
       .eq('api_key', deviceKey)
       .maybeSingle();
 
@@ -70,6 +80,9 @@ serve(async (req: Request) => {
         temp_alert_c: device.temp_threshold,
         owner_number: ownerProfile?.contact_number || '',
         bfp_number: device.bfp_contact || '',
+        firmware_version: device.firmware_version || '',
+        firmware_url: device.firmware_url || '',
+        firmware_md5: device.firmware_md5 || '',
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

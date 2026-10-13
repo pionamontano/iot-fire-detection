@@ -1,5 +1,18 @@
 // ============================================================
-// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM  (v2.3)
+// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM, OTA  (v2.5)
+//
+// Changes from v2.4 (this file):
+//  [24] postTelemetry() now includes firmware_version (compiled-in
+//       FIRMWARE_VERSION) so ingest-reading can record what a device
+//       is actually running — the admin UI compares this against the
+//       target firmware_version it set, instead of assuming an OTA
+//       push succeeded just because it was requested.
+//
+// Changes from v2.3 (this file):
+//  [23] performOtaUpdate(): HTTPS OTA via Update.h, triggered from
+//       fetchRemoteConfig() when firmware_version differs from the
+//       compiled-in FIRMWARE_VERSION. Wi-Fi only, gated to
+//       alertTier == CLEAR so a live alert is never interrupted.
 //
 // Changes from v2.2 (this file):
 //  [18] alert_event_id parsed from trigger-alert response and stored
@@ -51,6 +64,7 @@
 #include <WiFiManager.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <Update.h>
 #include <esp_task_wdt.h>
 
 #if DEBUG_MODE
@@ -190,7 +204,8 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
           "\"rssi\":%d,"
           "\"on_battery\":%s,"
           "\"sensor_ready\":%s,"
-          "\"mq7_phase\":\"%s\""
+          "\"mq7_phase\":\"%s\","
+          "\"firmware_version\":\"%s\""
         "}",
         DEVICE_ID,
         sd.co_ppm, sd.temperature_c,
@@ -199,7 +214,8 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
         batteryMv, rssi,
         on_battery      ? "true" : "false",
         sd.sensor_ready ? "true" : "false",
-        mq7Phase
+        mq7Phase,
+        FIRMWARE_VERSION
     );
     return httpsPost(ENDPOINT_INGEST, payload);
 }
@@ -324,8 +340,130 @@ int postSmsStatus(const char* role, bool success, const char* alertEventId) {
     return httpsPost(ENDPOINT_CONFIRM_SMS, payload);
 }
 
+// ── OTA Firmware Update ─────────────────────────────────────
+// Downloads firmware_url (an ESP32 .bin in Supabase Storage) and
+// flashes it via the built-in Update library. Only ever reached
+// from fetchRemoteConfig(), i.e. only over Wi-Fi, never over the
+// SIM800 GSM fallback, and only while alertTier == CLEAR. The
+// whole download+flash runs on the connectivity task, blocking
+// the alert FSM (Step 4 of connectivityUpdate) for its duration —
+// alertTier == CLEAR only guarantees no *existing* alert is live
+// when the download starts, not that one can't start mid-download.
+// So sensorData/sensorMtx (when passed — null at boot, where no
+// alert FSM is running yet) are polled every chunk: a raw
+// isTier1()/isTier2() threshold crossing aborts the OTA immediately
+// and returns control to connectivityUpdate within one chunk
+// interval, so the normal debounced FSM picks the reading up on
+// its next tick instead of waiting out the whole transfer.
+// esp_task_wdt_reset() is fed every chunk since Update.write()
+// does not yield long enough on its own for a multi-hundred-KB
+// image under WDT_TIMEOUT_S. On success this never returns —
+// ESP.restart() reboots into the new image.
+//
+// expectedMd5 (hex, 32 chars; may be empty to skip) is checked by
+// Update.end() against the downloaded image — HTTPS only proves
+// the bytes came from Supabase, not that they're the firmware
+// actually built, so this catches a corrupted transfer or a wrong/
+// unexpected binary sitting at firmware_url before it's activated.
+static bool performOtaUpdate(const char* url, const char* expectedMd5, ConnectivityCtx* ctx,
+                              SensorData* sensorData, SemaphoreHandle_t sensorMtx) {
+    if (!url || !url[0]) return false;
+
+    WiFiClientSecure client;
+    client.setCACert(SUPABASE_ROOT_CA);
+    client.setTimeout(10);
+
+    HTTPClient http;
+    if (!http.begin(client, url)) {
+        CLOG("OTA: http.begin failed");
+        return false;
+    }
+
+    int code = http.GET();
+    int len  = http.getSize();
+    if (code != 200 || len <= 0) {
+        CLOG("OTA: fetch failed (code=%d len=%d)", code, len);
+        http.end();
+        return false;
+    }
+
+    if (!Update.begin(len)) {
+        CLOG("OTA: Update.begin failed: %s", Update.errorString());
+        http.end();
+        return false;
+    }
+
+    if (expectedMd5 && strlen(expectedMd5) == 32 && !Update.setMD5(expectedMd5)) {
+        CLOG("OTA: setMD5 rejected '%s' — aborting", expectedMd5);
+        Update.abort();
+        http.end();
+        return false;
+    }
+
+    CLOG("OTA: downloading %d bytes...", len);
+    WiFiClient* stream = http.getStreamPtr();
+    uint8_t buf[1024];
+    int written = 0;
+    uint32_t lastData = millis();
+
+    while (http.connected() && written < len) {
+        size_t avail = stream->available();
+        if (avail) {
+            int n = stream->readBytes(buf, min(avail, sizeof(buf)));
+            if (n <= 0) break;
+            if (Update.write(buf, n) != (size_t)n) {
+                CLOG("OTA: Update.write failed: %s", Update.errorString());
+                Update.abort();
+                http.end();
+                return false;
+            }
+            written += n;
+            lastData = millis();
+        }
+        esp_task_wdt_reset();
+
+        if (ctx && sensorData && sensorMtx &&
+            xSemaphoreTake(sensorMtx, 0) == pdTRUE) {
+            SensorData sd = *sensorData;
+            xSemaphoreGive(sensorMtx);
+            if (sd.sensor_ready && sd.co_valid && sd.temp_valid &&
+                (isTier1(sd.co_ppm, sd.temperature_c, ctx) ||
+                 isTier2(sd.co_ppm, sd.temperature_c, ctx))) {
+                CLOG("OTA: aborting — sensor reading crossed alert threshold mid-download");
+                Update.abort();
+                http.end();
+                return false;
+            }
+        }
+
+        if (millis() - lastData > HTTP_TIMEOUT_MS) {
+            CLOG("OTA: stream stalled — aborting");
+            Update.abort();
+            http.end();
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+    http.end();
+
+    if (written != len) {
+        CLOG("OTA: incomplete download (written=%d/%d)", written, len);
+        Update.abort();
+        return false;
+    }
+    if (!Update.end()) {
+        CLOG("OTA: Update.end failed: %s", Update.errorString());
+        return false;
+    }
+
+    CLOG("OTA: flashed %d bytes — rebooting", written);
+    delay(500);
+    ESP.restart();
+    return true; // unreachable
+}
+
 // ── Remote Config Fetch ────────────────────────────────────
-bool fetchRemoteConfig(ConnectivityCtx* ctx) {
+bool fetchRemoteConfig(ConnectivityCtx* ctx, SensorData* sensorData, SemaphoreHandle_t sensorMtx) {
     WiFiClientSecure client;
     client.setCACert(SUPABASE_ROOT_CA);
     client.setTimeout(10);
@@ -370,6 +508,20 @@ bool fetchRemoteConfig(ConnectivityCtx* ctx) {
     CLOG("Config loaded: CO>=%.0f Temp>=%.0f Owner=%s BFP=%s",
          ctx->co_alert_ppm, ctx->temp_alert_c,
          ctx->ownerNumber, ctx->bfpNumber);
+
+    const char* fwVersion = doc["firmware_version"] | "";
+    const char* fwUrl     = doc["firmware_url"]     | "";
+    const char* fwMd5     = doc["firmware_md5"]     | "";
+    if (fwVersion[0] && fwUrl[0] &&
+        strcmp(fwVersion, FIRMWARE_VERSION) != 0 &&
+        ctx->alertTier == AlertTier::CLEAR) {
+        CLOG("OTA: new firmware %s available (current %s)",
+             fwVersion, FIRMWARE_VERSION);
+        performOtaUpdate(fwUrl, fwMd5, ctx, sensorData, sensorMtx);
+        // performOtaUpdate() only returns on failure — defaults above
+        // are already applied, so just carry on with this cycle.
+    }
+
     return true;
 }
 
@@ -478,7 +630,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
     if (ctx->deviceState == DeviceState::ONLINE &&
         now - ctx->lastConfigFetch_ms >= CONFIG_FETCH_INTERVAL_MS) {
         ctx->lastConfigFetch_ms = now;
-        fetchRemoteConfig(ctx);
+        fetchRemoteConfig(ctx, sensorData, sensorMtx);
     }
 
     // ── Step 3: Snapshot shared data under mutexes ──────────

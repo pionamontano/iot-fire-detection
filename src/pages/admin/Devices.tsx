@@ -29,7 +29,14 @@ export const Devices = () => {
   // Editing an already-registered device's thresholds + BFP contact
   // (spec HW-1.1.5 / SW-2.5.5) — previously only settable at creation.
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
-  const [editForm, setEditForm] = useState({ temp_threshold: 65, co_threshold: 200, bfp_contact: '' });
+  const [editForm, setEditForm] = useState({
+    temp_threshold: 65,
+    co_threshold: 200,
+    bfp_contact: '',
+    firmware_version: '',
+    firmware_url: '',
+    firmware_md5: '',
+  });
   const [savingEdit, setSavingEdit] = useState(false);
 
   // API key regeneration (spec SW-2.6.3) — shown once, right after
@@ -89,6 +96,9 @@ export const Devices = () => {
       temp_threshold: device.temp_threshold,
       co_threshold: device.co_threshold,
       bfp_contact: device.bfp_contact || '',
+      firmware_version: device.firmware_version || '',
+      firmware_url: device.firmware_url || '',
+      firmware_md5: device.firmware_md5 || '',
     });
     setNewApiKey(null);
     setKeyCopied(false);
@@ -124,6 +134,13 @@ export const Devices = () => {
 
   const saveEditDevice = async () => {
     if (!editingDevice) return;
+
+    const md5 = editForm.firmware_md5.trim();
+    if (md5 && !/^[0-9a-fA-F]{32}$/.test(md5)) {
+      alert('Firmware MD5 must be exactly 32 hex characters, or left blank.');
+      return;
+    }
+
     setSavingEdit(true);
     const { error } = await supabase
       .from('devices')
@@ -131,6 +148,9 @@ export const Devices = () => {
         temp_threshold: editForm.temp_threshold,
         co_threshold: editForm.co_threshold,
         bfp_contact: editForm.bfp_contact || null,
+        firmware_version: editForm.firmware_version.trim() || null,
+        firmware_url: editForm.firmware_url.trim() || null,
+        firmware_md5: md5 || null,
       })
       .eq('id', editingDevice.id);
 
@@ -422,7 +442,7 @@ export const Devices = () => {
               </button>
             </div>
             <p className="text-[#5B403D] text-sm mb-6">
-              Update alert thresholds and BFP contact for <span className="font-bold">{editingDevice.device_code}</span>. Changes take effect on the device's next config sync.
+              Update alert thresholds, BFP contact, and firmware target for <span className="font-bold">{editingDevice.device_code}</span>. Changes take effect on the device's next config sync.
             </p>
 
             <div className="flex flex-col gap-6">
@@ -458,6 +478,61 @@ export const Devices = () => {
                   className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
                 />
               </FormField>
+
+              {/* Firmware (OTA) — target version/URL/MD5 the admin sets vs
+                  what the device last reported actually running (via its
+                  telemetry POST) — see firmware/agapsense-firmware's
+                  connectivity.cpp fetchRemoteConfig()/performOtaUpdate(). */}
+              <div className="border-t border-[#E5E2E1] pt-6 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#5B403D] font-semibold text-[11px] tracking-[0.05em] uppercase">
+                    Firmware (OTA)
+                  </span>
+                  <span className="text-[11px] font-mono text-[#5B403D]">
+                    Running: {editingDevice.firmware_version_reported || 'Unknown'}
+                  </span>
+                </div>
+
+                {editForm.firmware_version &&
+                  editForm.firmware_version !== (editingDevice.firmware_version_reported || '') && (
+                  <div className="flex items-center gap-1.5 text-[#F59E0B]">
+                    <AlertTriangle size={12} />
+                    <span className="text-[10px] font-bold">
+                      Device hasn't reported running the target version yet — it syncs on its next config poll.
+                    </span>
+                  </div>
+                )}
+
+                <FormField label="Target Firmware Version">
+                  <input
+                    type="text"
+                    placeholder="e.g. 2.1.0 — leave blank to opt the device out of OTA"
+                    value={editForm.firmware_version}
+                    onChange={e => setEditForm({ ...editForm, firmware_version: e.target.value })}
+                    className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+                  />
+                </FormField>
+
+                <FormField label="Firmware Binary URL">
+                  <input
+                    type="text"
+                    placeholder="https://<project>.supabase.co/storage/v1/object/public/firmware/....bin"
+                    value={editForm.firmware_url}
+                    onChange={e => setEditForm({ ...editForm, firmware_url: e.target.value })}
+                    className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+                  />
+                </FormField>
+
+                <FormField label="Firmware MD5 (optional)">
+                  <input
+                    type="text"
+                    placeholder="32-char hex — leave blank to skip the integrity check"
+                    value={editForm.firmware_md5}
+                    onChange={e => setEditForm({ ...editForm, firmware_md5: e.target.value })}
+                    className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+                  />
+                </FormField>
+              </div>
 
               {/* API Key Regeneration (spec SW-2.6.3) */}
               <div className="border-t border-[#E5E2E1] pt-6">
