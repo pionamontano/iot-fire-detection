@@ -11,6 +11,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { ResidentHomeSkeleton } from '../../components/SkeletonLoaders';
 import { resolveDeviceLocation, markerOpacity } from '../../lib/location';
+import { formatLastSeen } from '../../lib/deviceStatus';
 import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
 
 // Icons
@@ -261,13 +262,15 @@ export const ResidentHome = () => {
     return d.toDateString() === now.toDateString();
   });
 
-  // Build chart bars from recent readings (last 24 readings)
-  const historyBars = recentReadings.length > 0
-    ? recentReadings.map(r => Math.min(100, Math.max(5, (r.temp_celsius / 100) * 100))).reverse()
-    : [15, 18, 20, 22, 24, 26, 25, 23, 22, 20, 19, 18, 17]; // fallback visual
+  // Build chart bars from recent readings (last 24 readings). No fallback
+  // sample data - an empty history renders an explicit empty state instead
+  // of a fabricated curve that could be mistaken for real sensor history.
+  const historyBars = recentReadings.map(r => Math.min(100, Math.max(5, (r.temp_celsius / 100) * 100))).reverse();
 
-  // Calculate uptime (based on last_seen_at freshness)
-  const uptimeStr = isOnline ? '99.98%' : 'OFFLINE';
+  // "Last seen" is derived from real telemetry (last_seen_at); there is no
+  // real uptime-percentage tracking anywhere in this app, so this no longer
+  // shows a fabricated number.
+  const lastSeenStr = formatLastSeen(device.last_seen_at).toUpperCase();
 
   // Status tiles only reflect the latest reading while the device is actually
   // reporting. With no reading (or a stale one from an offline device) they show
@@ -360,10 +363,10 @@ export const ResidentHome = () => {
           icon={BellRing}
           active={todayAlerts.length === 0} 
         />
-        <StatCard 
-          title="SYSTEM UPTIME" 
-          value={uptimeStr} 
-          icon={Clock} 
+        <StatCard
+          title="LAST SEEN"
+          value={isOnline ? 'Online' : lastSeenStr}
+          icon={Clock}
           active={isOnline}
         />
       </div>
@@ -458,14 +461,20 @@ export const ResidentHome = () => {
               </div>
             </div>
             <div className="h-40 flex items-end justify-between gap-1 mt-8 mb-4">
-              {historyBars.map((val, i) => (
-                <div 
-                  key={i} 
-                  className={`w-full rounded-t-sm transition-all duration-300 ${val > 60 ? 'bg-[#FECACA]' : 'bg-[#E0F2FE]'}`} 
-                  style={{ height: `${val}%` }}
-                  title={recentReadings.length > 0 ? `${recentReadings[recentReadings.length - 1 - i]?.temp_celsius?.toFixed(1) ?? '—'}°C` : ''}
-                />
-              ))}
+              {recentReadings.length > 0 ? (
+                historyBars.map((val, i) => (
+                  <div
+                    key={i}
+                    className={`w-full rounded-t-sm transition-all duration-300 ${val > 60 ? 'bg-[#FECACA]' : 'bg-[#E0F2FE]'}`}
+                    style={{ height: `${val}%` }}
+                    title={`${recentReadings[recentReadings.length - 1 - i]?.temp_celsius?.toFixed(1) ?? '—'}°C`}
+                  />
+                ))
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-[#A1A1AA] text-xs font-bold uppercase tracking-wider">
+                  No reading history yet
+                </div>
+              )}
             </div>
             <div className="flex justify-between text-[9px] font-bold text-[#A1A1AA] uppercase">
               <span>{recentReadings.length > 0 ? new Date(recentReadings[recentReadings.length - 1]?.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '00:00'}</span>

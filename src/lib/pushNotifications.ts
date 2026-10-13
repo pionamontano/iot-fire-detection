@@ -70,20 +70,28 @@ export const subscribeUserToPush = async () => {
     applicationServerKey,
   });
 
-  // Send subscription to backend
+  // Send subscription to backend. The browser-side subscription above can
+  // succeed even when this fails, which would otherwise leave the UI
+  // reporting "Enabled" for a subscription the backend never saved (and so
+  // could never actually deliver to).
   const { data: session } = await supabase.auth.getSession();
-  if (session?.session?.access_token) {
-    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-push`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.session.access_token}`,
-      },
-      body: JSON.stringify({
-        action: 'subscribe',
-        subscription: subscription.toJSON(),
-      }),
-    });
+  if (!session?.session?.access_token) {
+    throw new Error('Not signed in.');
+  }
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-push`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.session.access_token}`,
+    },
+    body: JSON.stringify({
+      action: 'subscribe',
+      subscription: subscription.toJSON(),
+    }),
+  });
+  if (!res.ok) {
+    await subscription.unsubscribe().catch(() => {});
+    throw new Error('Failed to save push subscription on the server.');
   }
 
   return subscription;
@@ -97,7 +105,7 @@ export const unsubscribeUserFromPush = async () => {
 
     const { data: session } = await supabase.auth.getSession();
     if (session?.session?.access_token) {
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-push`, {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-push`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -108,6 +116,9 @@ export const unsubscribeUserFromPush = async () => {
           subscription: subscription.toJSON(),
         }),
       });
+      if (!res.ok) {
+        throw new Error('Unsubscribed locally, but the server failed to remove the saved subscription.');
+      }
     }
   }
 };

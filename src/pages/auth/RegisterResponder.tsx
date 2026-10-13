@@ -16,28 +16,35 @@ export const RegisterResponder = () => {
   });
   
   const [error, setError] = useState<string | null>(null);
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
+  const [contactNumberError, setContactNumberError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '').slice(0, 11);
     setFormData({ ...formData, contactNumber: value });
+    if (contactNumberError) setContactNumberError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setConfirmPasswordError(null);
+    setContactNumberError(null);
+
+    if (formData.password !== formData.confirmPassword) {
+      setConfirmPasswordError("Passwords do not match");
+      return;
+    }
+
+    if (formData.contactNumber && !/^09\d{9}$/.test(formData.contactNumber)) {
+      setContactNumberError("Invalid phone format. Must be 11 digits starting with 09");
+      return;
+    }
+
     setLoading(true);
-
     try {
-      if (formData.password !== formData.confirmPassword) {
-        throw new Error("Passwords do not match");
-      }
-
-      if (formData.contactNumber && !/^09\d{9}$/.test(formData.contactNumber)) {
-        throw new Error("Invalid phone format. Must be 11 digits starting with 09");
-      }
-
       const { data, error: registerError } = await supabase.functions.invoke('register', {
         body: {
           full_name: formData.fullName,
@@ -164,10 +171,11 @@ export const RegisterResponder = () => {
                     value={formData.contactNumber}
                     onChange={handlePhoneChange}
                     maxLength={11}
-                    className="w-full pl-11 pr-4 py-3 bg-[#FCF9F8] border border-[#E5E2E1] rounded-lg text-sm text-[#231918] placeholder-[#8D7F7D] focus:outline-none focus:border-[#00799C] focus:ring-1 focus:ring-[#00799C] transition-colors"
+                    className={`w-full pl-11 pr-4 py-3 bg-[#FCF9F8] border rounded-lg text-sm text-[#231918] placeholder-[#8D7F7D] focus:outline-none focus:ring-1 transition-colors ${contactNumberError ? 'border-[#DC2626] focus:border-[#DC2626] focus:ring-[#DC2626]' : 'border-[#E5E2E1] focus:border-[#00799C] focus:ring-[#00799C]'}`}
                     placeholder="09XXXXXXXXX"
                   />
                 </div>
+                {contactNumberError && <p className="text-[#DC2626] text-xs font-bold mt-1.5 ml-1">{contactNumberError}</p>}
               </div>
 
               <div>
@@ -238,11 +246,12 @@ export const RegisterResponder = () => {
                       required
                       minLength={6}
                       value={formData.confirmPassword}
-                      onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
-                      className="w-full pl-11 pr-4 py-3 bg-[#FCF9F8] border border-[#E5E2E1] rounded-lg text-sm text-[#231918] placeholder-[#8D7F7D] focus:outline-none focus:border-[#00799C] focus:ring-1 focus:ring-[#00799C] transition-colors"
+                      onChange={(e) => { setFormData({...formData, confirmPassword: e.target.value}); if (confirmPasswordError) setConfirmPasswordError(null); }}
+                      className={`w-full pl-11 pr-4 py-3 bg-[#FCF9F8] border rounded-lg text-sm text-[#231918] placeholder-[#8D7F7D] focus:outline-none focus:ring-1 transition-colors ${confirmPasswordError ? 'border-[#DC2626] focus:border-[#DC2626] focus:ring-[#DC2626]' : 'border-[#E5E2E1] focus:border-[#00799C] focus:ring-[#00799C]'}`}
                       placeholder="••••••••"
                     />
                   </div>
+                  {confirmPasswordError && <p className="text-[#DC2626] text-xs font-bold mt-1.5 ml-1">{confirmPasswordError}</p>}
                 </div>
               </div>
             </div>

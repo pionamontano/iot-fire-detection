@@ -22,6 +22,10 @@ type LogRow = {
   location: string;
   status: TelemetryStatus;
   isCritical: boolean;
+  tempCelsius: number | null;
+  coPpm: number | null;
+  resolvedAt: string | null;
+  acknowledgedAt: string | null;
 };
 
 const statusConfig: Record<TelemetryStatus, { color: string; dot: string }> = {
@@ -47,6 +51,8 @@ export const ResponderAlertLogs = () => {
   const [dateFilter, setDateFilter] = useState('Last 24 Hours');
   const [deviceFilter, setDeviceFilter] = useState('All Devices');
   const [devices, setDevices] = useState<Device[]>([]);
+  const [avgResponseSeconds, setAvgResponseSeconds] = useState<number | null>(null);
+  const [selectedLog, setSelectedLog] = useState<LogRow | null>(null);
   const itemsPerPage = 15;
 
   useEffect(() => {
@@ -86,12 +92,29 @@ export const ResponderAlertLogs = () => {
           location,
           status,
           isCritical: status === 'FIRE ALERT (CRITICAL)',
+          tempCelsius: alert.temp_celsius ?? null,
+          coPpm: alert.co_ppm ?? null,
+          resolvedAt: alert.resolved_at ?? null,
+          acknowledgedAt: alert.acknowledged_at ?? null,
         });
       });
 
       // Sort by timestamp desc
       allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setLogs(allLogs);
+
+      // Real average response time (trigger -> first acknowledgement), not a
+      // placeholder - computed only from alerts that have actually been
+      // acknowledged, so it's honest about there being no data yet.
+      const responseDurations = (alertsRes.data || [])
+        .filter((a: any) => a.acknowledged_at)
+        .map((a: any) => (new Date(a.acknowledged_at).getTime() - new Date(a.triggered_at).getTime()) / 1000)
+        .filter((seconds: number) => seconds >= 0);
+      setAvgResponseSeconds(
+        responseDurations.length > 0
+          ? responseDurations.reduce((sum: number, s: number) => sum + s, 0) / responseDurations.length
+          : null
+      );
     } catch (err) {
       console.error('Error fetching alert logs:', err);
     }
@@ -106,8 +129,15 @@ export const ResponderAlertLogs = () => {
     if (deviceFilter !== 'All Devices') {
       filtered = filtered.filter(l => l.deviceName === deviceFilter);
     }
+    if (dateFilter !== 'All Time') {
+      const rangeMs = dateFilter === 'Last 24 Hours' ? 24 * 60 * 60 * 1000
+        : dateFilter === 'Last 7 Days' ? 7 * 24 * 60 * 60 * 1000
+        : 30 * 24 * 60 * 60 * 1000; // Last 30 Days
+      const cutoff = Date.now() - rangeMs;
+      filtered = filtered.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    }
     return filtered;
-  }, [logs, statusFilter, deviceFilter]);
+  }, [logs, statusFilter, deviceFilter, dateFilter]);
 
   const totalPages = Math.ceil(filteredLogs.length / itemsPerPage) || 1;
   const paginatedLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -266,7 +296,12 @@ export const ResponderAlertLogs = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button className="text-[#A1A1AA] hover:text-[#1C1B1B] transition-colors">
+                        <button
+                          onClick={() => setSelectedLog(log)}
+                          title="View details"
+                          aria-label={`View details for ${log.deviceName} at ${dateStr} ${timeStr}`}
+                          className="text-[#A1A1AA] hover:text-[#1C1B1B] transition-colors"
+                        >
                           <Eye className="w-4 h-4" />
                         </button>
                       </td>
@@ -358,13 +393,74 @@ export const ResponderAlertLogs = () => {
             <Zap className="w-6 h-6 text-[#0284C7]" />
           </div>
           <div>
-            <p className="text-[#1C1B1B] font-extrabold text-3xl leading-none">42.1s</p>
+            <p className="text-[#1C1B1B] font-extrabold text-3xl leading-none">
+              {avgResponseSeconds !== null ? `${avgResponseSeconds.toFixed(1)}s` : '—'}
+            </p>
             <p className="text-[#0284C7] font-bold text-[10px] tracking-[0.1em] uppercase mt-1">
               Avg Response Time
             </p>
           </div>
         </div>
       </div>
+
+      {/* Log Detail Modal */}
+      {selectedLog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setSelectedLog(null)}
+        >
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[#1C1B1B] font-extrabold text-xl">Alert Detail</h3>
+              <button onClick={() => setSelectedLog(null)} className="text-[#A1A1AA] hover:text-[#1C1B1B] transition-colors" aria-label="Close">
+                &times;
+              </button>
+            </div>
+            <div className="flex flex-col gap-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-[#5B403D] font-bold uppercase text-[10px] tracking-wider">Device</span>
+                <span className="text-[#1C1B1B] font-bold">{selectedLog.deviceName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#5B403D] font-bold uppercase text-[10px] tracking-wider">Location</span>
+                <span className="text-[#1C1B1B]">{selectedLog.location}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#5B403D] font-bold uppercase text-[10px] tracking-wider">Status</span>
+                <span className="font-bold" style={{ color: statusConfig[selectedLog.status].color }}>{selectedLog.status}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#5B403D] font-bold uppercase text-[10px] tracking-wider">Triggered</span>
+                <span className="text-[#1C1B1B]">{new Date(selectedLog.timestamp).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#5B403D] font-bold uppercase text-[10px] tracking-wider">Temperature</span>
+                <span className="text-[#1C1B1B]">{selectedLog.tempCelsius !== null ? `${selectedLog.tempCelsius}°C` : '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#5B403D] font-bold uppercase text-[10px] tracking-wider">CO Level</span>
+                <span className="text-[#1C1B1B]">{selectedLog.coPpm !== null ? `${selectedLog.coPpm}ppm` : '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#5B403D] font-bold uppercase text-[10px] tracking-wider">Acknowledged</span>
+                <span className="text-[#1C1B1B]">{selectedLog.acknowledgedAt ? new Date(selectedLog.acknowledgedAt).toLocaleString() : 'Not yet'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#5B403D] font-bold uppercase text-[10px] tracking-wider">Resolved</span>
+                <span className="text-[#1C1B1B]">{selectedLog.resolvedAt ? new Date(selectedLog.resolvedAt).toLocaleString() : 'Not yet'}</span>
+              </div>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="px-4 py-2 text-sm font-bold text-white bg-[#1C1B1B] hover:bg-black rounded transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

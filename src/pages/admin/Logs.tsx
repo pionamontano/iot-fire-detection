@@ -384,8 +384,8 @@ export const Logs = () => {
             <h4 className="text-[#A1A1AA] font-bold text-[10px] tracking-[0.1em] uppercase mb-1">
               System Throttling
             </h4>
-            <p className="text-[#1C1B1B] font-extrabold text-3xl leading-none">
-              Nominal
+            <p className="text-[#A1A1AA] font-extrabold text-lg leading-none">
+              Not Monitored
             </p>
           </div>
         </div>
@@ -405,8 +405,8 @@ export const Logs = () => {
             <h4 className="text-[#A1A1AA] font-bold text-[10px] tracking-[0.1em] uppercase mb-1">
               Retention Health
             </h4>
-            <p className="text-[#1C1B1B] font-extrabold text-3xl leading-none">
-              99.8%
+            <p className="text-[#A1A1AA] font-extrabold text-lg leading-none">
+              Not Tracked
             </p>
           </div>
         </div>
