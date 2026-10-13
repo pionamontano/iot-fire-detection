@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
@@ -10,7 +10,7 @@ import { getDeviceStatus } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
 import { formatAge } from '../../lib/location';
 import { DeviceMap, MapLegend } from '../../components/DeviceMap';
-import { MAP_READING_COLUMNS, toMapDevices, formatTemp } from '../../lib/mapDevices';
+import { MAP_READING_COLUMNS, toMapDevices, formatTemp, countByStatus } from '../../lib/mapDevices';
 import type { DeviceWithReadings } from '../../lib/mapDevices';
 
 export const InteractiveMap = () => {
@@ -25,6 +25,7 @@ export const InteractiveMap = () => {
   const [filterType, setFilterType] = useState<'all' | 'fires' | 'warnings'>('all');
   // Short-lived message over the map, e.g. when a feed card's device has no
   // position to fly to (otherwise the click looks like it did nothing).
+  const mapAreaRef = useRef<HTMLDivElement>(null);
   const [mapNotice, setMapNotice] = useState<string | null>(null);
   useEffect(() => {
     if (!mapNotice) return;
@@ -104,6 +105,8 @@ export const InteractiveMap = () => {
   });
   const locatedDevices = mapDevices.filter(d => d.location.kind !== 'unavailable');
   const shownCount = displayedDevices.filter(d => d.location.kind !== 'unavailable').length;
+  const legendCounts = countByStatus(mapDevices, activeAlerts, now);
+  const offlineCount = legendCounts.offline ?? 0;
 
   // Filter feed alerts. Tier 2 = dual-sensor confirmed fire; Tier 1 =
   // single-sensor warning (spec SW-2.3.1). Tier 1 was previously labeled
@@ -119,6 +122,10 @@ export const InteractiveMap = () => {
   // to it and open its popup. No position → say so instead of doing nothing.
   const handleFeedCardClick = (alert: AlertEvent) => {
     setSelectedAlertId(alert.id);
+    // Phones stack the feed under the map; bring the map back into view so
+    // the result of the click (fly-to or notice) is actually visible.
+    const mapTop = mapAreaRef.current?.getBoundingClientRect().top;
+    if (mapTop != null && mapTop < 0) mapAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     const device = mapDevices.find(d => d.id === alert.device_id);
     if (!device) {
       setMapNotice('This alert\'s device is no longer registered, so it can\'t be shown on the map.');
@@ -142,7 +149,7 @@ export const InteractiveMap = () => {
         </div>
       )}
       {/* ─── MAP LAYER ─── */}
-      <div className="h-[65vh] min-h-[360px] md:h-full md:min-h-0 md:flex-1 relative" style={{ zIndex: 0 }}>
+      <div ref={mapAreaRef} className="h-[65vh] min-h-[360px] md:h-full md:min-h-0 md:flex-1 relative" style={{ zIndex: 0 }}>
         <DeviceMap
           devices={displayedDevices}
           activeAlerts={activeAlerts}
@@ -153,25 +160,35 @@ export const InteractiveMap = () => {
         >
           {/* ─── FLOATING OVERLAYS (TOP) ─── */}
           {/* Search lives in the header only; the map just has the offline filter. */}
-          <div className="absolute top-3 left-3 right-14 sm:top-6 sm:left-6 sm:right-auto sm:max-w-[420px] flex flex-col items-start gap-2 pointer-events-none" style={{ zIndex: 1000 }}>
-            <div className={`${OVERLAY_CARD} flex items-center gap-1 h-[42px] p-1 pointer-events-auto`}>
-              <OverlayToggle label="Hide Offline" active={hideOffline} onClick={() => setHideOffline(!hideOffline)} />
-              {hideOffline && (
-                <>
-                  <span className="px-2 text-[10px] font-bold uppercase tracking-widest text-[#52525B] whitespace-nowrap" role="status">
-                    {shownCount} of {locatedDevices.length} devices shown
-                  </span>
-                  <button
-                    onClick={() => setHideOffline(false)}
-                    aria-label="Clear filter"
-                    title="Clear filter"
-                    className="h-full aspect-square flex items-center justify-center rounded text-[#71717A] hover:bg-gray-100 hover:text-[#18181B] transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </>
-              )}
+          <div className="absolute top-3 left-3 right-3 sm:top-6 sm:left-6 sm:right-auto sm:max-w-[420px] flex flex-col items-start gap-2 pointer-events-none" style={{ zIndex: 1000 }}>
+            {/* Offline devices: an explicit Show / Hide choice, so the current
+                state is always readable (a lone "Hide Offline" button didn't
+                say whether offline pins were currently on the map). */}
+            <div className={`${OVERLAY_CARD} flex flex-wrap items-center gap-x-2 gap-y-1 p-1 pl-3 pointer-events-auto`}>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#52525B] whitespace-nowrap">
+                Offline devices ({offlineCount})
+              </span>
+              <div role="group" aria-label="Offline devices" className="flex items-center h-8 rounded bg-[#F4F4F5] p-0.5">
+                <OverlayToggle label="Show" active={!hideOffline} onClick={() => setHideOffline(false)} />
+                <OverlayToggle label="Hide" active={hideOffline} onClick={() => setHideOffline(true)} />
+              </div>
             </div>
+
+            {hideOffline && (
+              <div role="status" className={`${OVERLAY_CARD} flex items-center gap-2 pl-3 pr-1 py-1 text-xs text-[#52525B] pointer-events-auto`}>
+                <span className="flex-1">
+                  {shownCount === 0
+                    ? <><strong className="text-[#18181B]">All {locatedDevices.length} devices are offline</strong>, so no pins are shown.</>
+                    : <>Showing <strong className="text-[#18181B]">{shownCount} of {locatedDevices.length}</strong> devices · {offlineCount} offline hidden</>}
+                </span>
+                <button
+                  onClick={() => setHideOffline(false)}
+                  className="h-7 px-2 flex items-center gap-1 rounded text-[10px] font-extrabold uppercase tracking-widest text-[#18181B] hover:bg-gray-100 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" /> Show all
+                </button>
+              </div>
+            )}
 
             {mapNotice && (
               <div role="status" className={`${OVERLAY_CARD} flex items-start gap-2 px-3 py-2 text-xs text-[#18181B] pointer-events-auto`}>
@@ -195,7 +212,7 @@ export const InteractiveMap = () => {
 
           {/* ─── LEGEND OVERLAY (BOTTOM LEFT) ─── */}
           <div className="absolute bottom-3 left-3 right-14 sm:bottom-6 sm:left-6 sm:right-auto pointer-events-auto" style={{ zIndex: 1000 }}>
-            <MapLegend />
+            <MapLegend counts={legendCounts} />
           </div>
         </DeviceMap>
       </div>
@@ -259,7 +276,7 @@ export const InteractiveMap = () => {
                     handleFeedCardClick(alert);
                   }
                 }}
-                className={`${bgClass} ${borderClass} rounded-lg p-4 shadow-sm relative transition-shadow cursor-pointer hover:shadow-md ${isSelected ? 'ring-2 ring-[#00799C]' : ''}`}
+                className={`${bgClass} ${borderClass} rounded-lg p-4 shadow-sm relative transition-shadow cursor-pointer hover:shadow-md ${isSelected ? 'ring-2 ring-inset ring-[#18181B]' : ''}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
@@ -310,13 +327,13 @@ export const InteractiveMap = () => {
 // Shared look for everything floating over the map (toolbar, notices, legend).
 const OVERLAY_CARD = 'bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg';
 
-// Same pressed/unpressed style as the feed's FilterBtn so all toggles on the
+// Same active (black) style as the feed's FilterBtn so all toggles on the
 // page read as one control family.
 const OverlayToggle = ({ label, active, onClick }: { label: string, active: boolean, onClick: () => void }) => (
   <button
     onClick={onClick}
     aria-pressed={active}
-    className={`px-3 h-full rounded text-[10px] font-extrabold uppercase tracking-widest transition-colors ${active ? 'bg-[#18181B] text-white' : 'text-[#71717A] hover:bg-gray-100'}`}
+    className={`px-3 h-full min-w-[52px] rounded text-[10px] font-extrabold uppercase tracking-widest transition-colors ${active ? 'bg-[#18181B] text-white shadow-sm' : 'text-[#52525B] hover:bg-white hover:text-[#18181B]'}`}
   >
     {label}
   </button>

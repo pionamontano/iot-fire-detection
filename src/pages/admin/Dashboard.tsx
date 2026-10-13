@@ -20,7 +20,7 @@ import type { DeviceStatus } from '../../lib/deviceStatus';
 import { StatusBadge, StatusCountPill } from '../../components/StatusBadge';
 import { useNowTick } from '../../hooks/useNowTick';
 import { DeviceMap, MapLegend } from '../../components/DeviceMap';
-import { MAP_READING_COLUMNS, toMapDevices } from '../../lib/mapDevices';
+import { MAP_READING_COLUMNS, toMapDevices, countByStatus } from '../../lib/mapDevices';
 import type { DeviceWithReadings } from '../../lib/mapDevices';
 
 // Plain counts — no zero-padding ("00", "002"), which read as codes.
@@ -178,7 +178,7 @@ export const Dashboard = () => {
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <MapLegend />
+              <MapLegend counts={countByStatus(mapDevices, activeAlerts, now)} />
               {devicesWithoutLocation.length > 0 && (
                 <span className="text-[11px] text-[#B45309]">
                   No location for {devicesWithoutLocation.map(d => d.device_code).join(', ')}
