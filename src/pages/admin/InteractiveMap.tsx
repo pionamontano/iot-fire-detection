@@ -39,14 +39,19 @@ export const InteractiveMap = () => {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
 
-  // ?device=<id> (from the header search's "Show on map") focuses that
-  // device once the devices have loaded.
+  // ?device=<id> (header search "Show on map", Dashboard rows and activity)
+  // focuses that device once the devices have loaded.
   const [searchParams, setSearchParams] = useSearchParams();
   const focusParam = searchParams.get('device');
   useEffect(() => {
     if (!focusParam || devices.length === 0) return;
     setHideOffline(false);
-    setSelectedDeviceId(focusParam);
+    const target = toMapDevices(devices, Date.now()).find(d => d.id === focusParam);
+    if (target?.location.kind === 'unavailable') {
+      setMapNotice(`${target.device_code} has no known location yet, so it can't be shown on the map.`);
+    } else {
+      setSelectedDeviceId(focusParam);
+    }
     const next = new URLSearchParams(searchParams);
     next.delete('device');
     setSearchParams(next, { replace: true });
