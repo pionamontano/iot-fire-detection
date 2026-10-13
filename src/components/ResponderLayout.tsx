@@ -42,7 +42,7 @@ export const ResponderLayout: React.FC = () => {
         {/* Right Section */}
         <div className="flex items-center gap-3 md:gap-6">
           {/* Search */}
-          <HeaderSearchBar devicesPath="/responder/devices" />
+          <HeaderSearchBar devicesPath="/responder/alerts" />
 
           {/* Notification Bell */}
           <NotificationDropdown alertsPath="/responder/alerts" />

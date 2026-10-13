@@ -242,18 +242,19 @@ export const InteractiveMap = () => {
                         <div className="bg-white/50 border border-gray-100 rounded p-2">
                           <span className="block text-[9px] font-bold text-[#A1A1AA] uppercase">Temp</span>
                           <span className="block font-extrabold text-sm text-[#DC2626]">
-                            {activeAlertForDevice ? activeAlertForDevice.temp_celsius : 24.5}°C
+                            {activeAlertForDevice ? `${activeAlertForDevice.temp_celsius}°C` : '—'}
                           </span>
                         </div>
                         <div className="bg-white/50 border border-gray-100 rounded p-2">
                           <span className="block text-[9px] font-bold text-[#A1A1AA] uppercase">CO Level</span>
                           <span className="block font-extrabold text-sm text-[#DC2626]">
-                            {activeAlertForDevice ? activeAlertForDevice.co_ppm : 15}ppm
+                            {activeAlertForDevice ? `${activeAlertForDevice.co_ppm}ppm` : '—'}
                           </span>
                         </div>
                       </div>
 
-                      <button 
+                      <button
+                        onClick={() => navigate('/admin/alerts')}
                         className={`w-full py-2 rounded text-[10px] font-extrabold uppercase tracking-widest text-white mt-1 transition-colors ${status === 'alert' ? 'bg-[#AF101A] hover:bg-[#8F0C14]' : 'bg-[#00799C] hover:bg-[#005F7B]'}`}
                       >
                         {status === 'alert' ? 'Dispatch Details' : 'View Sensor Log'}
@@ -284,31 +285,12 @@ export const InteractiveMap = () => {
             
             {/* Toggles */}
             <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg flex items-center h-[42px] overflow-hidden p-1">
-              <button 
+              <button
                 onClick={() => setHideOffline(!hideOffline)}
                 className={`px-4 h-full rounded text-xs font-bold uppercase transition-colors ${hideOffline ? 'bg-[#AF101A] text-white' : 'text-[#AF101A] hover:bg-[#AF101A]/10'}`}
               >
                 Hide Offline
               </button>
-              <div className="w-px h-6 bg-gray-200 mx-1"></div>
-              <button className="px-4 h-full rounded text-xs font-bold uppercase text-[#71717A] hover:bg-gray-100 transition-colors">
-                Clustering: ON
-              </button>
-            </div>
-          </div>
-
-          {/* Top Right Latency Widget */}
-          <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg p-2 px-4 flex items-center gap-3 pointer-events-auto h-[42px]">
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] leading-tight">Signal</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] leading-tight">Latency</span>
-            </div>
-            <span className="font-semibold text-sm text-[#005F7B]">42ms</span>
-            <div className="flex gap-0.5 items-end h-3">
-              <div className="w-1 h-1.5 bg-[#005F7B] rounded-full"></div>
-              <div className="w-1 h-2 bg-[#005F7B] rounded-full"></div>
-              <div className="w-1 h-2.5 bg-[#005F7B] rounded-full"></div>
-              <div className="w-1 h-3 bg-gray-300 rounded-full"></div>
             </div>
           </div>
         </div>

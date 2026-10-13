@@ -49,7 +49,7 @@ export const ResidentLayout = () => {
           </div>
 
           {/* Notification Bell */}
-          <NotificationDropdown alertsPath="/home/settings" />
+          <NotificationDropdown alertsPath="/home/logs" />
 
           {/* User Menu */}
           <UserMenuDropdown settingsPath="/account" />

@@ -134,10 +134,12 @@ export const Alerts = () => {
       if (!device.is_active) {
         updates.last_seen_at = new Date().toISOString();
       }
-      await supabase.from('devices').update(updates).eq('id', device.id);
+      const { error } = await supabase.from('devices').update(updates).eq('id', device.id);
+      if (error) throw error;
       fetchData();
     } catch (err) {
       console.error('Error toggling power:', err);
+      window.alert('Failed to update device power state: ' + (err as Error).message);
     }
   };
 
@@ -149,13 +151,17 @@ export const Alerts = () => {
   const saveEditLabel = async () => {
     if (editingDevice && editLabelValue.trim() !== '') {
       try {
-        await supabase.from('devices').update({ label: editLabelValue.trim() }).eq('id', editingDevice.id);
+        const { error } = await supabase.from('devices').update({ label: editLabelValue.trim() }).eq('id', editingDevice.id);
+        if (error) throw error;
         fetchData();
+        setEditingDevice(null);
       } catch (err) {
         console.error('Error updating label:', err);
+        window.alert('Failed to update device label: ' + (err as Error).message);
       }
+    } else {
+      setEditingDevice(null);
     }
-    setEditingDevice(null);
   };
 
   // Manual resolve fallback (spec SW-2.1.6) — e.g. for a device that went

@@ -296,6 +296,9 @@ export const Users = () => {
     r.email.toLowerCase().includes(searchTerm.toLowerCase())
   ));
 
+  // profiles has no email column (confirmed in 20260717000000_init.sql) - email
+  // only exists on registration_requests, which is why that table's own search
+  // can match on it below but this one can only ever match on name.
   const activeUsers = users.filter(u => u.status === 'approved' && (
     u.full_name.toLowerCase().includes(searchTerm.toLowerCase())
   ));
@@ -370,7 +373,7 @@ export const Users = () => {
                 <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search by name or email..."
+                  placeholder={activeTab === 'active' ? 'Search by name...' : 'Search by name or email...'}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-[#E5E2E1] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] text-sm"

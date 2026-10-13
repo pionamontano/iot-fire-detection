@@ -3,6 +3,8 @@ import { supabase } from '../../lib/supabase';
 import { Save, Clock, ShieldCheck, Activity, Unlock, Bell, BellOff, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { SettingsFormSkeleton } from '../../components/SkeletonLoaders';
 import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
+import { LoadErrorBanner } from '../../components/LoadErrorBanner';
+import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 
 
 
@@ -10,6 +12,7 @@ export const Settings = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
 
   // Manual unlock for a login-rate-limit lockout (spec SW-2.6.2's
   // "requiring Administrator intervention") — the lockout itself is
@@ -59,6 +62,9 @@ export const Settings = () => {
   const fetchSettings = async () => {
     setLoading(true);
     const { data, error } = await supabase.from('settings').select('*');
+    // A failed read must be visible, not look like an empty settings table
+    // whose fields just happen to fall back to their hardcoded defaults.
+    setLoadError(error ? { message: error.message, code: error.code } : null);
     if (!error && data) {
       const settingsMap: Record<string, string> = {};
       data.forEach(s => {
@@ -89,6 +95,10 @@ export const Settings = () => {
   };
 
   const handleSave = async () => {
+    if (loadError) {
+      alert("Can't save: the current settings failed to load, so saving now would overwrite them with these fields' fallback defaults. Retry loading first.");
+      return;
+    }
     setSaving(true);
     const updates = Object.keys(settings).map(key => ({
       key,
@@ -107,6 +117,9 @@ export const Settings = () => {
 
   return (
     <div className="max-w-4xl space-y-8">
+      {loadError && (
+        <LoadErrorBanner what="settings" error={loadError} onRetry={fetchSettings} />
+      )}
       {/* Page Header */}
       <div>
         <p className="text-primary-dark font-bold text-xs tracking-[0.05em] uppercase mb-1">System Security Configuration</p>
