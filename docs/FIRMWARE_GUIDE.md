@@ -290,7 +290,77 @@ pio device monitor      # serial monitor at 115200 baud
 
 ---
 
-## 8. Troubleshooting
+## 8. OTA Firmware Updates (over Wi-Fi)
+
+Nodes can update themselves without a USB cable. The download uses HTTPS (not plain
+HTTP) and is validated against the same `SUPABASE_ROOT_CA` as every other request, so
+the `.bin` must be served from the Supabase domain.
+
+### 8.1 How it works
+
+1. At boot and then every `CONFIG_FETCH_INTERVAL_MS` (10 min), the node calls
+   `get-device-config`, which returns `firmware_version`, `firmware_url` and
+   `firmware_md5` for that device.
+2. If `firmware_version` and `firmware_url` are set and the version **differs** from the
+   compiled-in `FIRMWARE_VERSION`, the node downloads the image. This only starts while
+   the alert tier is `CLEAR`.
+3. The image is streamed into the inactive app slot with `Update.h`. If a sensor reading
+   crosses an alert threshold mid-download, the OTA is aborted so the alert FSM can run.
+   The download is also aborted if the stream stalls for `HTTP_TIMEOUT_MS`.
+4. `Update.end()` verifies the MD5 (when provided), then the node reboots into the new image.
+5. The next telemetry POST carries `firmware_version`, so the admin Devices page shows
+   what the node is really running rather than what was requested.
+
+OTA is Wi-Fi only; it is never attempted over the SIM800L.
+
+### 8.2 Releasing an update
+
+1. **Bump the version** in `src/config.h`, e.g. `#define FIRMWARE_VERSION "2.1.1"`.
+   The node updates only when this differs from the target version, so every release
+   needs a new string.
+2. **Build:** `pio run`. The file to publish is `.pio/build/esp32dev/firmware.bin`
+   (not `bootloader.bin` or `partitions.bin`).
+3. **Checksum:** `md5sum .pio/build/esp32dev/firmware.bin` (32 hex characters).
+4. **Upload** `firmware.bin` to a Supabase Storage bucket and copy its public (or signed)
+   `https://<project-ref>.supabase.co/storage/v1/...` URL.
+5. **Publish in the admin Devices page:**
+   - Add a firmware release (version, URL, MD5). This feeds the fleet-wide "latest" record.
+   - Set the target on **one test device** first (edit device -> firmware version, URL, MD5).
+   - Once that device reports the new version, use the push-to-all action to roll it out
+     to every active device. Nodes pick it up on their next config sync (within 10 minutes).
+
+To opt a device out of OTA, leave its `firmware_version` and `firmware_url` empty.
+
+### 8.3 Rules and cautions
+
+- **First flash is always by USB.** OTA only works on firmware that already contains it.
+- **Always set the MD5.** HTTPS proves the bytes came from Supabase, not that they are the
+  build you intended; with an empty MD5 the check is skipped.
+- **Keep an OTA-capable partition scheme.** The default scheme has two app slots; a
+  "no OTA" scheme makes `Update.begin()` fail.
+- **A bad image cannot be fixed remotely** if it boots but never reaches Wi-Fi. Always
+  test on one device before a fleet push.
+- **Keep Wi-Fi credentials and `config.h` secrets compatible** between versions; OTA
+  replaces the app image only, so saved Wi-Fi credentials in NVS survive.
+- **Not covered by the host tests.** The OTA path compiles in the simulation but is never
+  executed there; verify it on hardware.
+
+### 8.4 If an update does not apply
+
+Enable `-DDEBUG_MODE=1` and watch the serial monitor for `OTA:` lines:
+
+| Log line | Meaning |
+|---|---|
+| `OTA: fetch failed (code=... len=...)` | URL wrong or not public, or the response has no `Content-Length` |
+| `OTA: Update.begin failed` | Image too large for the slot, or no OTA partition |
+| `OTA: setMD5 rejected` | `firmware_md5` is not valid hex |
+| `OTA: aborting - sensor reading crossed alert threshold` | Expected; retried on a later config sync |
+| `OTA: stream stalled` | Network dropped mid-download |
+| `OTA: Update.end failed` | MD5 mismatch or corrupt image |
+
+---
+
+## 9. Troubleshooting
 
 | Symptom | Likely Cause |
 |---|---|
