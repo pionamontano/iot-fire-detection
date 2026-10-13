@@ -73,10 +73,10 @@ serve(async (req: Request) => {
       callerId = user.id;
       const { data: profile } = await supabaseAdmin
         .from('profiles')
-        .select('role, status')
+        .select('role, status, is_active')
         .eq('id', user.id)
         .maybeSingle();
-      callerIsAdmin = profile?.role === 'admin' && profile?.status === 'approved';
+      callerIsAdmin = profile?.role === 'admin' && profile?.status === 'approved' && profile?.is_active !== false;
     }
 
     const { userIds, title, body, icon, topic } = await req.json();

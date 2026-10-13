@@ -146,6 +146,7 @@ supabase functions deploy
 | `link-device` | Links a device to a resident profile |
 | `login` | Gatekeeper for authentication, enforcing lockout logic |
 | `manage-registration` | Admin approves/rejects user registrations |
+| `manage-user` | Admin edits, deactivates or reactivates a user |
 | `register` | Self-registration for new users |
 | `telegram-webhook` | Handles linking user's Telegram ID for notifications |
 | `trigger-alert` | Fires alerts + sends Telegram notifications |

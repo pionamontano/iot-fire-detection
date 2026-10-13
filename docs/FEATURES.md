@@ -78,6 +78,7 @@ Located in `supabase/functions/`. Functions called by the ESP32 authenticate wit
 | **`manage-registration`** | Admin | Approves or rejects a pending registration. |
 | **`create-user`** | Admin | Creates a pre-approved user directly. |
 | **`assign-device`** | Admin | Assigns / unassigns a device to a resident. |
+| **`manage-user`** | Admin | Edits a user (name, contact, address, role, login email, temporary password), deactivates / reactivates accounts (no hard delete), and lists login emails + last sign-in. |
 | **`link-device`** | Resident | Links the caller to a device by device code. |
 | **`telegram-webhook`** | Telegram | Links a user's Telegram chat ID to their profile (`/start <token>`). *No code yet sends alerts to per-user chats; alerts go to the shared station chat only.* |
 | **`register-push`** / **`send-push-notification`** | Frontend / backend | Web Push (VAPID) subscription storage and delivery. |
