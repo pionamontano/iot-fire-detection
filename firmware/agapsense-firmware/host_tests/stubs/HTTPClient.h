@@ -18,5 +18,9 @@ struct HTTPClient {
     int GET() { return run("GET", nullptr); }
     String getString() { return String(resp); }
     String errorToString(int) { return String("err"); }
+    int getSize() { return -1; }
+    bool connected() { return false; }
+    WiFiClient* getStreamPtr() { return &stream_; }
+    WiFiClient stream_;
     void end() {}
 };

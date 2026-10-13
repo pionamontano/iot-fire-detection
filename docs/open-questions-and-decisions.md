@@ -33,6 +33,7 @@ Priority: **P1** = safety or security exposure, or it determines what the baseli
 | OQ-23 | P2 | **D5.4 / D5.5 — per-user Telegram.** Proceed, defer, or drop? If dropped, should the "Link Telegram" buttons and the webhook's "You will receive fire alerts here" text be removed? | UI promises something not built (KI-24). | issue #95 | Unchanged |
 | OQ-24 | P3 | Define "system availability" and any targets (uptime, alert latency end-to-end, recovery time). | All NFR targets are NS-RA. | spec §5.6 | Not specified |
 | OQ-25 | P3 | Which auxiliary items are maintained: `seed_script.ts`, `verify2.py`, `patch_*.cjs`, `scripts/*`, Postman collection? And clean up the QA device row noted in `LIVE_TESTING_SUMMARY.md`. | Unreviewed code in the repository root may include credentials or destructive steps. | repo root | Not reviewed |
+| OQ-26 | P2 | **OTA device identity.** `DEVICE_ID`/`DEVICE_API_KEY` are compiled into the firmware image, so an OTA image is valid only for the device it was built for. Fund the fix (per-device identity in NVS via the Wi-Fi portal, shared image) now, or keep OTA to single-device/USB flashing until the fleet grows? | Fleet-wide OTA would make every node authenticate as one device; the fix touches provisioning and safety-relevant firmware and needs a hardware retest. | `connectivity.cpp`, `gsm.cpp`; `docs/FIRMWARE_GUIDE.md` 8.6 | Fleet push disabled in the admin UI; devices keep empty `firmware_url`; USB flashing |
 
 ## B. Pending decisions already tracked inside the repository
 

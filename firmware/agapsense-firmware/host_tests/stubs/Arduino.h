@@ -60,3 +60,10 @@ extern FakeUart Serial1;
 extern FakeUart Serial2;
 struct FakeSerial { template<class... A> void printf(const char*, A...) {} };
 extern FakeSerial Serial;
+
+// OTA path only (compiles; never executed by the simulation)
+#include <algorithm>
+using std::min;
+inline void vTaskDelay(int) {}
+struct EspClass { void restart() {} };
+static EspClass ESP;
