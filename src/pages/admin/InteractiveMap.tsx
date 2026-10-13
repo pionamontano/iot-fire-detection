@@ -116,19 +116,20 @@ export const InteractiveMap = () => {
   };
 
   return (
-    <div className="flex w-full h-full relative overflow-hidden bg-[#E5E2E1]" style={{ isolation: 'isolate' }}>
+    // Phones: map on top, feed below (page scrolls). md+: map fills, feed docked right.
+    <div className="flex flex-col md:flex-row w-full md:h-full relative md:overflow-hidden bg-[#E5E2E1]" style={{ isolation: 'isolate' }}>
       {loadError && (
         <div className="absolute left-1/2 top-4 z-[1100] w-[min(92%,640px)] -translate-x-1/2">
           <LoadErrorBanner what="devices and alerts" error={loadError} onRetry={fetchData} />
         </div>
       )}
       {devicesWithoutLocation.length > 0 && (
-        <div role="status" className="absolute bottom-20 left-1/2 z-[1100] w-[min(92%,640px)] -translate-x-1/2 rounded-md border border-amber-300 bg-amber-50/95 px-3 py-2 text-xs text-amber-900">
+        <div role="status" className="absolute top-20 md:top-auto md:bottom-20 left-1/2 z-[1100] w-[min(92%,640px)] -translate-x-1/2 rounded-md border border-amber-300 bg-amber-50/95 px-3 py-2 text-xs text-amber-900">
           <strong>Location unavailable for {devicesWithoutLocation.length} device{devicesWithoutLocation.length > 1 ? 's' : ''}</strong> (not shown on the map): {devicesWithoutLocation.map(d => d.device_code).join(', ')}
         </div>
       )}
       {/* ─── MAP LAYER ─── */}
-      <div className="flex-1 h-full relative" style={{ zIndex: 0 }}>
+      <div className="h-[65vh] min-h-[360px] md:h-full md:min-h-0 md:flex-1 relative" style={{ zIndex: 0 }}>
         <DeviceMap
           devices={displayedDevices}
           activeAlerts={activeAlerts}
@@ -138,17 +139,17 @@ export const InteractiveMap = () => {
           onSelectionHandled={() => setSelectedDeviceId(null)}
         >
           {/* ─── FLOATING OVERLAYS (TOP) ─── */}
-          <div className="absolute top-6 left-6 right-6 flex justify-between pointer-events-none" style={{ zIndex: 1000 }}>
-            <div className="flex gap-3 pointer-events-auto">
+          <div className="absolute top-3 left-3 right-3 sm:top-6 sm:left-6 sm:right-6 flex justify-between pointer-events-none" style={{ zIndex: 1000 }}>
+            <div className="flex flex-wrap gap-2 sm:gap-3 pointer-events-auto w-full sm:w-auto">
               {/* Search */}
-              <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg flex items-center h-[42px] px-3">
+              <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg flex items-center h-[42px] px-3 flex-1 min-w-0 sm:flex-none">
                 <Search className="w-4 h-4 text-[#A1A1AA] mr-2" />
                 <input
                   type="text"
                   placeholder="Search device ID or location..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent border-none outline-none text-sm w-56 text-[#3F3F46] placeholder:text-[#A1A1AA]"
+                  className="bg-transparent border-none outline-none text-sm w-full sm:w-56 min-w-0 text-[#3F3F46] placeholder:text-[#A1A1AA]"
                 />
               </div>
 
@@ -166,15 +167,15 @@ export const InteractiveMap = () => {
           </div>
 
           {/* ─── LEGEND OVERLAY (BOTTOM LEFT) ─── */}
-          <div className="absolute bottom-6 left-6 pointer-events-auto" style={{ zIndex: 1000 }}>
+          <div className="absolute bottom-3 left-3 right-14 sm:bottom-6 sm:left-6 sm:right-auto pointer-events-auto" style={{ zIndex: 1000 }}>
             <MapLegend />
           </div>
         </DeviceMap>
       </div>
 
       {/* ─── RIGHT PANEL: LIVE ALERT FEED ─── */}
-      <div className="w-[320px] bg-white/70 backdrop-blur-md border-l border-white/50 shadow-2xl flex flex-col relative h-full" style={{ zIndex: 1 }}>
-        <div className="p-6 pb-4 flex flex-col gap-6 shrink-0">
+      <div className="w-full md:w-[320px] md:shrink-0 bg-white/70 backdrop-blur-md border-t md:border-t-0 md:border-l border-white/50 shadow-2xl flex flex-col relative md:h-full" style={{ zIndex: 1 }}>
+        <div className="p-4 md:p-6 pb-4 flex flex-col gap-4 md:gap-6 shrink-0">
           <div className="flex items-center justify-between">
             <h2 className="text-[#18181B] font-extrabold text-sm uppercase tracking-widest">Live Alert Feed</h2>
             {/* Red only when something is actually active */}
@@ -194,7 +195,7 @@ export const InteractiveMap = () => {
         </div>
 
         {/* Feed List */}
-        <div className="flex-1 overflow-y-auto px-6 pb-6 flex flex-col gap-4">
+        <div className="md:flex-1 md:overflow-y-auto px-4 md:px-6 pb-6 flex flex-col gap-3 md:gap-4">
           {feedAlerts.map(alert => {
             const isResolved = !!alert.resolved_at;
             const isFire = alert.alert_tier === 2;
@@ -266,7 +267,7 @@ export const InteractiveMap = () => {
         </div>
 
         {/* Footer */}
-        <div className="p-6 bg-white/30 border-t border-white/50 shrink-0">
+        <div className="p-4 md:p-6 bg-white/30 border-t border-white/50 shrink-0">
           <button
             onClick={() => navigate('/admin/logs')}
             className="w-full bg-[#18181B] text-white py-3 rounded text-xs font-extrabold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-black transition-colors"

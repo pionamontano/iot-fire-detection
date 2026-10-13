@@ -90,7 +90,7 @@ export const AdminLayout: React.FC = () => {
                 </h1>
               </div>
               <div className="mt-2">
-                <span className="text-primary font-bold text-[10px] leading-[15px] tracking-[0.1em] uppercase">
+                <span className="block text-primary font-bold text-[10px] leading-4 tracking-[0.1em] uppercase">
                   smarter detection, faster response
                 </span>
               </div>

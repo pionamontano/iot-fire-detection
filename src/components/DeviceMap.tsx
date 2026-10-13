@@ -38,7 +38,7 @@ const iconCache: Record<MapStatus, L.DivIcon> = {
 };
 
 export const MapLegend = () => (
-  <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg py-2 px-4 flex flex-wrap items-center gap-x-6 gap-y-1">
+  <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg py-2 px-3 sm:px-4 flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-1">
     {(Object.keys(MAP_STATUS_STYLE) as MapStatus[]).map(s => (
       <div key={s} className="flex items-center gap-2">
         <div className="w-2 h-2 rounded-full" style={{ background: MAP_STATUS_STYLE[s].color }}></div>
@@ -245,15 +245,46 @@ const MapBoundsUpdater = ({ devices }: { devices: Device[] }) => {
     .filter(d => d.latitude != null && d.longitude != null)
     .map(d => `${d.id}:${d.latitude},${d.longitude}`)
     .join('|');
-  useEffect(() => {
+  const fit = () => {
     const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);
     if (validDevices.length > 0) {
       const bounds = L.latLngBounds(validDevices.map(d => [d.latitude as number, d.longitude as number]));
       map.fitBounds(bounds, { maxZoom: 16, padding: [30, 30] });
     } else {
-      map.flyTo(DEFAULT_CENTER, DEFAULT_ZOOM, { duration: 1.5 });
+      map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
     }
+  };
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
+
+  useEffect(() => {
+    fit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positionsKey, map]);
+
+  // Leaflet only measures its container on window resize. When the container
+  // changes size for other reasons (grid reflow after data loads, sidebar
+  // toggle, breakpoint change) the fitted view ends up off-centre and pins
+  // get clipped at the edges. Re-measure and re-fit whenever it resizes.
+  useEffect(() => {
+    const container = map.getContainer();
+    let last = `${container.clientWidth}x${container.clientHeight}`;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new ResizeObserver(() => {
+      const size = `${container.clientWidth}x${container.clientHeight}`;
+      if (size === last) return;
+      last = size;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        map.invalidateSize();
+        fitRef.current();
+      }, 150);
+    });
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      clearTimeout(timer);
+    };
+  }, [map]);
   return null;
 };
