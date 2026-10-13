@@ -4,6 +4,7 @@ import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device, FirmwareRelease } from '../../lib/supabase';
+import { isValidCoordinate } from '../../lib/location';
 import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket } from 'lucide-react';
 import { CardListSkeleton } from '../../components/SkeletonLoaders';
 
@@ -38,6 +39,9 @@ export const Devices = () => {
   // (spec HW-1.1.5 / SW-2.5.5) — previously only settable at creation.
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
   const [editForm, setEditForm] = useState({
+    location_desc: '',
+    latitude: '',
+    longitude: '',
     temp_threshold: 65,
     co_threshold: 200,
     bfp_contact: '',
@@ -172,6 +176,9 @@ export const Devices = () => {
   const openEditDevice = (device: Device) => {
     setEditingDevice(device);
     setEditForm({
+      location_desc: device.location_desc || '',
+      latitude: device.latitude != null ? String(device.latitude) : '',
+      longitude: device.longitude != null ? String(device.longitude) : '',
       temp_threshold: device.temp_threshold,
       co_threshold: device.co_threshold,
       bfp_contact: device.bfp_contact || '',
@@ -220,10 +227,39 @@ export const Devices = () => {
       return;
     }
 
+    const locationDesc = editForm.location_desc.trim();
+    if (!locationDesc) {
+      alert('Location Reference cannot be empty.');
+      return;
+    }
+
+    // Registered coordinates are the install position (not a GPS fix — see
+    // lib/location.ts), so they must either both be present and valid, or
+    // both be blank. A one-sided edit here would silently desync lat/lng.
+    const latRaw = editForm.latitude.trim();
+    const lngRaw = editForm.longitude.trim();
+    if (!!latRaw !== !!lngRaw) {
+      alert('Enter both GPS latitude and longitude, or leave both blank.');
+      return;
+    }
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    if (latRaw && lngRaw) {
+      latitude = parseFloat(latRaw);
+      longitude = parseFloat(lngRaw);
+      if (!isValidCoordinate(latitude, longitude)) {
+        alert('GPS coordinates must be valid latitude (-90 to 90) and longitude (-180 to 180) values.');
+        return;
+      }
+    }
+
     setSavingEdit(true);
     const { error } = await supabase
       .from('devices')
       .update({
+        location_desc: locationDesc,
+        latitude,
+        longitude,
         temp_threshold: editForm.temp_threshold,
         co_threshold: editForm.co_threshold,
         bfp_contact: editForm.bfp_contact || null,
@@ -632,7 +668,7 @@ export const Devices = () => {
               </button>
             </div>
             <p className="text-[#5B403D] text-sm mb-6">
-              Update alert thresholds, BFP contact, and firmware target for <span className="font-bold">{editingDevice.device_code}</span>. Changes take effect on the device's next config sync.
+              Update alert thresholds, install location, BFP contact, and firmware target for <span className="font-bold">{editingDevice.device_code}</span>. Threshold and firmware changes take effect on the device's next config sync.
             </p>
 
             <div className="flex flex-col gap-6">
@@ -668,6 +704,49 @@ export const Devices = () => {
                   className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
                 />
               </FormField>
+
+              {/* Install location — the address/label and the registered GPS fix are
+                  independent fields (lib/location.ts), so a wrong address here does
+                  not fix itself when the GPS coordinates are corrected, and vice versa. */}
+              <div className="border-t border-[#E5E2E1] pt-6 flex flex-col gap-4">
+                <span className="text-[#5B403D] font-semibold text-[11px] tracking-[0.05em] uppercase">
+                  Install Location
+                </span>
+
+                <FormField label="Location Reference">
+                  <input
+                    type="text"
+                    placeholder="e.g. Server Room 402 - East Wing"
+                    value={editForm.location_desc}
+                    onChange={e => setEditForm({ ...editForm, location_desc: e.target.value })}
+                    className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+                  />
+                </FormField>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="GPS Latitude">
+                    <input
+                      type="text"
+                      placeholder="40.7128"
+                      value={editForm.latitude}
+                      onChange={e => setEditForm({ ...editForm, latitude: e.target.value })}
+                      className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+                    />
+                  </FormField>
+                  <FormField label="GPS Longitude">
+                    <input
+                      type="text"
+                      placeholder="-74.0060"
+                      value={editForm.longitude}
+                      onChange={e => setEditForm({ ...editForm, longitude: e.target.value })}
+                      className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+                    />
+                  </FormField>
+                </div>
+                <p className="text-[10px] text-[#A1A1AA]">
+                  These are the registered install coordinates, used only when the device has no GPS fix of its own. Leave both blank to clear them.
+                </p>
+              </div>
 
               {/* Firmware (OTA) — target version/URL/MD5 the admin sets vs
                   what the device last reported actually running (via its
