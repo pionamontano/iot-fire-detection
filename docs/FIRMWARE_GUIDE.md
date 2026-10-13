@@ -331,6 +331,28 @@ OTA is Wi-Fi only; it is never attempted over the SIM800L.
 
 To opt a device out of OTA, leave its `firmware_version` and `firmware_url` empty.
 
+### 8.2a Automated build and upload (GitHub Actions)
+
+`.github/workflows/firmware-release.yml` performs steps 1-4 above. Push a tag such as
+`firmware-v2.1.1` (or run the workflow manually and enter `2.1.1`). It runs the host tests,
+generates `config.h` from `config.example.h` with the tag's version, builds with PlatformIO,
+uploads `agapsense-<version>.bin` to Supabase Storage, checks that the public URL serves
+identical bytes, and prints the version, URL and MD5 in the run summary. It never overwrites an
+existing object and never rolls anything out; you still add the release and push it from the
+admin Devices page.
+
+One-time setup:
+- Create a **public** Storage bucket named `firmware` (or set the repo variable `FIRMWARE_BUCKET`).
+- Add repository secrets: `FIRMWARE_SUPABASE_URL`, `FIRMWARE_SUPABASE_ANON_KEY`,
+  `FIRMWARE_SUPABASE_SERVICE_ROLE_KEY` (upload only; never compiled in),
+  `FIRMWARE_DEVICE_ID`, `FIRMWARE_DEVICE_API_KEY`.
+
+> **Limitation - device identity is compiled in.** `DEVICE_ID` and `DEVICE_API_KEY` are build-time
+> constants, and the backend authenticates each node by its API key. An image built once and
+> pushed to several devices makes every one of them report as the device whose key was baked in.
+> Until identity moves to per-device storage (e.g. NVS), only push an image to the single device
+> whose credentials it was built with. Never use "push to fleet" for a multi-device deployment.
+
 ### 8.3 Rules and cautions
 
 - **First flash is always by USB.** OTA only works on firmware that already contains it.
