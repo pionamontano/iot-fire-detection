@@ -68,6 +68,12 @@ const getRoleLabel = (role: string) => {
   }
 };
 
+const ROLE_OPTIONS: Option[] = [
+  { value: 'resident', title: 'Resident / Owner', detail: 'Owns a device and gets home alerts' },
+  { value: 'bfp_responder', title: 'BFP Responder', detail: 'Receives and responds to fire alerts' },
+  { value: 'admin', title: 'Administrator', detail: 'Full access to this dashboard' },
+];
+
 const RoleBadge = ({ role }: { role: string }) => (
   <span className={`${PILL} font-semibold ${ROLE_BADGE[role] ?? 'bg-gray-100 text-gray-800 border-gray-200'}`}>
     {getRoleLabel(role)}
@@ -79,6 +85,134 @@ const Avatar = ({ name }: { name: string }) => (
     {name.charAt(0).toUpperCase()}
   </div>
 );
+
+// Single-select filter chips (replaces a <select>): every option and its
+// count is visible at once, and one tap switches. Scrolls sideways on phones.
+function FilterChips<V extends string>({ label, value, onChange, options }: {
+  label: string;
+  value: V;
+  onChange: (v: V) => void;
+  options: { value: V; label: string; count: number }[];
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex gap-2 overflow-x-auto scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
+      {options.map(o => {
+        const selected = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(o.value)}
+            className={`h-9 px-3.5 rounded-full border text-sm whitespace-nowrap shrink-0 inline-flex items-center gap-2 transition-colors ${
+              selected
+                ? 'bg-primary border-primary text-white font-bold'
+                : 'bg-surface-card border-border text-text-body font-semibold hover:border-text-faint hover:text-text'
+            }`}
+          >
+            {o.label}
+            <span className={`text-xs font-bold tabular-nums ${selected ? 'text-white/80' : 'text-text-faint'}`}>{o.count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+type Option = { value: string; title: string; detail?: React.ReactNode; icon?: React.ReactNode };
+
+// Tappable radio cards (replaces a <select> inside forms and modals): shows
+// each option's details, not just its name, and works well with touch.
+const OptionList = ({ name, label, value, onChange, options }: {
+  name: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Option[];
+}) => (
+  <div role="radiogroup" aria-label={label} className="grid grid-cols-1 gap-2">
+    {options.map(o => {
+      const selected = o.value === value;
+      return (
+        <label
+          key={o.value || 'none'}
+          className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+            selected ? 'border-primary bg-surface-warm ring-1 ring-primary' : 'border-border bg-surface-card hover:border-text-faint'
+          }`}
+        >
+          <input
+            type="radio"
+            name={name}
+            value={o.value}
+            checked={selected}
+            onChange={() => onChange(o.value)}
+            className="mt-0.5 accent-[var(--color-primary)] shrink-0"
+          />
+          {o.icon}
+          <span className="min-w-0">
+            <span className="block text-sm font-bold text-text">{o.title}</span>
+            {o.detail && <span className="block text-xs text-text-warm mt-0.5">{o.detail}</span>}
+          </span>
+        </label>
+      );
+    })}
+  </div>
+);
+
+// Device chooser for the approve/assign modals: a searchable list of the
+// unassigned devices, showing code, name and installed location.
+const DevicePicker = ({ name, value, onChange, devices, noneLabel }: {
+  name: string;
+  value: string;
+  onChange: (id: string) => void;
+  devices: Device[];
+  // When set, a first "skip" option with this title (value '').
+  noneLabel?: string;
+}) => {
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const shown = devices.filter(d =>
+    d.id === value || !q || [d.device_code, d.label, d.location_desc].some(f => f?.toLowerCase().includes(q))
+  );
+  const options: Option[] = [
+    ...(noneLabel ? [{ value: '', title: noneLabel, detail: 'You can assign one later from the Approved Users tab.' }] : []),
+    ...shown.map(d => ({
+      value: d.id,
+      title: d.device_code,
+      detail: [d.label, d.location_desc].filter(Boolean).join(' · ') || undefined,
+      icon: <Cpu className="w-4 h-4 mt-0.5 text-primary-dark shrink-0" />,
+    })),
+  ];
+  return (
+    <div className="space-y-2">
+      {devices.length > 5 && (
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-faint pointer-events-none" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search code, name or location"
+            aria-label="Search devices"
+            className={`${FIELD} pl-9`}
+          />
+        </div>
+      )}
+      <div className="max-h-64 overflow-y-auto -mx-1 px-1 py-1">
+        <OptionList name={name} label="Device" value={value} onChange={onChange} options={options} />
+        {devices.length === 0 ? (
+          <p className="text-xs text-amber mt-2 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            No unassigned devices available. Register one under Device Registration.
+          </p>
+        ) : shown.length === 0 && (
+          <p className="text-xs text-text-warm mt-2">No devices match “{query}”.</p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const Identity = ({ name, sub, badge }: { name: string; sub: React.ReactNode; badge?: React.ReactNode }) => (
   <div className="flex items-center gap-3 min-w-0">
@@ -480,7 +614,6 @@ export const Users = () => {
   };
 
   const deviceById = new Map(allDevices.map(d => [d.id, d]));
-  const formatDeviceOption = (device: Device) => device.label ? `${device.device_code} - ${device.label}` : device.device_code;
 
   // Filter lists based on tab and search term
   const term = searchTerm.trim().toLowerCase();
@@ -494,14 +627,22 @@ export const Users = () => {
   // profiles has no email column (confirmed in 20260717000000_init.sql) - email
   // only exists on registration_requests, which is why that table's own search
   // can match on it but this one can only match on name, phone and device code.
-  const approvedUsers = users.filter(u => {
+  const searchedUsers = users.filter(u => {
     if (u.status !== 'approved') return false;
-    if (roleFilter !== 'all' && u.role !== roleFilter) return false;
     const deviceCode = u.device_id ? deviceById.get(u.device_id)?.device_code ?? '' : '';
     return u.full_name.toLowerCase().includes(term)
       || (u.contact_number ?? '').includes(term)
       || deviceCode.toLowerCase().includes(term);
   });
+  const approvedUsers = roleFilter === 'all' ? searchedUsers : searchedUsers.filter(u => u.role === roleFilter);
+  // Chip counts follow the search, so each chip says what tapping it will show.
+  const roleCount = (role: Profile['role']) => searchedUsers.filter(u => u.role === role).length;
+  const ROLE_FILTERS: { value: RoleFilter; label: string; count: number }[] = [
+    { value: 'all', label: 'All', count: searchedUsers.length },
+    { value: 'resident', label: 'Residents', count: roleCount('resident') },
+    { value: 'bfp_responder', label: 'BFP Responders', count: roleCount('bfp_responder') },
+    { value: 'admin', label: 'Administrators', count: roleCount('admin') },
+  ];
 
   const TABS: { id: TabType; label: string; short: string; count?: number }[] = [
     { id: 'approved', label: 'Approved Users', short: 'Approved' },
@@ -567,8 +708,8 @@ export const Users = () => {
           </div>
 
           <div className={`${CARD} overflow-hidden`}>
-            <div className="p-3 sm:p-4 border-b border-border bg-surface flex flex-col sm:flex-row gap-3">
-              <div className="relative w-full sm:max-w-sm">
+            <div className="p-3 sm:p-4 border-b border-border bg-surface flex flex-col lg:flex-row lg:items-center gap-3">
+              <div className="relative w-full lg:max-w-sm">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-faint pointer-events-none" />
                 <input
                   type="search"
@@ -580,17 +721,7 @@ export const Users = () => {
                 />
               </div>
               {activeTab === 'approved' && (
-                <select
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
-                  aria-label="Filter by role"
-                  className={`${FIELD} sm:w-48`}
-                >
-                  <option value="all">All roles</option>
-                  <option value="resident">Resident / Owner</option>
-                  <option value="bfp_responder">BFP Responder</option>
-                  <option value="admin">Administrator</option>
-                </select>
+                <FilterChips label="Filter by role" value={roleFilter} onChange={setRoleFilter} options={ROLE_FILTERS} />
               )}
             </div>
 
@@ -740,26 +871,20 @@ export const Users = () => {
 
           {selectedRequest.requested_role === 'resident' && (
             <div className="mt-5">
-              <label className={LABEL} htmlFor="approve-device">Assign Device (Optional)</label>
+              <p className={LABEL}>Assign a device <span className="font-medium text-text-warm">(optional)</span></p>
               {selectedRequest.device_code && (
                 <p className={`text-xs mb-2 font-medium ${selectedDeviceForApproval ? 'text-success-dark' : 'text-amber'}`}>
                   Device code entered at sign-up: {selectedRequest.device_code}
                   {!selectedDeviceForApproval && ' (not found among unassigned devices)'}
                 </p>
               )}
-              <select
-                id="approve-device"
+              <DevicePicker
+                name="approve-device"
                 value={selectedDeviceForApproval}
-                onChange={(e) => setSelectedDeviceForApproval(e.target.value)}
-                className={FIELD}
-              >
-                <option value="">Do not assign yet</option>
-                {devices.map((device) => (
-                  <option key={device.id} value={device.id}>
-                    {formatDeviceOption(device)}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedDeviceForApproval}
+                devices={devices}
+                noneLabel="Don't assign yet"
+              />
             </div>
           )}
 
@@ -817,27 +942,13 @@ export const Users = () => {
               )}
             </p>
 
-            <label className={LABEL} htmlFor="assign-device">Unassigned Devices</label>
-            <select
-              id="assign-device"
-              required
+            <p className={LABEL}>Choose an unassigned device</p>
+            <DevicePicker
+              name="assign-device"
               value={selectedDevice}
-              onChange={(e) => setSelectedDevice(e.target.value)}
-              className={FIELD}
-            >
-              <option value="">Select a device</option>
-              {devices.map((device) => (
-                <option key={device.id} value={device.id}>
-                  {formatDeviceOption(device)}
-                </option>
-              ))}
-            </select>
-            {devices.length === 0 && (
-              <p className="text-xs text-amber mt-2 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" />
-                No unassigned devices available.
-              </p>
-            )}
+              onChange={setSelectedDevice}
+              devices={devices}
+            />
 
             <ModalActions>
               <button type="button" onClick={() => setShowAssignDeviceModal(false)} className={BTN_SECONDARY}>
@@ -885,34 +996,29 @@ export const Users = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={LABEL} htmlFor="new-role">Role</label>
-                  <select
-                    id="new-role"
-                    value={newUser.role}
-                    onChange={(e) => setNewUser({...newUser, role: e.target.value as Profile['role']})}
-                    className={FIELD}
-                  >
-                    <option value="resident">Resident / Owner</option>
-                    <option value="bfp_responder">BFP Responder</option>
-                    <option value="admin">Administrator</option>
-                  </select>
-                </div>
+              <div>
+                <p className={LABEL}>Role</p>
+                <OptionList
+                  name="new-role"
+                  label="Role"
+                  value={newUser.role}
+                  onChange={(v) => setNewUser({...newUser, role: v as Profile['role']})}
+                  options={ROLE_OPTIONS}
+                />
+              </div>
 
-                <div>
-                  <label className={LABEL} htmlFor="new-phone">Contact Number</label>
-                  <input
-                    id="new-phone"
-                    type="tel"
-                    inputMode="numeric"
-                    value={newUser.contactNumber}
-                    onChange={handlePhoneChange}
-                    maxLength={11}
-                    placeholder="09XXXXXXXXX"
-                    className={FIELD}
-                  />
-                </div>
+              <div>
+                <label className={LABEL} htmlFor="new-phone">Contact Number <span className="font-medium text-text-warm">(optional)</span></label>
+                <input
+                  id="new-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  value={newUser.contactNumber}
+                  onChange={handlePhoneChange}
+                  maxLength={11}
+                  placeholder="09XXXXXXXXX"
+                  className={FIELD}
+                />
               </div>
 
               <div>
