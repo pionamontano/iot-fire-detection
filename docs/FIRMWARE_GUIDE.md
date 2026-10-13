@@ -351,7 +351,8 @@ One-time setup:
 > constants, and the backend authenticates each node by its API key. An image built once and
 > pushed to several devices makes every one of them report as the device whose key was baked in.
 > Until identity moves to per-device storage (e.g. NVS), only push an image to the single device
-> whose credentials it was built with. Never use "push to fleet" for a multi-device deployment.
+> whose credentials it was built with. The admin page's "push to fleet" button is therefore disabled (`FLEET_PUSH_ENABLED = false` in
+> `src/pages/admin/Devices.tsx`); re-enable it only after that change.
 
 ### 8.3 Rules and cautions
 
