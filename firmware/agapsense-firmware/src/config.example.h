@@ -62,14 +62,13 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 // If none exist or connection fails, it launches an AP with
 // this SSID so the user can provision via captive portal.
 #define WIFI_AP_NAME           "AgapSense-Setup"
-#define WIFI_AP_PASSWORD       ""            // open AP (no password)
+#define WIFI_AP_PASSWORD       "agapsense-setup"   // CHANGE ME. The portal now receives the device API key, so it must not be open (WPA2 needs >= 8 chars).
 #define WIFI_CONNECT_TIMEOUT_S  15           // seconds to wait for STA connect
 #define WIFI_RECONNECT_INTERVAL_S 60
 
 // ── Supabase Backend ───────────────────────────────────────
 #define SUPABASE_URL             "https://your-project-ref.supabase.co"
 #define SUPABASE_ANON_KEY        "your-anon-key-here"
-#define DEVICE_API_KEY           "your-device-api-key-here"   // X-Device-Key header
 
 #define ENDPOINT_INGEST          "/functions/v1/ingest-reading"
 #define ENDPOINT_ALERT           "/functions/v1/trigger-alert"
@@ -77,8 +76,13 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 
 #define HTTP_TIMEOUT_MS          10000
 
-// ── Device Identity ────────────────────────────────────────
-#define DEVICE_ID                "bantay-apoy-node-001"
+// ── Device Identity ──────────────────────────────────────
+// DEVICE_ID and the device API key are NOT compiled in. They are entered once per node in the
+// Wi-Fi setup portal (Setup page), stored in NVS, and survive OTA updates, so one firmware image
+// runs on every node. See identity.h. To re-provision a node, erase its flash (pio run -t erase)
+// or re-open the portal.
+#define IDENTITY_NVS_NAMESPACE   "agapsense"
+#define IDENTITY_PORTAL_TIMEOUT_S 600   // how long the portal waits for identity on an unprovisioned node
 
 // Bumped per release. Compared against get-device-config's
 // firmware_version field; a mismatch triggers an OTA download.

@@ -46,12 +46,13 @@ firmware/agapsense-firmware/
     ├── main.cpp           setup()/loop(), FreeRTOS task creation
     ├── sensors.h/.cpp      MQ-7 heat/measure cycle + DS18B20 reads
     ├── gps.h/.cpp          NEO-6M parsing via TinyGPS++
-    ├── connectivity.h/.cpp Wi-Fi, HTTPS to Supabase, alert FSM, LEDs
+    ├── connectivity.h/.cpp Wi-Fi, HTTPS to Supabase, alert FSM, LEDs, setup portal
+    ├── identity.h/.cpp     Per-node device ID + API key in NVS (set via the setup portal)
     └── gsm.h/.cpp          SIM800L AT commands, async SMS queue
 ```
 
 `config.h` is **not** committed (see `.gitignore`) because it holds the Supabase
-anon key, device API key, and CA certificate. Copy the example before building:
+anon key and CA certificate (the per-device ID and API key are *not* in it; see 5.1). Copy the example before building:
 
 ```bash
 cd firmware/agapsense-firmware/src
@@ -59,12 +60,14 @@ cp config.example.h config.h
 ```
 
 Then edit `config.h`:
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `DEVICE_API_KEY` — from your Supabase
-  project and the device row created in the admin dashboard (Devices page).
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY` — from your Supabase project.
+- `WIFI_AP_PASSWORD` — password of the setup portal (WPA2, at least 8 characters). Change
+  the default; the portal receives each node's API key.
 - `OWNER_SMS_NUMBER_DEFAULT` / `BFP_SMS_NUMBER_DEFAULT` — fallback numbers used
   only until `fetchRemoteConfig()` pulls the real ones from the DB.
-- `DEVICE_ID` is informational only — the edge functions authenticate by
-  `DEVICE_API_KEY` alone, so a readable label (e.g. `AGS-001`) is fine.
+- There is **no** `DEVICE_ID` / `DEVICE_API_KEY` in `config.h` any more. Each node's ID
+  and API key (from the device row in the admin Devices page) are entered once in the setup
+  portal and stored in the node's flash (NVS). See 5.1.
 - `SUPABASE_ROOT_CA` — the example bundles the **GTS Root R4** cert (Google
   Trust Services, cross-signed by GlobalSign, valid until 2028-01-28), which
   is the root of the chain Supabase currently serves
@@ -163,8 +166,22 @@ coordinates" in telemetry/alert payloads.
 `connectivityInit()` uses **WiFiManager** for zero-touch provisioning:
 - Tries saved NVS credentials first.
 - If that fails, it opens a captive-portal AP (`WIFI_AP_NAME` =
-  `AgapSense-Setup`, open/no password) for up to 180 s so the installer can
+  `AgapSense-Setup`, protected with `WIFI_AP_PASSWORD`) for up to 180 s so the installer can
   connect a phone and enter the site's Wi-Fi credentials.
+
+**Device identity.** The portal also has two fields, *Device ID* (e.g. `AGS-001`; letters,
+digits, `.`, `_`, `-`, up to 39 chars) and *Device API key* (`sk_...` from the admin Devices
+page, up to 64 chars). Both are validated and stored in NVS (`identity.cpp`), so one firmware
+image, including an OTA image, runs on every node, and an update never touches them.
+- **Identity already stored:** normal boot. The fields appear pre-filled if the portal opens
+  (e.g. Wi-Fi lost), so they can be corrected.
+- **Identity missing** (new node, or erased flash): the portal is forced open even if Wi-Fi
+  credentials are saved. After the fields are saved the node waits for Wi-Fi (up to 30 s) and
+  reboots. If nobody provisions it within `IDENTITY_PORTAL_TIMEOUT_S` (10 min) it runs offline:
+  LEDs and buzzer still work, nothing is posted, and the blue LED stays off. Power-cycle to retry.
+- **Re-provisioning** a node: `pio run -t erase` (clears Wi-Fi and identity) and start over.
+- Identity is only editable at boot. The reconnect portal that `loop()` opens after 30 s without
+  Wi-Fi has no identity fields, so a running node's identity can never change under its tasks.
 
 ### 5.2 Device State
 
@@ -278,9 +295,10 @@ pio device monitor      # serial monitor at 115200 baud
 
 1. Flash the firmware, then power the board — the boot blink sequence
    (Yellow → Red → Blue → buzzer) confirms all indicators are wired.
-2. Connect to the `AgapSense-Setup` open Wi-Fi AP with a phone/laptop; the
-   captive portal lets you select the site's Wi-Fi network and enter its
-   password.
+2. Connect to the `AgapSense-Setup` Wi-Fi AP (password = `WIFI_AP_PASSWORD`) with a
+   phone/laptop; the captive portal lets you select the site's Wi-Fi network and
+   enter its password, plus the node's **Device ID** and **Device API key**
+   (copy them from the admin Devices page). The node reboots once after saving.
 3. Once connected, the blue LED goes solid (ONLINE) and the device fetches
    its remote config (thresholds + SMS numbers) from Supabase.
 4. Allow ~150 s for the MQ-7's first full heat/measure cycle before expecting
@@ -344,15 +362,12 @@ admin Devices page.
 One-time setup:
 - Create a **public** Storage bucket named `firmware` (or set the repo variable `FIRMWARE_BUCKET`).
 - Add repository secrets: `FIRMWARE_SUPABASE_URL`, `FIRMWARE_SUPABASE_ANON_KEY`,
-  `FIRMWARE_SUPABASE_SERVICE_ROLE_KEY` (upload only; never compiled in),
-  `FIRMWARE_DEVICE_ID`, `FIRMWARE_DEVICE_API_KEY`.
+  `FIRMWARE_SUPABASE_SERVICE_ROLE_KEY` (upload only; never compiled in). No per-device
+  secrets are needed: the image is identical for every node.
 
-> **Limitation - device identity is compiled in.** `DEVICE_ID` and `DEVICE_API_KEY` are build-time
-> constants, and the backend authenticates each node by its API key. An image built once and
-> pushed to several devices makes every one of them report as the device whose key was baked in.
-> Until identity moves to per-device storage (e.g. NVS), only push an image to the single device
-> whose credentials it was built with. The admin page's "push to fleet" button is therefore disabled (`FLEET_PUSH_ENABLED = false` in
-> `src/pages/admin/Devices.tsx`); re-enable it only after that change.
+> **Device identity is per node, not in the image** (see 8.6), so one release can be pushed to any
+> number of nodes. Nodes flashed with firmware older than this change still have identity compiled in
+> and must be re-flashed once over USB (then provisioned in the portal) before they can take a shared image.
 
 ### 8.3 Rules and cautions
 
@@ -391,7 +406,7 @@ Firmware is only one half of OTA. The full chain is:
 | `devices.firmware_version_reported` | migration `20261024000000_add_device_firmware_reported_version.sql` | What the node says it actually runs. Written only by `ingest-reading` from the telemetry field `firmware_version`. |
 | `firmware_releases` table | migration `20261025000000_firmware_releases.sql` | Admin-only log of published builds (version, url, md5, notes). The newest row is "latest". It never talks to devices directly. |
 | `get-device-config` edge function | `supabase/functions/get-device-config/index.ts` | Authenticates the node by `X-Device-Key`, then returns thresholds, contacts and the three firmware target fields. This is the only channel through which a node learns about an update. |
-| Admin Devices page | `src/pages/admin/Devices.tsx` | Publish a release, set a per-device target (edit form), see "Running: x" vs target, and an "outdated devices" indicator comparing reported versions with the latest release. The fleet push button is disabled (see 8.6). |
+| Admin Devices page | `src/pages/admin/Devices.tsx` | Publish a release, set a per-device target (edit form), see "Running: x" vs target, and an "outdated devices" indicator comparing reported versions with the latest release. The fleet push button is enabled (see 8.6). |
 | Release workflow | `.github/workflows/firmware-release.yml` | Builds and uploads `firmware.bin` (see 8.2a). |
 
 Not provided (by design or not yet built):
@@ -401,42 +416,34 @@ Not provided (by design or not yet built):
 - **No staged or percentage rollout** and no automatic halt if devices stop reporting after an update.
 - **No GSM path.** Updates are Wi-Fi only.
 
-### 8.6 Known limitation: compiled-in device identity (fix deferred)
+### 8.6 Device identity (was a blocker for fleet OTA; now resolved in code)
 
-**The problem.** `DEVICE_ID` and `DEVICE_API_KEY` are compile-time constants from `config.h`
-(9 uses: the `X-Device-Key` header and payloads in `connectivity.cpp`, the config request URL,
-and the BFP SMS text in `gsm.cpp`). The backend identifies a node by its API key. So an OTA image
-carries one specific device's identity; flashing it onto another node makes that node report,
-alert and fetch config as the first device.
+**What it was.** `DEVICE_ID` and `DEVICE_API_KEY` used to be compile-time constants, and the backend
+identifies a node by its API key, so an OTA image would have made every node report as one device.
+Fleet push was disabled because of it.
 
-**Why it is not fixed yet.**
-- The fix is a cross-cutting change, not a patch: identity must move to per-device storage and
-  every use above must read it at runtime; the provisioning flow must collect it; the host
-  simulation and tests must be updated; and it needs a hardware retest of boot, portal and
-  reconnect paths. Detection and alerting code is safety-relevant, and this repository requires
-  review and a physical retest for changes of that kind.
-- The deployment today is a prototype with one or a few nodes, each flashed over USB with its own
-  `config.h`. For that, OTA gives little benefit and a failed update on a fire detector costs more
-  than a cable.
-- Nothing is at risk while fleet push is off and devices keep an empty `firmware_url`.
+**What changed.** Identity now lives in each node's NVS (see 5.1 and `identity.h`):
+- the 9 former compile-time uses (request headers, payloads, config URL, BFP SMS text) read
+  `deviceId()` / `deviceApiKey()` at runtime;
+- every outbound POST/GET is skipped (and reported as failed so the existing retry logic applies)
+  while the node has no valid identity, instead of sending an empty key;
+- the setup portal is now password-protected, because it receives the key;
+- the release workflow no longer needs device secrets, and the admin "push to fleet" button is
+  enabled again (`FLEET_PUSH_ENABLED = true` in `Devices.tsx`).
 
-**Current safeguards.**
-- The admin "push to fleet" button is disabled (`FLEET_PUSH_ENABLED = false` in `Devices.tsx`).
-- The default for a device is no target, so no node attempts an update.
-- Use per-device targets only for the single node whose credentials the image was built with.
+**Migration for existing nodes.** They run firmware with identity compiled in, which has no portal
+fields. Flash each once over USB with the new build, then enter its ID and API key in the portal.
+After that, all later updates can go over the air.
 
-**Proposed fix, when it is worth doing.**
-1. Keep only shared values in `config.h` (Supabase URL, anon key, CA cert, pins, timings).
-2. Add `WiFiManagerParameter` fields for device ID and API key to the captive portal; save them to
-   NVS (`Preferences`); load them at boot into runtime buffers; open the portal if they are missing.
-3. Replace the 9 compile-time uses with those buffers.
-4. Remove the device secrets from the release workflow so one build serves every node.
-5. Give the portal AP a password (see OQ-17: the AP is open today, and it would now receive the key).
-6. Update the host stubs/tests, then re-run the simulation and a hardware bench test.
-
-**When to revisit.** More than a handful of nodes, or when USB reflashing in the field becomes the
-bottleneck. At that point do steps 1-6 first, then set `FLEET_PUSH_ENABLED = true`.
-Tracked as OQ-26 in `docs/open-questions-and-decisions.md`.
+**Known limits.**
+- Stored in plain NVS: anyone with physical access can read the key from flash. That was equally true
+  of the compiled-in key; ESP32 flash encryption is the mitigation if it matters.
+- The portal password is a shared default until you change `WIFI_AP_PASSWORD` in `config.h`.
+- **Not tested on hardware.** The host tests cover the validators (24 checks) and the whole
+  connectivity/GSM logic with a stubbed identity; the WiFiManager portal flow (forced portal,
+  non-blocking `process()`, save-then-reboot) and the NVS read/write are compiled only on the board.
+  Bench-test a fresh node, a node with saved Wi-Fi but no identity, and an OTA update that keeps its
+  identity before rolling out. Tracked as OQ-26.
 
 ---
 

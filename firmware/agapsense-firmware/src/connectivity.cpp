@@ -59,6 +59,7 @@
 
 #include "connectivity.h"
 #include "gsm.h"
+#include "identity.h"
 
 #include <WiFi.h>
 #include <WiFiManager.h>
@@ -66,6 +67,7 @@
 #include <HTTPClient.h>
 #include <Update.h>
 #include <esp_task_wdt.h>
+#include <functional>
 
 #if DEBUG_MODE
   #define CLOG(fmt, ...) Serial.printf("[CONN] " fmt "\n", ##__VA_ARGS__)
@@ -158,6 +160,7 @@ int readBatteryMv() {
 
 // ── HTTPS POST helper ──────────────────────────────────────
 static int httpsPost(const char* endpoint, const char* payload) {
+    if (!identityConfigured()) { CLOG("ERROR: device identity not provisioned — POST skipped"); return -1; }
     WiFiClientSecure client;
     client.setCACert(SUPABASE_ROOT_CA);
     client.setTimeout(HTTP_TIMEOUT_MS / 1000);
@@ -170,7 +173,7 @@ static int httpsPost(const char* endpoint, const char* payload) {
     }
     http.addHeader("Content-Type",  "application/json");
     http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
-    http.addHeader("X-Device-Key",  DEVICE_API_KEY);
+    http.addHeader("X-Device-Key",  deviceApiKey());
     http.setTimeout(HTTP_TIMEOUT_MS);
 
     CLOG("POST %s → %s", endpoint, payload);
@@ -207,7 +210,7 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
           "\"mq7_phase\":\"%s\","
           "\"firmware_version\":\"%s\""
         "}",
-        DEVICE_ID,
+        deviceId(),
         sd.co_ppm, sd.temperature_c,
         fix.lat, fix.lng,
         fix.valid ? "true" : "false",
@@ -225,6 +228,7 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
 // trigger-alert response and stores them in ctx for use by the SMS
 // queue and confirm-sms-status confirmation flow.
 int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int alertTier) {
+    if (!identityConfigured()) { CLOG("ERROR: device identity not provisioned — alert POST skipped"); return -1; }
     char payload[384];
     snprintf(payload, sizeof(payload),
         "{"
@@ -238,7 +242,7 @@ int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int
           "\"tier\":%d,"
           "\"sensor_ready\":%s"
         "}",
-        DEVICE_ID,
+        deviceId(),
         sd.co_ppm, sd.temperature_c,
         fix.lat, fix.lng,
         fix.valid ? "true" : "false",
@@ -258,7 +262,7 @@ int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int
     }
     http.addHeader("Content-Type",  "application/json");
     http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
-    http.addHeader("X-Device-Key",  DEVICE_API_KEY);
+    http.addHeader("X-Device-Key",  deviceApiKey());
     http.setTimeout(HTTP_TIMEOUT_MS);
 
     CLOG("POST %s → %s", ENDPOINT_ALERT, payload);
@@ -332,7 +336,7 @@ int postSmsStatus(const char* role, bool success, const char* alertEventId) {
           "\"role\":\"%s\","
           "\"success\":%s"
         "}",
-        DEVICE_ID,
+        deviceId(),
         alertEventId,
         role,
         success ? "true" : "false"
@@ -464,17 +468,18 @@ static bool performOtaUpdate(const char* url, const char* expectedMd5, Connectiv
 
 // ── Remote Config Fetch ────────────────────────────────────
 bool fetchRemoteConfig(ConnectivityCtx* ctx, SensorData* sensorData, SemaphoreHandle_t sensorMtx) {
+    if (!identityConfigured()) return false;
     WiFiClientSecure client;
     client.setCACert(SUPABASE_ROOT_CA);
     client.setTimeout(10);
 
     HTTPClient http;
     String url = String(SUPABASE_URL) + ENDPOINT_GET_CONFIG
-                 + "?device_id=" + DEVICE_ID;
+                 + "?device_id=" + deviceId();
     if (!http.begin(client, url)) return false;
 
     http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
-    http.addHeader("X-Device-Key",  DEVICE_API_KEY);
+    http.addHeader("X-Device-Key",  deviceApiKey());
 
     int code = http.GET();
     if (code != 200) {
@@ -525,6 +530,62 @@ bool fetchRemoteConfig(ConnectivityCtx* ctx, SensorData* sensorData, SemaphoreHa
     return true;
 }
 
+// ── Provisioning: device identity + Wi-Fi ──────────────────
+// The setup portal carries two extra fields (Device ID, Device API key) next to the Wi-Fi form; they are
+// validated and stored in NVS (identity.cpp), so one firmware image serves every node and survives OTA.
+//
+// - Identity already stored: normal WiFiManager autoConnect() (portal only if Wi-Fi fails; the fields are
+//   there too, pre-filled, so they can be corrected).
+// - Identity missing: the portal is forced open even if Wi-Fi credentials are saved, in non-blocking mode so
+//   we can see when the fields were saved. Once they are, wait for Wi-Fi (or 30 s) and reboot: the next
+//   boot takes the normal path with everything persisted. Gives up after IDENTITY_PORTAL_TIMEOUT_S and
+//   returns false; the node then runs offline (local LEDs/buzzer still work, nothing is posted) until it is
+//   power-cycled and provisioned.
+static bool provisionAndConnect() {
+    identityLoad();
+
+    WiFiManagerParameter idParam("device_id", "Device ID (e.g. AGS-001)", deviceId(), (int)agap::kDeviceIdMax);
+    WiFiManagerParameter keyParam("device_key", "Device API key (sk_...)", deviceApiKey(), (int)agap::kApiKeyMax);
+
+    WiFiManager wm;
+    wm.setConnectTimeout(WIFI_CONNECT_TIMEOUT_S);
+    wm.addParameter(&idParam);
+    wm.addParameter(&keyParam);
+    std::function<void()> onSave = [&]() {
+        if (!identitySave(idParam.getValue(), keyParam.getValue())) {
+            CLOG("Portal save: identity missing or invalid — not stored");
+        }
+    };
+    wm.setSaveParamsCallback(onSave);
+    wm.setSaveConfigCallback(onSave);
+
+    if (identityConfigured()) {
+        wm.setConfigPortalTimeout(180);
+        return wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    }
+
+    CLOG("No device identity stored — opening setup portal");
+    wm.setConfigPortalBlocking(false);
+    wm.startConfigPortal(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    const uint32_t start = millis();
+    uint32_t savedAt = 0;
+    while (millis() - start < (uint32_t)IDENTITY_PORTAL_TIMEOUT_S * 1000UL) {
+        wm.process();
+        if (identityConfigured()) {
+            if (savedAt == 0) savedAt = millis();
+            if (WiFi.status() == WL_CONNECTED || millis() - savedAt > 30000UL) break;
+        }
+        delay(10);
+    }
+    if (identityConfigured()) {
+        CLOG("Identity saved — rebooting to apply");
+        delay(1000);
+        ESP.restart();
+    }
+    CLOG("Setup portal timed out without a device identity — running offline");
+    return false;
+}
+
 // ── Init ───────────────────────────────────────────────────
 void connectivityInit(ConnectivityCtx* ctx) {
     pinMode(LED_YELLOW_PIN, OUTPUT);
@@ -559,12 +620,9 @@ void connectivityInit(ConnectivityCtx* ctx) {
     strncpy(ctx->ownerNumber, OWNER_SMS_NUMBER_DEFAULT, sizeof(ctx->ownerNumber) - 1);
     strncpy(ctx->bfpNumber,   BFP_SMS_NUMBER_DEFAULT,   sizeof(ctx->bfpNumber)   - 1);
 
-    WiFiManager wm;
-    wm.setConnectTimeout(WIFI_CONNECT_TIMEOUT_S);
-    wm.setConfigPortalTimeout(180);
     digitalWrite(LED_BLUE_PIN, HIGH);
 
-    bool connected = wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD);
+    bool connected = provisionAndConnect();
 
     if (connected) {
         ctx->deviceState = DeviceState::ONLINE;

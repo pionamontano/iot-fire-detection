@@ -16,6 +16,7 @@
 // ============================================================
 
 #include "gsm.h"
+#include "identity.h"
 
 #if DEBUG_MODE
   #define GSMLOG(fmt, ...) Serial.printf("[GSM] " fmt "\n", ##__VA_ARGS__)
@@ -195,7 +196,7 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
             "CO:%.0fppm Temp:%.1fC\n"
             "https://maps.google.com/?q=%.5f,%.5f\n"
             "Loc:%.40s",
-            DEVICE_ID, timeStr,
+            deviceId(), timeStr,
             co_ppm, temp_c,
             lat, lng, address
         );
@@ -205,7 +206,7 @@ void gsmSendBfpSms(float co_ppm, float temp_c,
             "Time:%s\n"
             "CO:%.0fppm Temp:%.1fC\n"
             "https://maps.google.com/?q=%.5f,%.5f",
-            DEVICE_ID, timeStr,
+            deviceId(), timeStr,
             co_ppm, temp_c,
             lat, lng
         );
