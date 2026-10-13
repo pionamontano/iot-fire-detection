@@ -31,6 +31,9 @@ verify_jwt = false
 [functions.create-user]
 verify_jwt = false
 
+[functions.manage-user]
+verify_jwt = false
+
 [functions.login]
 verify_jwt = false
 
