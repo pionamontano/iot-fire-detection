@@ -86,6 +86,16 @@ export interface Device {
   firmware_version_reported: string | null;
 }
 
+export interface FirmwareRelease {
+  id: string;
+  version: string;
+  url: string;
+  md5: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface SensorReading {
   id: string;
   device_id: string;

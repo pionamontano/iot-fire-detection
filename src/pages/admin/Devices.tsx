@@ -3,8 +3,8 @@ import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
-import type { Device } from '../../lib/supabase';
-import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check } from 'lucide-react';
+import type { Device, FirmwareRelease } from '../../lib/supabase';
+import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket } from 'lucide-react';
 import { CardListSkeleton } from '../../components/SkeletonLoaders';
 
 const timeAgo = (dateStr: string) => {
@@ -46,6 +46,14 @@ export const Devices = () => {
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
 
+  // Fleet-wide firmware release log — independent of any one device's
+  // firmware_version target, this is what "latest" means for the whole
+  // fleet (see 20261025000000_firmware_releases.sql).
+  const [latestRelease, setLatestRelease] = useState<FirmwareRelease | null>(null);
+  const [releaseForm, setReleaseForm] = useState({ version: '', url: '', md5: '', notes: '' });
+  const [publishingRelease, setPublishingRelease] = useState(false);
+  const [pushingFleet, setPushingFleet] = useState(false);
+
   // Form state matching Figma fields
   const [form, setForm] = useState({
     device_code: '',
@@ -86,9 +94,72 @@ export const Devices = () => {
     setLoading(false);
   }, []);
 
+  const fetchLatestRelease = useCallback(async () => {
+    const { data } = await supabase
+      .from('firmware_releases')
+      .select('id, version, url, md5, notes, created_by, created_at')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setLatestRelease(data ?? null);
+  }, []);
+
   useEffect(() => {
     fetchDevices();
-  }, [fetchDevices]);
+    fetchLatestRelease();
+  }, [fetchDevices, fetchLatestRelease]);
+
+  const publishRelease = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const md5 = releaseForm.md5.trim();
+    if (md5 && !/^[0-9a-fA-F]{32}$/.test(md5)) {
+      alert('Firmware MD5 must be exactly 32 hex characters, or left blank.');
+      return;
+    }
+
+    setPublishingRelease(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from('firmware_releases').insert({
+      version: releaseForm.version.trim(),
+      url: releaseForm.url.trim(),
+      md5: md5 || null,
+      notes: releaseForm.notes.trim() || null,
+      created_by: user?.id,
+    });
+
+    if (error) {
+      alert('Failed to publish release: ' + error.message);
+    } else {
+      setReleaseForm({ version: '', url: '', md5: '', notes: '' });
+      fetchLatestRelease();
+    }
+    setPublishingRelease(false);
+  };
+
+  const pushReleaseToFleet = async () => {
+    if (!latestRelease) return;
+    const activeCount = devices.filter(d => d.is_active).length;
+    if (!window.confirm(
+      `Push firmware ${latestRelease.version} to all ${activeCount} active device(s)? Each device picks it up on its next config sync (within 10 minutes).`
+    )) return;
+
+    setPushingFleet(true);
+    const { error } = await supabase
+      .from('devices')
+      .update({
+        firmware_version: latestRelease.version,
+        firmware_url: latestRelease.url,
+        firmware_md5: latestRelease.md5,
+      })
+      .eq('is_active', true);
+
+    if (error) {
+      alert('Failed to push to fleet: ' + error.message);
+    } else {
+      fetchDevices();
+    }
+    setPushingFleet(false);
+  };
 
   const openEditDevice = (device: Device) => {
     setEditingDevice(device);
@@ -197,6 +268,15 @@ export const Devices = () => {
     }
     setSubmitting(false);
   };
+
+  // A device counts as outdated only once it's told us what it's running —
+  // one that has never reported (firmware_version_reported === null, e.g.
+  // older firmware predating this field, or never seen online) is unknown,
+  // not assumed current.
+  const activeDevices = devices.filter(d => d.is_active);
+  const outdatedDevices = latestRelease
+    ? activeDevices.filter(d => d.firmware_version_reported && d.firmware_version_reported !== latestRelease.version)
+    : [];
 
   return (
     <div className="space-y-10">
@@ -403,6 +483,104 @@ export const Devices = () => {
                 ))
               )}
             </div>
+          </div>
+
+          {/* Firmware Releases Card — fleet-wide "latest" independent of any
+              one device's target (see firmware_releases migration). */}
+          <div className="bg-[#EBE7E7] rounded-lg p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.1em] uppercase">
+                Firmware Releases
+              </h3>
+              {latestRelease && (
+                outdatedDevices.length > 0 ? (
+                  <span className="bg-[rgba(245,158,11,0.15)] text-[#B45309] font-bold text-[9.6px] uppercase px-2 py-1 rounded-sm">
+                    {outdatedDevices.length} Outdated
+                  </span>
+                ) : (
+                  <span className="bg-[rgba(16,185,129,0.15)] text-[#047857] font-bold text-[9.6px] uppercase px-2 py-1 rounded-sm">
+                    Fleet Up To Date
+                  </span>
+                )
+              )}
+            </div>
+
+            {latestRelease ? (
+              <div className="bg-white rounded p-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm text-[#1C1B1B] font-mono">v{latestRelease.version}</span>
+                  <span className="text-[#5B403D] font-medium text-[9.6px]">{timeAgo(latestRelease.created_at)}</span>
+                </div>
+                {latestRelease.notes && (
+                  <p className="text-[#5B403D] text-[11px] leading-[16.5px] mt-1">{latestRelease.notes}</p>
+                )}
+                <p className="text-[#5B403D] text-[11px] mt-2">
+                  {activeDevices.length - outdatedDevices.length} of {activeDevices.length} active device(s) on this version
+                </p>
+                {activeDevices.some(d => !d.firmware_version_reported) && (
+                  <p className="text-[#5B403D] text-[10px] italic mt-0.5">
+                    Some devices have never reported a running version.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={pushReleaseToFleet}
+                  disabled={pushingFleet || activeDevices.length === 0}
+                  className="w-full mt-3 py-2.5 rounded text-white font-bold text-xs tracking-[0.025em] uppercase flex items-center justify-center gap-2 transition-all disabled:opacity-60 bg-[#00799C] hover:bg-[#005F7B]"
+                >
+                  {pushingFleet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                  {pushingFleet ? 'Pushing...' : `Push to ${activeDevices.length} Active Device(s)`}
+                </button>
+              </div>
+            ) : (
+              <div className="bg-white rounded py-6 px-4 text-center">
+                <p className="text-[#5B403D] text-xs">No firmware release published yet.</p>
+              </div>
+            )}
+
+            <form onSubmit={publishRelease} className="border-t border-[#D6D1D0] pt-5 flex flex-col gap-3">
+              <span className="text-[#5B403D] font-semibold text-[11px] tracking-[0.05em] uppercase">
+                Publish New Release
+              </span>
+              <input
+                type="text"
+                required
+                placeholder="Version (e.g. 2.2.0)"
+                value={releaseForm.version}
+                onChange={e => setReleaseForm({ ...releaseForm, version: e.target.value })}
+                className="w-full border border-[#E5E2E1] rounded px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+              />
+              <input
+                type="text"
+                required
+                placeholder="Binary URL (Supabase Storage)"
+                value={releaseForm.url}
+                onChange={e => setReleaseForm({ ...releaseForm, url: e.target.value })}
+                className="w-full border border-[#E5E2E1] rounded px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+              />
+              <input
+                type="text"
+                placeholder="MD5 (optional, 32 hex chars)"
+                value={releaseForm.md5}
+                onChange={e => setReleaseForm({ ...releaseForm, md5: e.target.value })}
+                className="w-full border border-[#E5E2E1] rounded px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+              />
+              <input
+                type="text"
+                placeholder="Notes (optional)"
+                value={releaseForm.notes}
+                onChange={e => setReleaseForm({ ...releaseForm, notes: e.target.value })}
+                className="w-full border border-[#E5E2E1] rounded px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+              />
+              <button
+                type="submit"
+                disabled={publishingRelease}
+                className="w-full py-2.5 rounded text-[#5B403D] font-bold text-xs tracking-[0.025em] uppercase flex items-center justify-center gap-2 transition-all disabled:opacity-60 border border-[#D6D1D0] hover:bg-white"
+              >
+                {publishingRelease ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                {publishingRelease ? 'Publishing...' : 'Publish Release'}
+              </button>
+            </form>
           </div>
 
           {/* Calibration Protocol Info Card */}
