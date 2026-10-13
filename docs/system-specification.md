@@ -1,4 +1,4 @@
-# AgapSense System Specification (Baseline Draft v0.1)
+# AgapSense System Specification (Baseline Draft v0.2)
 
 > **Status: DRAFT BASELINE — requires project-owner approval before it is treated as controlled.**
 > This document describes what the repository *demonstrably contains*, separates that from what is *approved*, *deployed* and *tested*,
@@ -17,10 +17,11 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 |---|---|
 | Document title | AgapSense System Specification and Scope Boundary Definition |
 | System name | AgapSense — IoT-Based Fire Detection and Location Tracking System Using Multi-Sensor Fusion and Dual-Path Communication |
-| Version / status | 0.1 — first specification baseline, **draft, not owner-approved** |
-| Date prepared | 2026-10-12 |
-| Repository / branch | `pionamontano/iot-fire-detection`, branch `claude/epic-brahmagupta-r9vi1d` |
+| Version / status | 0.2 — incremental backend re-review, **draft, not owner-approved** |
+| Date prepared | 2026-10-12 (baseline); updated 2026-10-13 |
+| Repository / branch | `pionamontano/iot-fire-detection`, branch `claude/epic-brahmagupta-r9vi1d` (baseline); `fix/revoke-alert-events-direct-update` (0.2 update) |
 | Commit inspected | `5441cb78e4fef320eecc613fc3c7058ec669647c` ("Add documentation of audit remediation changes (#98)"), working tree clean before this document was added |
+| Commit inspected (0.2 update) | Working-tree snapshot anchored near `96716ffb0caf78e28b64c2777dfacbcfa365bdbb`, **not a fixed commit**: the branch had uncommitted/untracked changes in progress in `supabase/migrations/` during this review (files were renamed and added mid-review — see §5.1 limitation 5). Scope limited to `supabase/functions/*` (all 14, stable throughout) and `supabase/migrations/*` (35 files read at the time of inspection; the directory kept changing afterward, so this is a lower bound, not an exact current count) — frontend, firmware and docs were not re-read |
 | Method | Read-only static inspection of source, SQL migrations, firmware, tests and existing documentation. **No test suite, build, firmware compile, deployment or live-service call was executed in this review.** |
 
 ### Inspection coverage
@@ -35,6 +36,8 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 | Existing docs (`README`, `docs/*`, `testing/reports/*`, `CONTRIBUTING`) | Read (testing reports: summary + selected sections) | Treated as *claims*, not proof |
 | Tests (`tests/`, `supabase/tests/`, `firmware/.../host_tests/`) | Listed and described in docs; **not executed** | |
 | Postman collection, `seed_script.ts`, `verify2.py`, `patch_*.cjs`, `scripts/*` | Not reviewed | Auxiliary tooling; classified Unverified |
+| **[0.2 update]** Edge Functions (all 14, re-read in full) | Re-read in full | Findings: KI-08 (rewritten), KI-26, KI-28; test-suite break noted separately (see PR review, not duplicated here) |
+| **[0.2 update]** Migrations (`supabase/migrations/*`, 35 files as of this update, including one untracked file) | Read in full, in order, reconstructed as current effective schema (later migrations superseding earlier ones) | Findings: KI-25, KI-27, KI-29; frontend/firmware/docs were **not** re-read for this update |
 
 ### Known limitations of this review
 
@@ -42,12 +45,14 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 2. **The live database may differ from the repository.** The repository's own documents state that production's migration history differs from `supabase/migrations/` and that the live definition of `get_auth_role()` has never been inspected (`docs/CHANGELOG_AUDIT_REMEDIATION.md` §11, `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md` §4).
 3. **No owner-supplied requirements document is in the repository.** Code comments cite requirement IDs (`SW-2.1.1` … `SW-2.6.3`, `HW-1.1.5` … `HW-1.5.2`) from a specification that is *not present*. Those IDs are recorded here as *referenced, unconfirmed requirements*.
 4. Test results quoted from `docs/` or `testing/reports/` are **self-reported by the repository authors and were not re-executed** here.
+5. **[0.2]** During the 0.2 incremental review, the working tree was under active concurrent edit (a migration file was renamed mid-review — `20261022000000_support_requests.sql` → `20261022000001_support_requests.sql` — and others were added). All 0.2 findings were re-verified against the file paths current at the time each was written into this document, but the repository may have moved on further by the time it is read; treat filenames/line numbers in KI-08 and KI-25–KI-29 as accurate as of this update's citations, not as a live guarantee.
 
 ### Change history
 
 | Version | Date | Change |
 |---|---|---|
 | 0.1 | 2026-10-12 | First specification baseline (this document). |
+| 0.2 | 2026-10-13 | Incremental backend-only re-review (all Edge Functions, full migration history re-read as current effective schema). Resolved the `get_dashboard_stats()` Unverified note into confirmed KI-25. Added KI-25–KI-29 (dashboard-stats privilege exposure, login-lockout case-sensitivity bypass, `get_device_api_key_secure()` missing `search_path` pin, `manage-registration` duplicate-device gap, `reviewed_by`/`unlocked_by` FK convention break). Rewrote KI-08, B7, C8, FR-RESP-005, FR-NOTIF-007 and §5.10/§5.12 Resend entries: the Resend e-mail support path they described was replaced by an in-app admin inbox (`support_requests` table, PR #107) before this update; added the `support_requests` table to §5.8 and new gaps found in its replacement. |
 
 ### Relationship to existing documents (not overwritten)
 
@@ -80,7 +85,7 @@ Separate axes are always kept apart: **Implemented (in repo)** ≠ **Tested** �
 
 **Stakeholders / users.** System Administrator, BFP Responder, Resident; the IoT device acts as a non-human client (§5.4).
 
-**Operating environment.** ESP32-based node (MQ-7 CO sensor, DS18B20 temperature sensor, NEO-6M GPS, SIM800L GSM, LEDs/buzzer) → HTTPS to Supabase Edge Functions → PostgreSQL/Auth/Realtime → React SPA (Vite, hosted on Vercel per `vercel.json`; hosting itself Unverified). External: OpenStreetMap Nominatim (reverse geocoding) and OSM tiles via Leaflet, Telegram Bot API, Web Push (VAPID), Resend (support e-mail), cellular network for SMS.
+**Operating environment.** ESP32-based node (MQ-7 CO sensor, DS18B20 temperature sensor, NEO-6M GPS, SIM800L GSM, LEDs/buzzer) → HTTPS to Supabase Edge Functions → PostgreSQL/Auth/Realtime → React SPA (Vite, hosted on Vercel per `vercel.json`; hosting itself Unverified). External: OpenStreetMap Nominatim (reverse geocoding) and OSM tiles via Leaflet, Telegram Bot API, Web Push (VAPID), cellular network for SMS. Support requests are stored in-app (`support_requests` table, no external service) since #107 [0.2].
 
 **High-level capabilities (what the code does).**
 1. Sense CO and temperature; classify Tier 1 (one sensor over its threshold) / Tier 2 (both) with debounce; indicate locally; post to the backend.
@@ -132,7 +137,7 @@ Separate axes are always kept apart: **Implemented (in repo)** ≠ **Tested** �
 | B4 | Nominatim reverse geocoding + 24 h in-memory cache | External service, per-isolate cache |
 | B5 | Realtime (`postgres_changes`) live updates | Needs live Supabase; remediation notes say profile-filtered Realtime "not verified live" |
 | B6 | Idle-timeout hook, password reset flow | Only partly read; live-verified per self-reported reports |
-| B7 | Support e-mail (Resend) | Needs `RESEND_API_KEY`; see KI-08 |
+| B7 | Support request inbox (in-app, `support_requests` table; replaced Resend e-mail, #107) | Insert path verified in code (service-role, bypasses RLS by construction); admin-side inbox UI not re-read in the 0.2 update; see KI-08 |
 | B8 | OSM tile rendering, Vercel hosting | External |
 | B9 | Auxiliary tooling (`seed_script.ts`, `verify2.py`, `patch_*.cjs`, Postman collection) | Not reviewed |
 
@@ -147,7 +152,7 @@ Separate axes are always kept apart: **Implemented (in repo)** ≠ **Tested** �
 | C5 | Auto-resolution policy and device-clear display | Owner decision D6.1 pending (Step 6.3) | KI-13, issue #96 |
 | C6 | Direct `UPDATE` on `alert_events` still granted (Step 6c) | Revoke migration written (`20261022000000`), not deployed; apply only after 6.1/6.2 are live | issue #97 |
 | C7 | Stale-sensor detection in firmware | `last_co_ms`/`last_temp_ms` written, never read | KI-17 |
-| C8 | Support e-mail `profiles.email` read | Column absent from migrations | KI-08 |
+| C8 | *(Resolved by #107, confirmed 0.2)* `admin-support-request` no longer reads a `profiles.email` column or sends e-mail; it inserts into `support_requests` via service-role. New gaps found in the replacement (unapproved accounts can file requests; `category` unvalidated) | See updated KI-08 | KI-08 |
 
 ### D. Proposed but Not Approved
 
@@ -254,7 +259,7 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | FR-RESP-002 | Incident handling only via `transition_incident()`: acknowledge, responding, resolved, false alarm (confirmation on close; errors mapped to messages) | remediation 6.1/6.2 | Verified (code) **[R: DB function must be deployed first]** | `lib/incidents.ts`; `20261021000000`; `ResponderDashboard.tsx:230-240`; test `incident_lifecycle.test.sql` (reported 64) | Full transition table in §5.9 | Without the migration, actions fail with `PGRST202` message (`incidents.ts:62`) |
 | FR-RESP-003 | Alert log with filtering and export | C | Partially Verified | `ResponderAlertLogs.tsx:61-130` | Filters narrow list | |
 | FR-RESP-004 | Own profile (name, contact) and Telegram link; station information editor (`station_settings` id=1) | C | **Conflicting** (schema) | `ResponderSettings.tsx:49-135`; init.sql:90-100 | Save station info succeeds | Columns `station_name`, `email` not in migrations (KI-07) |
-| FR-RESP-005 | Support request to the project mailbox via `admin-support-request` (Resend) | C | Partially Verified | `AdminSupportModal.tsx:40`; `admin-support-request/index.ts` | E-mail sent | KI-08 |
+| FR-RESP-005 | Support request filed in-app via `admin-support-request` into `support_requests`, reviewed by an admin inbox (replaced Resend e-mail, #107) | C | Verified (backend code, 0.2); admin-inbox UI not re-read in 0.2 | `AdminSupportModal.tsx:40`; `admin-support-request/index.ts`; `20261022000001_support_requests.sql` | Row appears in `support_requests` | Any authenticated caller, not just approved accounts; `category` unvalidated (KI-08) |
 
 ### FR-RES — Resident
 
@@ -317,7 +322,7 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | FR-NOTIF-004 | Per-SMS outcome (`+CMGS` seen) reported to `confirm-sms-status` → `alert_events.sms_sent_owner/_bfp`; failure never overwrites an earlier success | C | Verified (code) | `confirm-sms-status/index.ts:67-131` | | "Sent" means the modem returned `+CMGS`, not that the handset received it |
 | FR-NOTIF-005 | Notification ledger (`alert_notifications`): claim before send, record outcome; ≤ 3 attempts; stale `pending` reclaimable after 2 min; fail-open if ledger unavailable; delivery semantics are **at-least-once** | remediation 5.1/5.2 | Verified (code) **[R]** | `20261020000000`; `trigger-alert/index.ts:145-178` | Replay → no duplicate send | Not deployed; reclaim happens only when a later request touches the same key |
 | FR-NOTIF-006 | Per-user Telegram alerts to residents/responders | Proposed in repo (D5.4/D5.5) | **Not Implemented** | channel `telegram_user` reserved in `20261020000000` CHECK; no sender code | — | KI-24, issue #95 |
-| FR-NOTIF-007 | Support request e-mail via Resend to a fixed mailbox | C | Partially Verified | `admin-support-request/index.ts` | | KI-08 |
+| FR-NOTIF-007 | Support request stored in-app (`support_requests` table); no e-mail is sent (Resend path removed, #107) | C | Verified (backend code, 0.2) | `admin-support-request/index.ts`; `20261022000001_support_requests.sql` | | KI-08 |
 | FR-NOTIF-008 | In-app notification bell lists the 10 latest alert events with Realtime refresh | C | Partially Verified | `HeaderWidgets.tsx:34-55` | | Same query for all roles — result governed by RLS |
 
 **Requirement count:** 10 AUTH · 7 ADMIN · 5 RESP · 8 RES · 12 IOT · 6 ALERT · 5 LOC · 8 NOTIF = **61 functional requirements** (statistics in `requirements-traceability.md`).
@@ -394,7 +399,8 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 | `alert_events` | Incident record | `alert_tier` ∈ {1,2}; readings; coords; `address_resolved`; `telegram_sent`, `sms_sent_owner`, `sms_sent_bfp`; `triggered_at`; `resolved_at`; `incident_status`, `acknowledged_by/at`, `outcome_notes`; [R] `resolved_by`, `resolution_source`; [R] unique open-per-device index | Admin ALL; responder SELECT + column UPDATE; resident SELECT own device; INSERT service-role only |
 | `alert_notifications` [R] | Delivery ledger | UNIQUE `(alert_event_id, tier, channel, recipient_key)`; `status`, `attempts`, `retryable`, `provider_status/ref`, `error` | service role only |
 | `address_discrepancies` | GPS-vs-registered drift prompts | `device_id`, `resident_id`, `gps_derived_address`, `registered_address`, lat/lng, `status` ∈ pending/approved/rejected | Admin ALL; resident SELECT own; update only via RPC |
-| `registration_requests` | Review metadata for sign-ups | `user_id` → `profiles` (CASCADE), `requested_role`, `device_code` (free text), `organization`, `position`, `verification_info`, review fields | Admin ALL; user reads/creates own |
+| `registration_requests` | Review metadata for sign-ups | `user_id` → `profiles` (CASCADE), `requested_role`, `device_code` (free text), `organization`, `position`, `verification_info`, review fields; [0.2] `reviewed_by` → `auth.users` (convention break, see KI-29) | Admin ALL; user reads/creates own |
+| `support_requests` [0.2] | In-app support/contact requests (replaced Resend e-mail, #107) | `user_id` → `profiles` (CASCADE); `category`, `message` (no CHECK/length limit — KI-08); `status` ∈ open/resolved; `reviewed_by` → `auth.users` (convention break, see KI-29) | Admin ALL (`get_auth_role()='admin'`); user insert/select own — but function inserts via service-role, bypassing these checks entirely (KI-08) |
 | `push_subscriptions` | Web Push endpoints | `user_id`, `endpoint` UNIQUE, `p256dh`, `auth` | Owner CRUD; service reads |
 | `telegram_link_tokens` | One-time link tokens (15 min) | `token` PK, `user_id`, `expires_at` | No client grants; RPC + webhook only |
 | `login_attempts` | Lockout evidence | `email`, `success`, `attempted_at`, `ip_address` (never populated by `login`) | Admin read; no client insert |
@@ -403,9 +409,9 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 | `station_settings` | Singleton station info | `id=1` CHECK; **migration columns:** `team_name, commander_name, contact_number, address, latitude, longitude, alert_radius_km`; **UI uses:** `station_name, address, contact_number, email` | Admin ALL, **responder ALL**, resident SELECT |
 
 ### Functions / triggers / views
-`get_auth_role()`, `is_approved_admin()`, `get_dashboard_stats()` (SECURITY DEFINER, unused by pages found — Unverified), `protect_profile_fields` (trigger), `handle_new_user` (no-op), `generate_device_api_key`/`set_device_api_key` (legacy base64 key path, superseded by column default), `regenerate_device_api_key`, `get_device_api_key_secure`, `check_login_lockout`, `admin_unlock_login`, `update_own_device_alert_settings`, `resolve_address_discrepancy`, `create_telegram_link_token`, `claim_/complete_notification` [R], `raise_alert` [R], `alert_events_lifecycle_guard` [R], `transition_incident` [R]; view `devices_safe` (security_invoker).
+`get_auth_role()`, `is_approved_admin()`, `get_dashboard_stats()` (SECURITY DEFINER, unused by pages found; EXECUTE open to PUBLIC — Confirmed, KI-25 [0.2]), `protect_profile_fields` (trigger), `handle_new_user` (no-op), `generate_device_api_key`/`set_device_api_key` (legacy base64 key path, superseded by column default), `regenerate_device_api_key`, `get_device_api_key_secure`, `check_login_lockout`, `admin_unlock_login`, `update_own_device_alert_settings`, `resolve_address_discrepancy`, `create_telegram_link_token`, `claim_/complete_notification` [R], `raise_alert` [R], `alert_events_lifecycle_guard` [R], `transition_incident` [R]; view `devices_safe` (security_invoker).
 
-> **Note — `get_dashboard_stats()`** counts all devices/alerts/profiles with `SECURITY DEFINER` and no caller check (init.sql:198-218). Whether it is executable by arbitrary authenticated users depends on default `EXECUTE` grants (Unverified). No frontend call was found.
+> **Note — `get_dashboard_stats()`** counts all devices/alerts/profiles with `SECURITY DEFINER`, no internal caller check and no `SET search_path` (init.sql:198-218). **[0.2 — resolved, now Confirmed]** Postgres grants `EXECUTE` to `PUBLIC` by default on newly created functions, and no migration in the full history (re-read in the 0.2 update) revokes it or adds a caller-role check — so this is executable by any authenticated (and possibly `anon`) caller today, bypassing every RLS policy that otherwise hides these counts from non-admin roles. See KI-25. No frontend call was found.
 
 ### Location and address data — kept distinct
 
@@ -486,8 +492,8 @@ Terminology: **generated** (message composed) → **provider-accepted** (HTTP 2x
 | Audit | `alert_events.sms_sent_owner/_bfp` |
 | Limitations | Duplicates possible after reboot (D5.7); empty/placeholder numbers fail (KI-19); coordinates may be 0,0 (KI-18); hardware **Cannot Verify** |
 
-### Support e-mail (Resend)
-Triggered by the `AdminSupportModal`; delivered to one hard-coded mailbox; `RESEND_API_KEY` required; user-supplied `category`/`message` are interpolated unescaped into HTML (KI-08).
+### Support request inbox (in-app) [0.2 — replaced Resend e-mail, #107]
+Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `support_requests` via service-role (no e-mail, no `RESEND_API_KEY`). Caller only needs a valid session — `profiles.status`/`is_active`/`role` are not checked, so unapproved accounts can file a request; `category` is checked for truthiness only, not validated against the UI's category list or length-limited (KI-08).
 
 ### In-app Realtime
 `postgres_changes` channels on `devices`, `alert_events`, `profiles`, `sensor_readings`; unfiltered subscriptions; availability depends on Supabase Realtime (WebSocket) — not testable in the reviewers' sandbox per `LIVE_TESTING_SUMMARY.md`.
@@ -533,7 +539,7 @@ The existing information architecture (routes above) is preserved; no new page i
 | OSM tile servers via Leaflet | Map tiles | tile requests from browsers | none | Tile blocking ⇒ blank map |
 | Telegram Bot API | Station alerts, account linking | message text, chat ids | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET` (webhook registered with `secret_token`) | 403/blocked bot ⇒ non-retryable |
 | Web Push services (browser vendors) | Push | encrypted payloads | VAPID keys | Expired endpoints reported only |
-| Resend | Support e-mail | user id, role, e-mail, message | `RESEND_API_KEY` | Missing key ⇒ 500 |
+| *(removed, #107)* ~~Resend~~ | Support requests now stored in `support_requests` (in-app admin inbox), no external service involved [0.2] | user id, role, contact info, message | none (no `RESEND_API_KEY` needed) | DB insert failure ⇒ 500 |
 | Cellular network / SIM800L | SMS | SMS bodies with coordinates | SIM with credit, coverage | Coverage, credit, antenna, 2G availability ⇒ silent failure (reported as `false`) |
 | Google Maps (links only) | Navigation URLs in messages | coordinates in URL | none | None (links only) |
 | Vercel | SPA hosting | | `vercel.json` | Unverified |
@@ -593,7 +599,7 @@ Every requirement is therefore **Not Tested** in this review; the traceability m
 | KI-05 | `devices.local_ip` is filled from `x-forwarded-for`/`x-real-ip` of the request, i.e. the client's *public/forwarded* address, not a LAN address; UI labels it "Device local IP"; firmware does not send `local_ip` | Mislabelled data | `ingest-reading/index.ts:177`; `Devices.tsx:364` | Existing | Clarify intent |
 | KI-06 | Threshold defaults disagree: DB temp 60 °C (`init.sql:18`), admin form default 65 (`Devices.tsx`), firmware fallback 70 (`TEMP_ALERT_PPM_DEFAULT`, misnamed "PPM") ; CO 200 everywhere | Wrong behaviour if first config fetch fails or device created via form | files cited | Existing | Owner to define canonical default |
 | KI-07 | `station_settings`: UI and TS type use `station_name`, `email`, `key_personnel`; migrations define `team_name`, `commander_name`, `alert_radius_km`… | Station editor fails on a DB built from the repo; live schema unknown | `ResponderSettings.tsx:49-135`; `lib/supabase.ts:105-116`; `init.sql:90-100` | Conflicting | Owner: which is intended (OQ-04) |
-| KI-08 | `admin-support-request` selects `profiles.email` (no such column in migrations ⇒ would 500 "Failed to fetch user profile"); caller role/status unchecked; free-text interpolated unescaped into HTML e-mail; recipient hard-coded | Feature may be broken; minor injection into one mailbox | `admin-support-request/index.ts:44-48,71,82` | Existing | Verify live; correct if broken |
+| KI-08 | **[0.2 — rewritten]** `admin-support-request` (post-#107 in-app inbox, not the old Resend path) inserts into `support_requests` using the service-role client, so the table's RLS is bypassed by construction. The function itself checks only that the caller has a valid session — not `profiles.status='approved'`/`is_active`/role — so any authenticated account, including pending/unapproved ones, can file a request; `category` is checked for truthiness only, not restricted to the UI's fixed list, and neither `category` nor `message` has a length limit; `full_name` is still selected from `profiles` but never used (dead code left over from the deleted Resend template) | Unapproved accounts can reach the admin inbox; unbounded/arbitrary `category` values can be stored and later rendered in the admin UI; minor storage-abuse vector | `admin-support-request/index.ts:30-37,44-48`; `20261022000001_support_requests.sql` (no CHECK on `category`, no length constraint) | New gaps in the #107 replacement; old Resend-specific defect (missing `profiles.email` column) no longer applies | Confirm unapproved-account access is intended; add `category` validation + length limits if not; drop the unused `full_name` select |
 | KI-09 | Repo `get_auth_role()` ignores `profiles.status`; every `get_auth_role()`-based policy (devices, sensor_readings, alert_events, settings, station_settings…) therefore admits **pending/rejected** accounts holding a role. Contradicted by older migration comments and by a live RBAC test that observed immediate revocation | If live = repo: a self-registered responder (pending) could read all incidents/devices, edit `station_settings` and update incident columns before approval | `init.sql:192-195`; `20261019000000` header; `LIVE_RBAC_VERIFICATION.md` row 38; `CHANGELOG §12` ("none yet") | Security — **Conflicting** | **Owner clarification + live inspection first** (OQ-03); no redesign authorised |
 | KI-10 | `protect_profile_fields` protects only `role,status,device_id` | A user can alter own `is_active`, `setup_complete`, `telegram_chat_id` via PostgREST; no UI to deactivate users was found, so practical risk depends on operations | `init.sql:236-261`; `Users.tsx` (no `is_active`) | Existing | Clarify intent for `is_active` |
 | KI-11 | Responder role has `FOR ALL` on `station_settings` and (in production, until Step 6c is deployed) direct column UPDATE on `alert_events` | Wider than the UI exposes | `init.sql:341-342`; `20261012000001`; revoke migration `20261022000000` | Fixed in code (#97), not yet deployed | Deploy after 6.1/6.2 |
@@ -605,6 +611,11 @@ Every requirement is therefore **Not Tested** in this review; the traceability m
 | KI-19 | Unlinked/unapproved resident ⇒ `owner_number` is `""`; `fetchRemoteConfig` default operator keeps a present-but-empty string ⇒ SMS to empty number fails; compile-time placeholder numbers apply if the first fetch never succeeds | Owner SMS silently fails in those cases | `get-device-config:67-78`; `connectivity.cpp:362-368` | Partially verified (ArduinoJson semantics assumed) | Hardware test |
 | KI-20 | `sw.js` icon `/icon-192x192.png` is not in `public/` | Missing push icon | `public/` listing | Cosmetic | Optional |
 | KI-24 | Telegram account linking stores `telegram_chat_id`; no sender uses it; webhook says "You will receive fire alerts here" | User expectation not met | grep: only `telegram-webhook:76-79` writes it | Incomplete (#95) | Owner D5.4/D5.5 |
+| KI-25 [0.2] | `get_dashboard_stats()` is `SECURITY DEFINER` with no `SET search_path` and no internal caller check; Postgres grants `EXECUTE` to `PUBLIC` by default on new functions and no migration (full 35-file history re-read) revokes it. Corroborating pattern: from `20261017000000` onward, every other sensitive function the team wrote gets an explicit `REVOKE ALL ... FROM PUBLIC/anon/authenticated` in the same migration (`create_telegram_link_token`, `resolve_address_discrepancy`, `is_approved_admin`, `claim_/complete_notification`, `raise_alert`, `transition_incident`) — `get_dashboard_stats()` is among the `SECURITY DEFINER` functions that never received this treatment (also true of `protect_profile_fields()` and the dead-code `handle_new_user()`, all three from the same original `init.sql`, and of `get_device_api_key_secure()` — KI-27, a later and more unusual case), consistent with being a pre-convention oversight rather than an intentionally public RPC | Any authenticated (possibly `anon`) caller can execute it directly (e.g. PostgREST `rpc/get_dashboard_stats`) and get system-wide device/alert/user counts, bypassing every RLS policy hiding these from non-admin roles | `20260717000000_init.sql:197-218`; no later `REVOKE EXECUTE`/role check found; no frontend caller found | Resolves the prior "Unverified" note in §5.8 — Confirmed static defect (subject to the standing live-vs-repo caveat in §5.1 limitation 2) | Security — add `REVOKE EXECUTE ... FROM PUBLIC` + explicit admin-only grant, or an internal role check |
+| KI-26 [0.2] | `check_login_lockout()` keys the failure counter on `email` with a case-sensitive comparison; `login/index.ts` never lower-cases `email` before calling it or writing `login_attempts`; Supabase Auth (GoTrue) authenticates e-mail case-insensitively | An attacker can defeat the app-level lockout tiers by varying case per attempt (`victim@x.com`, `Victim@x.com`, `VICTIM@X.com`…) — each is counted as a fresh, unlocked identity while GoTrue treats them as the same account | `login/index.ts:67-112`; `check_login_lockout()` (migration `20260924090000`) | New — security | Lower-case the e-mail before every lockout read/write and RPC call |
+| KI-27 [0.2] | `get_device_api_key_secure()` is `SECURITY DEFINER` without `SET search_path`. Unlike the pre-convention gaps in `init.sql` (KI-25), this function was created on `20261015000000` — chronologically *after* the hardening convention began (first seen `20260917060000`, made explicit/systematic from `20260924020000`) — making it the only `SECURITY DEFINER` function created after the convention started that doesn't follow it | Low current exploitability (`authenticated`/`anon` lack `CREATE` on the database by default; the function also has its own internal `v_role = 'admin'` check, unlike `get_dashboard_stats()`), but breaks the project's own hardening convention and is the exact class of bug `20260924020000` exists to close | `20261015000000_fix_devices_safe_security_invoker.sql:6-22` | New — hardening consistency | Add `SET search_path = public, pg_temp` to match the convention |
+| KI-28 [0.2] | `manage-registration`'s `approve` action writes `profiles.device_id` with no check that the device isn't already claimed by another resident, unlike `assign-device`/`link-device`, which both guard this | If two profiles end up sharing a `device_id`, `trigger-alert`'s Tier-2 SMS lookup uses `.maybeSingle()`, which errors on multiple matches; the error is swallowed and `owner_contact` resolves to `''` — **the resident's SMS fire alert silently never sends** | `manage-registration/index.ts:67-77`; `trigger-alert/index.ts:359-369` | New — safety-critical (alert delivery) | Add the same pre-write uniqueness check used in `assign-device`/`link-device` to the approve path |
+| KI-29 [0.2] | `support_requests.reviewed_by`, `registration_requests.reviewed_by` and `login_lockout_overrides.unlocked_by` reference `auth.users(id)` directly, while every other actor-tracking column in the schema (`acknowledged_by`, `resolved_by`, `user_id`, `resident_id`…) references `public.profiles(id)` | Not a functional bug (1:1 PK), but breaks a PostgREST embed like `profiles!reviewed_by(full_name)` — the same pattern already used for the analogous `user_id` column — if ever attempted on these columns | `20260717000000_init.sql:116`; `20260924010000_admin_login_unlock.sql:20`; `20261022000000_support_requests.sql:14` | New — schema convention | Optional: point new actor-tracking FKs at `profiles(id)` going forward |
 
 ### Incomplete requirements (tracked by the repository)
 Step 5.4 (per-user Telegram, #95) · Step 6.3 (auto-resolve/device-clear/admin reopen, #96) · keep-alive re-assert (D5.2) · UTC label on message times (D5.6) · backfill of legacy incidents (D6.3).
@@ -617,7 +628,7 @@ KI-03, KI-06, KI-07, KI-09; `FEATURES.md` vs code (§5.1); `devices_safe` has be
 Retention (FR-ALERT-006); password/session policy; SLA/availability/performance targets; whether GSM data fallback is required (OQ-02); who must receive Tier 1 (currently admins+responders only, residents get nothing on Tier 1); coverage/area scoping of responders; privacy basis for location data.
 
 ### Unverified integrations
-Telegram, Web Push, SMS/SIM800L, Nominatim, Resend, Realtime, OSM tiles, Vercel (§5.12).
+Telegram, Web Push, SMS/SIM800L, Nominatim, Realtime, OSM tiles, Vercel (§5.12). *(Resend removed from this list in 0.2 — the integration was removed from the codebase by #107, not merely unverified.)*
 
 ### Unresolved architectural decisions
 D5.2, D5.4, D5.5, D5.6, D5.7, D6.1, D6.3, D6.4, D6.5 (the last is referenced in `CHANGELOG §11` but not defined in any inspected document).
