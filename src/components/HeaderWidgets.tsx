@@ -119,6 +119,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
             ) : (
               alerts.map((alert) => {
                 const deviceInfo = alert.devices as unknown as { device_code: string; label: string; location_desc: string } | undefined;
+                const resolved = !!alert.resolved_at;
                 return (
                   <button
                     key={alert.id}
@@ -127,20 +128,20 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
                       setIsOpen(false);
                     }}
                     className={`w-full text-left px-4 py-3 border-b border-[#F0EDEC] last:border-0 hover:bg-[#FCF9F8] transition-colors flex items-start gap-3 ${
-                      !alert.resolved_at ? 'bg-[#FFF5F2]' : ''
+                      !resolved ? 'bg-[#FFF5F2]' : 'opacity-60'
                     }`}
                   >
                     <div className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                      alert.alert_tier === 2 ? 'bg-[#FEE2E2]' : 'bg-[#FEF3C7]'
+                      resolved ? 'bg-[#F0EDEC]' : alert.alert_tier === 2 ? 'bg-[#FEE2E2]' : 'bg-[#FEF3C7]'
                     }`}>
                       <Flame className={`w-3.5 h-3.5 ${
-                        alert.alert_tier === 2 ? 'text-[#DC2626]' : 'text-[#F59E0B]'
+                        resolved ? 'text-[#A1A1AA]' : alert.alert_tier === 2 ? 'text-[#DC2626]' : 'text-[#F59E0B]'
                       }`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <span className={`text-xs font-bold ${
-                          alert.alert_tier === 2 ? 'text-[#DC2626]' : 'text-[#92400E]'
+                          resolved ? 'text-[#A1A1AA]' : alert.alert_tier === 2 ? 'text-[#DC2626]' : 'text-[#92400E]'
                         }`}>
                           {alert.alert_tier === 2 ? 'CRITICAL ALERT' : 'WARNING'}
                         </span>
@@ -148,12 +149,12 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
                           {timeAgo(alert.triggered_at)}
                         </span>
                       </div>
-                      <p className="text-xs text-[#1C1B1B] font-medium mt-0.5 truncate">
+                      <p className={`text-xs font-medium mt-0.5 truncate ${resolved ? 'text-[#5B403D]' : 'text-[#1C1B1B]'}`}>
                         {deviceInfo?.device_code || 'Unknown Device'}
                       </p>
                       <p className="text-[10px] text-[#5B403D] mt-0.5">
                         {alert.temp_celsius}°C · {alert.co_ppm} ppm CO
-                        {alert.resolved_at && (
+                        {resolved && (
                           <span className="text-[#10B981] ml-1 font-bold">· Resolved</span>
                         )}
                       </p>
