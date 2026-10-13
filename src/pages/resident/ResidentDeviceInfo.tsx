@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { DeviceInfoSkeleton } from '../../components/SkeletonLoaders';
 import type { Device, SensorReading } from '../../lib/supabase';
-import { MapPin, Thermometer, Wind, Clock, Wifi, WifiOff, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { MapPin, Thermometer, Wind, Clock, Wifi, WifiOff, CheckCircle2, XCircle, RefreshCw, Pencil, Save, X, AlertTriangle } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { resolveDeviceLocation, markerOpacity } from '../../lib/location';
@@ -22,6 +22,14 @@ export const ResidentDeviceInfo = () => {
   const [readings, setReadings] = useState<SensorReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Resident-editable address text (lib/location.ts: "registered" is the
+  // install reference text, independent of any GPS fix). Lets a resident
+  // make it more specific (unit/floor/landmark) without admin involvement.
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [addressInput, setAddressInput] = useState('');
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [addressMsg, setAddressMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     if (profile?.device_id) {
@@ -51,6 +59,44 @@ export const ResidentDeviceInfo = () => {
     setRefreshing(true);
     await fetchData(profile.device_id);
     setRefreshing(false);
+  };
+
+  const startEditingAddress = () => {
+    setAddressInput(device?.location_desc || '');
+    setAddressMsg(null);
+    setEditingAddress(true);
+  };
+
+  const cancelEditingAddress = () => {
+    setEditingAddress(false);
+    setAddressMsg(null);
+  };
+
+  const saveAddress = async () => {
+    const trimmed = addressInput.trim();
+    if (!trimmed) {
+      setAddressMsg({ type: 'error', text: 'Address cannot be empty.' });
+      return;
+    }
+    setSavingAddress(true);
+    setAddressMsg(null);
+    try {
+      // Residents have no direct UPDATE grant on devices - this goes through
+      // a narrow RPC that only ever touches location_desc on the caller's
+      // own device (see 20261028000000_resident_update_device_address_rpc.sql).
+      const { data, error } = await supabase.rpc('update_own_device_location_desc', {
+        p_location_desc: trimmed,
+      });
+      if (error) throw error;
+      setDevice(prev => (prev ? { ...prev, location_desc: data as string } : prev));
+      setEditingAddress(false);
+      setAddressMsg({ type: 'success', text: 'Address updated.' });
+      setTimeout(() => setAddressMsg(null), 4000);
+    } catch (e: any) {
+      setAddressMsg({ type: 'error', text: e.message || 'Failed to update address.' });
+    } finally {
+      setSavingAddress(false);
+    }
   };
 
   if (loading) return <DeviceInfoSkeleton />;
@@ -102,9 +148,56 @@ export const ResidentDeviceInfo = () => {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-[#F4F4F5] p-3 rounded">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Location</span>
-                <span className="text-xs font-bold text-[#18181B] flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />{device.location_desc}</span>
+              <div className="bg-[#F4F4F5] p-3 rounded col-span-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Location</span>
+                  {!editingAddress && (
+                    <button
+                      onClick={startEditingAddress}
+                      title="Edit address"
+                      className="text-[#A1A1AA] hover:text-[#18181B] transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                {editingAddress ? (
+                  <div className="flex flex-col gap-2 mt-1">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={addressInput}
+                      onChange={e => setAddressInput(e.target.value)}
+                      placeholder="e.g. Unit 402, Server Room - East Wing"
+                      className="w-full px-2 py-1.5 text-xs font-bold text-[#18181B] bg-white border border-[#D4D4D8] rounded focus:outline-none focus:ring-1 focus:ring-[#00799C] focus:border-[#00799C]"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveAddress}
+                        disabled={savingAddress}
+                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-[#18181B] text-white text-[10px] font-bold uppercase rounded hover:bg-black transition-colors disabled:opacity-50"
+                      >
+                        <Save className="w-3 h-3" />
+                        {savingAddress ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={cancelEditingAddress}
+                        disabled={savingAddress}
+                        className="px-2 py-1 border border-[#D4D4D8] text-[#52525B] text-[10px] font-bold uppercase rounded hover:bg-white transition-colors disabled:opacity-50"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-xs font-bold text-[#18181B] flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />{device.location_desc}</span>
+                )}
+                {addressMsg && (
+                  <p className={`text-[10px] font-bold mt-1.5 flex items-center gap-1 ${addressMsg.type === 'success' ? 'text-[#00799C]' : 'text-[#DC2626]'}`}>
+                    {addressMsg.type === 'error' && <AlertTriangle className="w-3 h-3 shrink-0" />}
+                    {addressMsg.text}
+                  </p>
+                )}
               </div>
               <div className="bg-[#F4F4F5] p-3 rounded">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Temp Threshold</span>
