@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
+import { PageHeader } from '../../components/PageHeader';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { AlertEvent } from '../../lib/supabase';
 import {
@@ -153,14 +154,9 @@ export const Dashboard = () => {
       )}
 
       {/* Page header */}
-      <header className="flex flex-col gap-1 mb-6 md:mb-8">
-        <h2 className="text-text font-extrabold text-[28px] leading-8 md:text-[40px] md:leading-[44px] tracking-[-0.02em]">
-          Dashboard
-        </h2>
-        <p className="text-text-body/80 font-medium text-sm leading-5">
-          Real-time overview of users, devices, and fire alerts.
-        </p>
-      </header>
+      <div className="mb-6 md:mb-8">
+        <PageHeader title="Dashboard" description="Real-time overview of users, devices, and fire alerts." />
+      </div>
 
       {/* Stat cards — 2-up on phones, 4-up on desktop */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 md:mb-8">

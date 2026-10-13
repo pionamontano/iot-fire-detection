@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
@@ -305,26 +306,22 @@ export const Users = () => {
 
   return (
     <>
-      <div className="flex-1 overflow-auto bg-[#FCF9F8] font-['Inter',_sans-serif]">
-        <header className="bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-b border-[#E5E2E1] p-6 sticky top-0 z-10">
-        <div className="flex justify-between items-center max-w-7xl mx-auto">
-          <div>
-            <h1 className="text-2xl font-black text-[#231918] tracking-tight">User Management</h1>
-            <p className="text-[#534341] text-sm mt-1">Manage accounts and registration requests</p>
-          </div>
-            {activeTab === 'active' && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="bg-[#D32F2F] text-white px-4 py-2.5 rounded-lg flex items-center font-bold text-sm tracking-wide uppercase hover:bg-[#B91C1C] transition-colors shadow-sm"
-              >
-                <UserPlus className="w-4 h-4 mr-2" />
-                Add User
-              </button>
-            )}
-          </div>
-        </header>
+      <div className="space-y-8">
+        <PageHeader
+          title="User Management"
+          description="Manage accounts and registration requests."
+          actions={activeTab === 'active' && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="h-11 bg-primary text-white px-4 rounded-lg flex items-center gap-2 font-semibold text-sm hover:bg-primary-dark transition-colors shadow-sm"
+            >
+              <UserPlus className="w-4 h-4" />
+              Add User
+            </button>
+          )}
+        />
 
-        <main className="p-8 max-w-7xl mx-auto">
+        <div>
           {deviceLoadError && (
             <div className="mb-6"><LoadErrorBanner what="the device list (needed for device assignment)" error={deviceLoadError} onRetry={fetchData} /></div>
           )}
@@ -598,7 +595,7 @@ export const Users = () => {
               )}
             </div>
           </div>
-        </main>
+        </div>
       </div>
 
       {/* Approve Modal */}

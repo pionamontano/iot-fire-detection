@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
@@ -328,15 +329,10 @@ export const Devices = () => {
         <LoadErrorBanner what="devices" error={loadError} onRetry={fetchDevices} />
       )}
       {/* Page Header */}
-      <div>
-        <h2 className="text-[#1C1B1B] font-extrabold text-[40px] leading-9 tracking-[-0.019em]">
-          Device Registration
-        </h2>
-        <p className="text-[#5B403D] text-base leading-6 mt-3 max-w-[656px]">
-          Provision hardware nodes for the thermal monitoring mesh. Ensure all GPS coordinates
-          are calibrated to within 2 meters for accurate emergency dispatch.
-        </p>
-      </div>
+      <PageHeader
+        title="Device Registration"
+        description="Register and manage AgapSense units. Accurate GPS coordinates matter: they are what responders are dispatched to."
+      />
 
       {/* Main Grid: 12-col → 7-col Left + 5-col Right */}
       <div className="grid grid-cols-12 gap-8">

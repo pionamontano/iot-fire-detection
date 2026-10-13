@@ -23,7 +23,7 @@ export const ResponderLayout: React.FC = () => {
 
   const secondaryNavItems = [
     { name: 'Settings', path: '/responder/settings', icon: Settings },
-    { name: 'Logout', path: '#logout', icon: LogOut },
+    { name: 'Log out', path: '#logout', icon: LogOut },
   ];
 
   return (
@@ -48,7 +48,7 @@ export const ResponderLayout: React.FC = () => {
           <NotificationDropdown alertsPath="/responder/alerts" />
 
           {/* User Menu */}
-          <UserMenuDropdown settingsPath="/responder/settings" />
+          <UserMenuDropdown settingsPath="/responder/settings" onSignOut={() => setShowLogoutModal(true)} />
 
           {/* Mobile Menu Toggle */}
           <button
@@ -168,20 +168,20 @@ export const ResponderLayout: React.FC = () => {
       {showLogoutModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-border animate-in fade-in zoom-in duration-200">
-            <h3 className="text-xl font-bold text-text-heading mb-2">Confirm Logout</h3>
+            <h3 className="text-xl font-bold text-text-heading mb-2">Log out?</h3>
             <p className="text-sm text-text-body mb-6">Are you sure you want to end your session? You will need to re-authenticate to access the dashboard again.</p>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setShowLogoutModal(false)}
                 className="px-4 py-2 text-sm font-bold text-text-muted hover:text-text-heading transition-colors"
               >
-                CANCEL
+                Cancel
               </button>
               <button
                 onClick={handleSignOut}
                 className="px-5 py-2 bg-[#B91C1C] hover:bg-[#991B1B] text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
               >
-                LOGOUT
+                Log out
               </button>
             </div>
           </div>

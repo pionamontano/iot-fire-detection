@@ -51,7 +51,7 @@ export const ResidentLayout = () => {
           <NotificationDropdown alertsPath="/home/logs" />
 
           {/* User Menu */}
-          <UserMenuDropdown settingsPath="/account" />
+          <UserMenuDropdown settingsPath="/account" onSignOut={() => setShowLogoutModal(true)} />
         </div>
       </header>
 
@@ -122,7 +122,7 @@ export const ResidentLayout = () => {
               className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-[#52525B] hover:bg-[#FEE2E2] hover:text-[#DC2626] transition-colors text-sm font-medium"
             >
               <LogOut size={18} />
-              Logout
+              Log out
             </button>
           </div>
         </aside>
@@ -140,20 +140,20 @@ export const ResidentLayout = () => {
       {showLogoutModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-border animate-in fade-in zoom-in duration-200">
-            <h3 className="text-xl font-bold text-text-heading mb-2">Confirm Logout</h3>
+            <h3 className="text-xl font-bold text-text-heading mb-2">Log out?</h3>
             <p className="text-sm text-text-body mb-6">Are you sure you want to log out? You will need to log back in to access your dashboard.</p>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setShowLogoutModal(false)}
                 className="px-4 py-2 text-sm font-bold text-text-muted hover:text-text-heading transition-colors"
               >
-                CANCEL
+                Cancel
               </button>
               <button
                 onClick={handleLogout}
                 className="px-5 py-2 bg-[#B91C1C] hover:bg-[#991B1B] text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
               >
-                LOGOUT
+                Log out
               </button>
             </div>
           </div>

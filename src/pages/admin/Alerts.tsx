@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
@@ -232,18 +233,11 @@ export const Alerts = () => {
         <LoadErrorBanner what="devices and alerts" error={loadError} onRetry={fetchData} />
       )}
       {/* ─── Page Header & Stats Summary ─── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-[#1C1B1B] font-extrabold text-[40px] leading-9 tracking-[-0.019em]">
-            System Overview
-          </h2>
-          <p className="text-[#5B403D] text-base leading-6 mt-2">
-            Real-time status tracking for all deployed IoT environmental sensors.
-          </p>
-        </div>
-
-        {/* Summary Badges */}
-        <div className="flex items-stretch gap-4 shrink-0">
+      <PageHeader
+        title="System Overview"
+        description="Real-time status tracking for all deployed IoT environmental sensors."
+        actions={
+        <div className="flex items-stretch gap-3 md:gap-4">
           {/* Critical Alerts */}
           <div className="bg-[#F6F3F2] border border-[#E5E2E1] rounded-lg px-5 py-3 flex items-center gap-4">
             <div className="w-8 h-8 rounded-full bg-[rgba(220,38,38,0.1)] flex items-center justify-center shrink-0">
@@ -251,8 +245,8 @@ export const Alerts = () => {
             </div>
             <div>
               <p className="text-[#5B403D] font-bold text-[10px] tracking-[0.1em] uppercase">Critical Alerts</p>
-              <p className="font-extrabold text-2xl leading-none text-[#DC2626] mt-0.5">
-                {activeAlertCount.toString().padStart(2, '0')}
+              <p className={`font-extrabold text-2xl leading-none mt-0.5 ${activeAlertCount > 0 ? 'text-[#DC2626]' : 'text-[#1C1B1B]'}`}>
+                {activeAlertCount.toLocaleString()}
               </p>
             </div>
           </div>
@@ -270,7 +264,8 @@ export const Alerts = () => {
             </div>
           </div>
         </div>
-      </div>
+        }
+      />
 
       {/* ─── Bento Grid: 8-col Table + 4-col Sidebar ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -350,8 +345,8 @@ export const Alerts = () => {
                       return (
                         <tr key={device.id} className="border-b border-[#E5E2E1] last:border-0 hover:bg-[#FCF9F8] transition-colors">
                           <td className="px-5 py-4 align-top">
-                            <span className="font-bold text-xs text-[#1C1B1B] break-words whitespace-pre-wrap max-w-[80px] block">
-                              {device.device_code.replace('-', '-\n')}
+                            <span className="font-mono font-semibold text-xs text-[#1C1B1B] whitespace-nowrap">
+                              {device.device_code}
                             </span>
                           </td>
                           <td className="px-5 py-4 align-top">

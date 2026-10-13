@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import type { SupportRequest } from '../../lib/supabase';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
@@ -93,15 +94,13 @@ export const SupportRequests = () => {
 
   return (
     <>
-      <div className="flex-1 overflow-auto bg-[#FCF9F8] font-['Inter',_sans-serif]">
-        <header className="bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-b border-[#E5E2E1] p-6 sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto">
-            <h1 className="text-2xl font-black text-[#231918] tracking-tight">Support Requests</h1>
-            <p className="text-[#534341] text-sm mt-1">Requests submitted via "Contact System Administrator"</p>
-          </div>
-        </header>
+      <div className="space-y-8">
+        <PageHeader
+          title="Support Requests"
+          description={<>Requests submitted via &ldquo;Contact System Administrator&rdquo;.</>}
+        />
 
-        <main className="p-8 max-w-7xl mx-auto">
+        <div>
           {loadError && (
             <div className="mb-6"><LoadErrorBanner what="support requests" error={loadError} onRetry={fetchRequests} /></div>
           )}
@@ -226,7 +225,7 @@ export const SupportRequests = () => {
               )}
             </div>
           </div>
-        </main>
+        </div>
       </div>
 
       {/* Resolve Modal */}

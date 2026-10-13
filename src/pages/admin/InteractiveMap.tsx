@@ -8,24 +8,10 @@ import type { AlertEvent } from '../../lib/supabase';
 import { Search, Activity, Layers } from 'lucide-react';
 import { getMapStatus } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
+import { formatAge } from '../../lib/location';
 import { DeviceMap, MapLegend } from '../../components/DeviceMap';
 import { MAP_READING_COLUMNS, toMapDevices } from '../../lib/mapDevices';
 import type { DeviceWithReadings } from '../../lib/mapDevices';
-
-const timeAgo = (dateStr: string) => {
-  const seconds = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 1000);
-  let interval = seconds / 31536000;
-  if (interval > 1) return Math.floor(interval) + "y ago";
-  interval = seconds / 2592000;
-  if (interval > 1) return Math.floor(interval) + "mo ago";
-  interval = seconds / 86400;
-  if (interval > 1) return Math.floor(interval) + "d ago";
-  interval = seconds / 3600;
-  if (interval > 1) return Math.floor(interval) + "h ago";
-  interval = seconds / 60;
-  if (interval > 1) return Math.floor(interval) + "m ago";
-  return Math.floor(seconds) + "s ago";
-};
 
 export const InteractiveMap = () => {
   const navigate = useNavigate();
@@ -241,7 +227,7 @@ export const InteractiveMap = () => {
                     <span className={`font-extrabold text-xs uppercase ${titleClass}`}>{title}</span>
                   </div>
                   <span className="text-[9px] font-bold text-[#71717A]" title={new Date(eventAt).toLocaleString()}>
-                    {timeAgo(eventAt)}
+                    {formatAge(eventAt)}
                   </span>
                 </div>
                 <h4 className="font-bold text-sm text-[#18181B] mb-0.5">{deviceLabel}</h4>

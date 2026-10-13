@@ -30,20 +30,30 @@ export const AdminLayout: React.FC = () => {
 
   const secondaryNavItems = [
     { name: 'Settings', path: '/admin/settings/security', icon: Settings },
-    { name: 'Logout', path: '#logout', icon: LogOut },
+    { name: 'Log out', path: '#logout', icon: LogOut },
   ];
 
   return (
     <div className="h-screen w-screen bg-surface font-sans flex flex-col overflow-hidden">
       
       {/* ─── Top Navigation Bar ─── */}
-      <header className="shrink-0 h-[69px] z-50 bg-[#B91C1C] flex items-center justify-between px-3 md:px-8 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-        {/* Brand */}
-        <div className="flex items-center gap-0 min-w-0 shrink-0">
-          <span className="text-white font-bold text-xl sm:text-2xl md:text-[32px] leading-7 tracking-[-0.03em] whitespace-nowrap">
-            AgapSense{' '}
+      <header className="shrink-0 h-[69px] z-50 bg-primary flex items-center justify-between px-3 md:px-8 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+        {/* Brand — shown once, here; the sidebar no longer repeats it */}
+        <NavLink to="/dashboard" className="flex items-center gap-2 min-w-0 shrink-0" aria-label="AgapSense dashboard">
+          <span className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0">
+            <svg width="16" height="20" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M12 0C12 0 4 8 4 16C4 20.4183 7.58172 24 12 24C16.4183 24 20 20.4183 20 16C20 8 12 0 12 0Z" fill="#D32F2F"/>
+              <path d="M12 12C12 12 8 16 8 20C8 22.2091 9.79086 24 12 24C14.2091 24 16 22.2091 16 20C16 16 12 12 12 12Z" fill="#FF8A65"/>
+            </svg>
           </span>
-        </div>
+          <span className="text-white font-bold text-xl sm:text-2xl md:text-[28px] leading-7 tracking-[-0.03em] whitespace-nowrap">
+            AgapSense
+          </span>
+          <span className="hidden lg:inline-block w-px h-5 bg-white/40 mx-3"></span>
+          <span className="hidden lg:inline text-white/80 font-bold text-[10px] tracking-[0.1em] uppercase whitespace-nowrap">
+            Smarter detection, faster response
+          </span>
+        </NavLink>
 
         {/* Right Section */}
         <div className="flex items-center gap-3 md:gap-6">
@@ -54,7 +64,7 @@ export const AdminLayout: React.FC = () => {
           <NotificationDropdown alertsPath="/admin/alerts" />
 
           {/* User Avatar */}
-          <UserMenuDropdown settingsPath="/admin/settings/security" />
+          <UserMenuDropdown settingsPath="/admin/settings/security" onSignOut={() => setShowLogoutModal(true)} />
 
           {/* Mobile Menu Toggle */}
           <button
@@ -78,26 +88,8 @@ export const AdminLayout: React.FC = () => {
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
         `}>
           <div className="flex flex-col flex-1 pt-6 overflow-hidden">
-            {/* Sidebar Heading */}
-            <div className="px-6 pb-0 shrink-0">
-              <div className="flex items-center gap-2 mb-1">
-                <svg width="20" height="26" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 0C12 0 4 8 4 16C4 20.4183 7.58172 24 12 24C16.4183 24 20 20.4183 20 16C20 8 12 0 12 0Z" fill="#D32F2F"/>
-                  <path d="M12 12C12 12 8 16 8 20C8 22.2091 9.79086 24 12 24C14.2091 24 16 22.2091 16 20C16 16 12 12 12 12Z" fill="#FF8A65"/>
-                </svg>
-                <h1 className="text-text-heading font-black text-3xl tracking-[-0.03em]">
-                  AgapSense
-                </h1>
-              </div>
-              <div className="mt-2">
-                <span className="block text-primary font-bold text-[10px] leading-4 tracking-[0.1em] uppercase">
-                  smarter detection, faster response
-                </span>
-              </div>
-            </div>
-
             {/* Main Nav */}
-            <nav className="flex-1 px-3 mt-8 space-y-1 overflow-y-auto">
+            <nav className="flex-1 px-3 space-y-1 overflow-y-auto" aria-label="Main">
               {mainNavItems.map((item) => (
                 <NavLink
                   key={item.name}
@@ -107,7 +99,7 @@ export const AdminLayout: React.FC = () => {
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 text-sm font-medium ${
                       isActive
-                        ? 'bg-[rgba(244,161,133,0.27)] text-[#B91C1C]'
+                        ? 'bg-[rgba(244,161,133,0.27)] text-primary'
                         : 'text-[#52525B] hover:bg-border-light/30 hover:text-text-heading'
                     }`
                   }
@@ -138,7 +130,7 @@ export const AdminLayout: React.FC = () => {
                     className={({ isActive }) =>
                       `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 text-sm font-medium ${
                         isActive
-                          ? 'bg-[rgba(244,161,133,0.27)] text-[#B91C1C]'
+                          ? 'bg-[rgba(244,161,133,0.27)] text-primary'
                           : 'text-[#52525B] hover:bg-border-light/30 hover:text-text-heading'
                       }`
                     }
@@ -174,20 +166,20 @@ export const AdminLayout: React.FC = () => {
       {showLogoutModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-border animate-in fade-in zoom-in duration-200">
-            <h3 className="text-xl font-bold text-text-heading mb-2">Confirm Logout</h3>
+            <h3 className="text-xl font-bold text-text-heading mb-2">Log out?</h3>
             <p className="text-sm text-text-body mb-6">Are you sure you want to end your session? You will need to re-authenticate to access the dashboard again.</p>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setShowLogoutModal(false)}
-                className="px-4 py-2 text-sm font-bold text-text-muted hover:text-text-heading transition-colors"
+                className="px-4 py-2 text-sm font-semibold text-text-muted hover:text-text-heading transition-colors"
               >
-                CANCEL
+                Cancel
               </button>
               <button
                 onClick={handleSignOut}
-                className="px-5 py-2 bg-[#B91C1C] hover:bg-[#991B1B] text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
+                className="px-5 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
               >
-                LOGOUT
+                Log out
               </button>
             </div>
           </div>

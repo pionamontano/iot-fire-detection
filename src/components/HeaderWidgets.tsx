@@ -4,18 +4,8 @@ import { Bell, Search, X, Cpu, Settings, LogOut, Flame, ArrowRight } from 'lucid
 import { supabase } from '../lib/supabase';
 import type { AlertEvent, Device } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-
-// ─── Time Ago Helper ───
-const timeAgo = (dateStr: string) => {
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return 'Just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-};
+import { formatAge } from '../lib/location';
+import { getConnectivityStatus } from '../lib/deviceStatus';
 
 // ═══════════════════════════════════════════
 // ─── Notification Dropdown ───
@@ -143,10 +133,10 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
                         <span className={`text-xs font-bold ${
                           resolved ? 'text-[#A1A1AA]' : alert.alert_tier === 2 ? 'text-[#DC2626]' : 'text-[#92400E]'
                         }`}>
-                          {alert.alert_tier === 2 ? 'CRITICAL ALERT' : 'WARNING'}
+                          {alert.alert_tier === 2 ? 'Fire alert · Tier 2' : 'Warning · Tier 1'}
                         </span>
                         <span className="text-[10px] text-[#A1A1AA] whitespace-nowrap">
-                          {timeAgo(alert.triggered_at)}
+                          {formatAge(alert.triggered_at)}
                         </span>
                       </div>
                       <p className={`text-xs font-medium mt-0.5 truncate ${resolved ? 'text-[#5B403D]' : 'text-[#1C1B1B]'}`}>
@@ -263,7 +253,7 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
         onFocus={() => query.trim().length >= 2 && results.length > 0 && setIsOpen(true)}
         className="bg-surface-alt rounded-md pl-9 pr-4 py-[7px] text-sm text-text placeholder-text-faint w-64 focus:outline-none focus:ring-2 focus:ring-white/30"
       />
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-[10.5px] h-[10.5px] text-text-faint" />
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-faint" />
 
       {isOpen && (
         <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-[#E5E2E1] z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
@@ -297,7 +287,12 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
                     <p className="text-xs font-bold text-[#1C1B1B] truncate">{device.device_code}</p>
                     <p className="text-[10px] text-[#5B403D] truncate">{device.label} · {device.location_desc}</p>
                   </div>
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${device.is_active ? 'bg-[#10B981]' : 'bg-[#A1A1AA]'}`} />
+                  {/* Same online rule as the dashboard badges — is_active alone showed
+                      devices that had been offline for weeks as green. */}
+                  <div
+                    title={device.is_active && getConnectivityStatus(device.last_seen_at) === 'online' ? 'Online' : 'Offline'}
+                    className={`w-2 h-2 rounded-full shrink-0 ${device.is_active && getConnectivityStatus(device.last_seen_at) === 'online' ? 'bg-[#10B981]' : 'bg-[#A1A1AA]'}`}
+                  />
                 </button>
               ))}
             </div>
@@ -314,9 +309,11 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
 // ═══════════════════════════════════════════
 interface UserMenuProps {
   settingsPath: string;
+  /** Layouts with a logout confirmation pass it here so both entry points behave the same. */
+  onSignOut?: () => void;
 }
 
-export const UserMenuDropdown: React.FC<UserMenuProps> = ({ settingsPath }) => {
+export const UserMenuDropdown: React.FC<UserMenuProps> = ({ settingsPath, onSignOut }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
@@ -382,11 +379,11 @@ export const UserMenuDropdown: React.FC<UserMenuProps> = ({ settingsPath }) => {
             </button>
             <div className="border-t border-[#F0EDEC]" />
             <button
-              onClick={handleLogout}
+              onClick={() => { setIsOpen(false); if (onSignOut) onSignOut(); else handleLogout(); }}
               className="w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm text-[#DC2626] hover:bg-[#FEE2E2] transition-colors"
             >
               <LogOut className="w-4 h-4" />
-              <span className="font-medium">Sign Out</span>
+              <span className="font-medium">Log out</span>
             </button>
           </div>
         </div>
