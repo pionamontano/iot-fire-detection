@@ -65,6 +65,29 @@ serve(async (req: Request) => {
     )
 
     if (action === 'approve') {
+      // Prevent assigning a device that's already claimed by a different resident (KI-28:
+      // assign-device and link-device both guard this; this path had no equivalent check, and a
+      // second profile sharing device_id makes trigger-alert's .maybeSingle() resident lookup error
+      // out, silently dropping that device's Tier-2 SMS with no error surfaced anywhere).
+      if (device_id) {
+        const { data: existingProfiles, error: pError } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .eq('device_id', device_id)
+          .eq('role', 'resident')
+          .neq('id', userId)
+          .limit(1)
+
+        if (pError) throw pError
+
+        if (existingProfiles && existingProfiles.length > 0) {
+          return new Response(JSON.stringify({ error: 'This device is already assigned to another resident.' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 409,
+          })
+        }
+      }
+
       // Update profile status to approved
       const updateData: Record<string, any> = { status: 'approved' }
       if (device_id) updateData.device_id = device_id
