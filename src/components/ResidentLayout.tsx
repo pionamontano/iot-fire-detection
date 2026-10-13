@@ -44,7 +44,6 @@ export const ResidentLayout = () => {
         {/* Profile & Notifications */}
         <div className="flex items-center gap-2 lg:gap-4 min-w-0 shrink-0">
           <div className="hidden sm:flex items-center text-white text-[10px] sm:text-xs font-bold tracking-[0.1em] uppercase min-w-0">
-            <BellRing size={14} className="mr-1.5 sm:mr-3 shrink-0" />
             <span className="truncate max-w-[80px] sm:max-w-[140px] lg:max-w-none">OWNER : {profile?.full_name?.split(' ')[0] || 'USER'}</span>
           </div>
 
