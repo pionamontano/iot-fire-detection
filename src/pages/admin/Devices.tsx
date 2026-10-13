@@ -7,12 +7,12 @@ import type { Device, FirmwareRelease } from '../../lib/supabase';
 import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket } from 'lucide-react';
 import { CardListSkeleton } from '../../components/SkeletonLoaders';
 
-// Fleet-wide firmware push is disabled: DEVICE_ID / DEVICE_API_KEY are compiled into the firmware image,
-// so one image pushed to several devices would make them all authenticate as the same device.
-// Re-enable only after device identity moves to per-device storage (see docs/FIRMWARE_GUIDE.md, 8.2a).
-const FLEET_PUSH_ENABLED = false;
+// Fleet-wide firmware push. Safe because device ID / API key are stored per node (NVS) rather than compiled
+// into the image (docs/FIRMWARE_GUIDE.md, 5.1 and 8.6). Set to false to disable it again (e.g. while nodes still
+// run firmware with a compiled-in identity).
+const FLEET_PUSH_ENABLED = true;
 const FLEET_PUSH_DISABLED_REASON =
-  'Fleet push is disabled: firmware images embed one device identity. Flash devices over USB, or set a target on a single device.';
+  'Fleet push is disabled. See docs/FIRMWARE_GUIDE.md, section 8.6.';
 
 
 const timeAgo = (dateStr: string) => {

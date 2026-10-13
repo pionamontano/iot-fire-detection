@@ -1,6 +1,7 @@
 name: Firmware release
 
 # Builds the ESP32 firmware and uploads firmware.bin to Supabase Storage for OTA.
+# One image serves every node: device ID / API key are stored per node (NVS), not compiled in.
 # It does NOT roll anything out: register the printed version/URL/MD5 in the admin
 # Devices page (add release -> test on one device -> push to fleet).
 #
@@ -48,13 +49,11 @@ jobs:
 
       - name: Check required secrets
         run: |
-          for n in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY BUILD_ANON_KEY BUILD_DEVICE_ID BUILD_DEVICE_API_KEY; do
+          for n in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY BUILD_ANON_KEY; do
             if [ -z "${!n}" ]; then echo "Missing secret for $n"; exit 1; fi
           done
         env:
           BUILD_ANON_KEY: ${{ secrets.FIRMWARE_SUPABASE_ANON_KEY }}
-          BUILD_DEVICE_ID: ${{ secrets.FIRMWARE_DEVICE_ID }}
-          BUILD_DEVICE_API_KEY: ${{ secrets.FIRMWARE_DEVICE_API_KEY }}
 
       - name: Host logic tests
         run: bash firmware/agapsense-firmware/host_tests/run.sh
@@ -75,8 +74,6 @@ jobs:
         env:
           VERSION: ${{ steps.ver.outputs.version }}
           ANON_KEY: ${{ secrets.FIRMWARE_SUPABASE_ANON_KEY }}
-          DEVICE_ID: ${{ secrets.FIRMWARE_DEVICE_ID }}
-          DEVICE_API_KEY: ${{ secrets.FIRMWARE_DEVICE_API_KEY }}
         run: |
           python3 - <<'PY'
           import os, re
@@ -87,8 +84,6 @@ jobs:
               return pat.sub(lambda m: m.group(1) + '"' + value + '"', s, count=1)
           s = setdef(s, 'SUPABASE_URL', os.environ['SUPABASE_URL'])
           s = setdef(s, 'SUPABASE_ANON_KEY', os.environ['ANON_KEY'])
-          s = setdef(s, 'DEVICE_API_KEY', os.environ['DEVICE_API_KEY'])
-          s = setdef(s, 'DEVICE_ID', os.environ['DEVICE_ID'])
           s = setdef(s, 'FIRMWARE_VERSION', os.environ['VERSION'])
           open('config.h', 'w', encoding='utf-8').write(s)
           PY
