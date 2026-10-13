@@ -1,5 +1,5 @@
 // ============================================================
-// gps.cpp ΓÇö NEO-6M / NEO-7M GPS Implementation
+// gps.cpp — NEO-6M / NEO-7M GPS Implementation
 // ============================================================
 
 #include "gps.h"

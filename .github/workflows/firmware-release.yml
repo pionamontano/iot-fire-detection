@@ -1,0 +1,147 @@
+name: Firmware release
+
+# Builds the ESP32 firmware and uploads firmware.bin to Supabase Storage for OTA.
+# One image serves every node: device ID / API key are stored per node (NVS), not compiled in.
+# It does NOT roll anything out: register the printed version/URL/MD5 in the admin
+# Devices page (add release -> test on one device -> push to fleet).
+#
+# Trigger: push a tag like  firmware-v2.1.1  (the tag's version becomes FIRMWARE_VERSION),
+# or run manually and give the version.
+
+on:
+  push:
+    tags: ['firmware-v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Firmware version, e.g. 2.1.1 (no "v" prefix)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    env:
+      # Supabase project (Settings -> API). SUPABASE_SERVICE_ROLE_KEY is used ONLY to upload to Storage;
+      # it is never compiled into the firmware.
+      SUPABASE_URL: ${{ secrets.FIRMWARE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.FIRMWARE_SUPABASE_SERVICE_ROLE_KEY }}
+      FIRMWARE_BUCKET: ${{ vars.FIRMWARE_BUCKET || 'firmware' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME#firmware-v}"; else v="$INPUT_VERSION"; fi
+          if ! printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'; then
+            echo "Invalid firmware version: '$v'"; exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Check required secrets
+        run: |
+          for n in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY BUILD_ANON_KEY; do
+            if [ -z "${!n}" ]; then echo "Missing secret for $n"; exit 1; fi
+          done
+        env:
+          BUILD_ANON_KEY: ${{ secrets.FIRMWARE_SUPABASE_ANON_KEY }}
+
+      - name: Host logic tests
+        run: bash firmware/agapsense-firmware/host_tests/run.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('firmware/agapsense-firmware/platformio.ini') }}
+
+      - run: pip install platformio
+
+      - name: Generate config.h
+        working-directory: firmware/agapsense-firmware/src
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          ANON_KEY: ${{ secrets.FIRMWARE_SUPABASE_ANON_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          s = open('config.example.h', encoding='utf-8').read()
+          def setdef(s, name, value):
+              pat = re.compile(r'^(#define\s+%s\s+)".*?"' % name, re.M)
+              assert pat.search(s), name
+              return pat.sub(lambda m: m.group(1) + '"' + value + '"', s, count=1)
+          s = setdef(s, 'SUPABASE_URL', os.environ['SUPABASE_URL'])
+          s = setdef(s, 'SUPABASE_ANON_KEY', os.environ['ANON_KEY'])
+          s = setdef(s, 'FIRMWARE_VERSION', os.environ['VERSION'])
+          open('config.h', 'w', encoding='utf-8').write(s)
+          PY
+
+      - name: Build
+        working-directory: firmware/agapsense-firmware
+        run: pio run
+
+      - name: Checksum
+        id: sum
+        working-directory: firmware/agapsense-firmware
+        run: |
+          f=.pio/build/esp32dev/firmware.bin
+          test -s "$f"
+          echo "md5=$(md5sum "$f" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "size=$(stat -c %s "$f")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Supabase Storage
+        id: up
+        working-directory: firmware/agapsense-firmware
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          path="agapsense-${VERSION}.bin"
+          code=$(curl -sS -o resp.txt -w '%{http_code}' -X POST \
+            "${SUPABASE_URL}/storage/v1/object/${FIRMWARE_BUCKET}/${path}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @.pio/build/esp32dev/firmware.bin)
+          if [ "$code" != "200" ] && [ "$code" != "201" ]; then
+            echo "Upload failed (HTTP $code) - an existing object with this version is never overwritten:"; cat resp.txt; exit 1
+          fi
+          echo "url=${SUPABASE_URL}/storage/v1/object/public/${FIRMWARE_BUCKET}/${path}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the public URL serves the same bytes
+        env:
+          URL: ${{ steps.up.outputs.url }}
+          MD5: ${{ steps.sum.outputs.md5 }}
+        run: |
+          curl -fsSL "$URL" -o dl.bin
+          test "$(md5sum dl.bin | cut -d' ' -f1)" = "$MD5"
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          URL: ${{ steps.up.outputs.url }}
+          MD5: ${{ steps.sum.outputs.md5 }}
+          SIZE: ${{ steps.sum.outputs.size }}
+        run: |
+          {
+            echo "### Firmware ${VERSION} uploaded"
+            echo
+            echo "Register this in the admin Devices page (add release), test on ONE device, then push to fleet."
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Version | \`${VERSION}\` |"
+            echo "| URL | ${URL} |"
+            echo "| MD5 | \`${MD5}\` |"
+            echo "| Size | ${SIZE} bytes |"
+          } >> "$GITHUB_STEP_SUMMARY"

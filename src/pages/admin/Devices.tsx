@@ -7,6 +7,14 @@ import type { Device, FirmwareRelease } from '../../lib/supabase';
 import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket } from 'lucide-react';
 import { CardListSkeleton } from '../../components/SkeletonLoaders';
 
+// Fleet-wide firmware push. Safe because device ID / API key are stored per node (NVS) rather than compiled
+// into the image (docs/FIRMWARE_GUIDE.md, 5.1 and 8.6). Set to false to disable it again (e.g. while nodes still
+// run firmware with a compiled-in identity).
+const FLEET_PUSH_ENABLED = true;
+const FLEET_PUSH_DISABLED_REASON =
+  'Fleet push is disabled. See docs/FIRMWARE_GUIDE.md, section 8.6.';
+
+
 const timeAgo = (dateStr: string) => {
   const seconds = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 1000);
   if (seconds < 60) return `${seconds}s ago`;
@@ -137,7 +145,7 @@ export const Devices = () => {
   };
 
   const pushReleaseToFleet = async () => {
-    if (!latestRelease) return;
+    if (!FLEET_PUSH_ENABLED || !latestRelease) return;
     const activeCount = devices.filter(d => d.is_active).length;
     if (!window.confirm(
       `Push firmware ${latestRelease.version} to all ${activeCount} active device(s)? Each device picks it up on its next config sync (within 10 minutes).`
@@ -525,12 +533,16 @@ export const Devices = () => {
                 <button
                   type="button"
                   onClick={pushReleaseToFleet}
-                  disabled={pushingFleet || activeDevices.length === 0}
+                  disabled={!FLEET_PUSH_ENABLED || pushingFleet || activeDevices.length === 0}
+                  title={FLEET_PUSH_ENABLED ? undefined : FLEET_PUSH_DISABLED_REASON}
                   className="w-full mt-3 py-2.5 rounded text-white font-bold text-xs tracking-[0.025em] uppercase flex items-center justify-center gap-2 transition-all disabled:opacity-60 bg-[#00799C] hover:bg-[#005F7B]"
                 >
                   {pushingFleet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
                   {pushingFleet ? 'Pushing...' : `Push to ${activeDevices.length} Active Device(s)`}
                 </button>
+                {!FLEET_PUSH_ENABLED && (
+                  <p className="text-[#5B403D] text-[10px] italic mt-1.5">{FLEET_PUSH_DISABLED_REASON}</p>
+                )}
               </div>
             ) : (
               <div className="bg-white rounded py-6 px-4 text-center">
