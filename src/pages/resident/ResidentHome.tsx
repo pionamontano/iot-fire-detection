@@ -496,11 +496,13 @@ export const ResidentHome = () => {
           <div className="bg-white rounded-lg border border-[#E4E4E7] overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b border-[#F4F4F5]">
               <h2 className="text-lg font-black tracking-tight text-[#18181B]">Recent Activity Log</h2>
-              <button 
+              <button
                 onClick={handleRefresh}
-                className="text-[#DC2626] text-[10px] font-bold uppercase tracking-wider hover:underline"
+                disabled={refreshing}
+                className="text-[#DC2626] text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 hover:text-[#b91c1c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                REFRESH →
+                <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+                REFRESH
               </button>
             </div>
             <table className="w-full text-left">
