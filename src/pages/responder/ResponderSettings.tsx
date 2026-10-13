@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
 import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Send, Bell } from 'lucide-react';
 import { AdminSupportModal } from '../../components/AdminSupportModal';
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
 
 export const ResponderSettings = () => {
   const { profile, user } = useAuth();
@@ -15,6 +16,7 @@ export const ResponderSettings = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(true);
 
   const [hasChanges, setHasChanges] = useState(false);
   const [profileContactError, setProfileContactError] = useState('');
@@ -43,7 +45,36 @@ export const ResponderSettings = () => {
       setOrigContact(profile.contact_number || '');
     }
     fetchStationSettings();
+    getPushSubscription().then(sub => {
+      setIsPushSubscribed(!!sub);
+      setPushLoading(false);
+    });
   }, [profile]);
+
+  const handleTogglePush = async () => {
+    setPushLoading(true);
+    try {
+      if (isPushSubscribed) {
+        await unsubscribeUserFromPush();
+        setIsPushSubscribed(false);
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          await subscribeUserToPush();
+          setIsPushSubscribed(true);
+        } else {
+          setErrorMsg('Notification permission denied by browser.');
+          setTimeout(() => setErrorMsg(''), 5000);
+        }
+      }
+    } catch (e: any) {
+      console.error(e);
+      setErrorMsg(describePushError(e, await isBraveBrowser()));
+      setTimeout(() => setErrorMsg(''), 5000);
+    } finally {
+      setPushLoading(false);
+    }
+  };
 
   const fetchStationSettings = async () => {
     try {
@@ -283,8 +314,10 @@ export const ResponderSettings = () => {
 
               <button
                 type="button"
-                onClick={() => setIsPushSubscribed(!isPushSubscribed)}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${isPushSubscribed ? 'bg-primary' : 'bg-[#E4E4E7]'}`}
+                onClick={handleTogglePush}
+                disabled={pushLoading}
+                aria-label={isPushSubscribed ? 'Disable push notifications' : 'Enable push notifications'}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${isPushSubscribed ? 'bg-primary' : 'bg-[#E4E4E7]'}`}
               >
                 <span
                   aria-hidden="true"

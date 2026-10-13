@@ -1,2 +1,41 @@
 [functions.telegram-webhook]
 verify_jwt = false
+
+[functions.register-push]
+verify_jwt = false
+
+[functions.send-push-notification]
+verify_jwt = false
+
+[functions.trigger-alert]
+verify_jwt = false
+
+[functions.ingest-reading]
+verify_jwt = false
+
+[functions.get-device-config]
+verify_jwt = false
+
+[functions.confirm-sms-status]
+verify_jwt = false
+
+[functions.admin-support-request]
+verify_jwt = false
+
+[functions.manage-registration]
+verify_jwt = false
+
+[functions.assign-device]
+verify_jwt = false
+
+[functions.create-user]
+verify_jwt = false
+
+[functions.login]
+verify_jwt = false
+
+[functions.register]
+verify_jwt = false
+
+[functions.link-device]
+verify_jwt = false

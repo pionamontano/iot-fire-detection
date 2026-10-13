@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Save, Clock, ShieldCheck, Activity, Unlock } from 'lucide-react';
+import { Save, Clock, ShieldCheck, Activity, Unlock, Bell, BellOff, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { SettingsFormSkeleton } from '../../components/SkeletonLoaders';
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
 
 
 
@@ -17,9 +18,43 @@ export const Settings = () => {
   const [unlocking, setUnlocking] = useState(false);
   const [unlockMessage, setUnlockMessage] = useState<string | null>(null);
 
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(true);
+  const [pushError, setPushError] = useState('');
+
   useEffect(() => {
     fetchSettings();
+    getPushSubscription().then(sub => {
+      setIsPushSubscribed(!!sub);
+      setPushLoading(false);
+    });
   }, []);
+
+  const handleTogglePush = async () => {
+    setPushLoading(true);
+    setPushError('');
+    try {
+      if (isPushSubscribed) {
+        await unsubscribeUserFromPush();
+        setIsPushSubscribed(false);
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          await subscribeUserToPush();
+          setIsPushSubscribed(true);
+        } else {
+          setPushError('Notification permission denied by browser.');
+          setTimeout(() => setPushError(''), 5000);
+        }
+      }
+    } catch (e: any) {
+      console.error(e);
+      setPushError(describePushError(e, await isBraveBrowser()));
+      setTimeout(() => setPushError(''), 5000);
+    } finally {
+      setPushLoading(false);
+    }
+  };
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -185,6 +220,47 @@ export const Settings = () => {
               </div>
               {unlockMessage && (
                 <p className={`text-xs font-semibold mt-3 ${unlockMessage.startsWith('Failed') ? 'text-[#DC2626]' : 'text-teal'}`}>{unlockMessage}</p>
+              )}
+            </div>
+
+            {/* Push Notifications */}
+            <div className="pt-8 border-t border-border">
+              <h4 className="text-xs font-bold text-text-body uppercase tracking-[0.1em] mb-1 flex items-center gap-2">
+                <Bell className="w-3.5 h-3.5" />
+                Browser Push Notifications
+              </h4>
+              <p className="text-xs text-text-warm mb-5">
+                Receive fire alert and support-request notifications directly in this browser, even when the dashboard isn't open.
+              </p>
+              <div className="flex items-center justify-between gap-4 bg-surface-alt border border-border rounded-md px-4 py-3.5">
+                <div className="flex items-center gap-2">
+                  {isPushSubscribed ? (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#10B981] bg-[#10B981]/10 px-2.5 py-1 rounded-full">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      ENABLED
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#F59E0B] bg-[#F59E0B]/10 px-2.5 py-1 rounded-full">
+                      <BellOff className="w-3.5 h-3.5" />
+                      DISABLED
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleTogglePush}
+                  disabled={pushLoading}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-border text-text-body text-sm font-bold hover:bg-surface-card transition-colors disabled:opacity-50 shrink-0"
+                >
+                  {isPushSubscribed ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+                  {pushLoading ? 'Processing...' : (isPushSubscribed ? 'Disable Push Notifications' : 'Enable Push Notifications')}
+                </button>
+              </div>
+              {pushError && (
+                <div className="flex items-center gap-2 mt-3 text-xs font-bold text-[#DC2626]">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {pushError}
+                </div>
               )}
             </div>
 
