@@ -9,13 +9,39 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-key',
 };
 
+// Philippine address hierarchy, smallest unit to largest. Subdivision and barangay
+// both commonly land under Nominatim's suburb/village/neighbourhood/quarter tags with
+// no reliable way to tell them apart, so neighbourhood/residential is read as the
+// subdivision and suburb/village/quarter as the barangay - an admin/resident can
+// correct either in the pre-filled form before saving.
+export interface PhAddressParts {
+  houseNo: string | null;
+  street: string | null;
+  subdivision: string | null;
+  barangay: string | null;
+  cityMunicipality: string | null;
+  province: string | null;
+}
+
 interface GeocodeCacheEntry {
   address: string;
+  parts: PhAddressParts;
   timestamp: number;
 }
 
 const GEOCODE_CACHE = new Map<string, GeocodeCacheEntry>();
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24-hour cache
+
+function extractAddressParts(address: Record<string, string> | undefined): PhAddressParts {
+  return {
+    houseNo: address?.house_number || null,
+    street: address?.road || null,
+    subdivision: address?.neighbourhood || address?.residential || null,
+    barangay: address?.suburb || address?.village || address?.quarter || null,
+    cityMunicipality: address?.city || address?.municipality || address?.town || address?.county || null,
+    province: address?.state || address?.region || null,
+  };
+}
 
 function buildTieredAddress(address: Record<string, string> | undefined): string | null {
   if (!address) return null;
@@ -28,13 +54,17 @@ function buildTieredAddress(address: Record<string, string> | undefined): string
   return parts.length > 0 ? parts.join(', ') : null;
 }
 
-async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
-  if (!lat || !lon) return null;
+const EMPTY_PARTS: PhAddressParts = {
+  houseNo: null, street: null, subdivision: null, barangay: null, cityMunicipality: null, province: null,
+};
+
+async function reverseGeocode(lat: number, lon: number): Promise<{ address: string | null; parts: PhAddressParts }> {
+  if (!lat || !lon) return { address: null, parts: EMPTY_PARTS };
 
   const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
   const cached = GEOCODE_CACHE.get(key);
   if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-    return cached.address;
+    return { address: cached.address, parts: cached.parts };
   }
 
   try {
@@ -53,18 +83,19 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
     );
     clearTimeout(timeoutId);
 
-    if (!res.ok) return null;
+    if (!res.ok) return { address: null, parts: EMPTY_PARTS };
     const data = await res.json();
     const address = buildTieredAddress(data?.address) || data?.display_name || null;
+    const parts = extractAddressParts(data?.address);
 
     if (address) {
-      GEOCODE_CACHE.set(key, { address, timestamp: Date.now() });
+      GEOCODE_CACHE.set(key, { address, parts, timestamp: Date.now() });
     }
 
-    return address;
+    return { address, parts };
   } catch (e) {
     console.error('Geocoding error/timeout:', e);
-    return null;
+    return { address: null, parts: EMPTY_PARTS };
   }
 }
 
@@ -268,12 +299,15 @@ serve(async (req: Request) => {
 
           if (shouldNotify) {
             let geocodedAddress: string | null = null;
+            let geocodedParts: PhAddressParts = EMPTY_PARTS;
 
             // Device-State Caching: Check if device hasn't drifted beyond 100 meters from its registered location
             if (device.latitude && device.longitude && getDistance(latitude, longitude, device.latitude, device.longitude) <= 100) {
               geocodedAddress = device.location_desc;
             } else {
-              geocodedAddress = await reverseGeocode(latitude, longitude);
+              const geocoded = await reverseGeocode(latitude, longitude);
+              geocodedAddress = geocoded.address;
+              geocodedParts = geocoded.parts;
             }
 
              // Verify that reverse geocoding returned a specific enough address (not just a single word / country)
@@ -285,7 +319,16 @@ serve(async (req: Request) => {
                    gps_derived_address: geocodedAddress,
                    registered_address: device.location_desc || 'Unknown',
                    latitude,
-                   longitude
+                   longitude,
+                   // Structured parts so the resident's approval form can be pre-filled field
+                   // by field (House/Unit No. -> Street -> Subdivision -> Barangay ->
+                   // City/Municipality -> Province) instead of just showing the flat string.
+                   gps_house_no: geocodedParts.houseNo,
+                   gps_street: geocodedParts.street,
+                   gps_subdivision: geocodedParts.subdivision,
+                   gps_barangay: geocodedParts.barangay,
+                   gps_city_municipality: geocodedParts.cityMunicipality,
+                   gps_province: geocodedParts.province,
                  })
                );
              }

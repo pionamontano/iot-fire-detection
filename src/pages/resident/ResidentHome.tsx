@@ -26,6 +26,18 @@ const markerIcon = new L.Icon({
 });
 
 // Components
+const AddressField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+  <label className="flex flex-col gap-1">
+    <span className="text-[#92400E] text-[10px] font-bold tracking-wider uppercase">{label}</span>
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full bg-white border border-[#F59E0B]/50 rounded px-3 py-2 text-sm text-[#231918] focus:outline-none focus:ring-2 focus:ring-[#D97706]/30 focus:border-[#D97706]"
+    />
+  </label>
+);
+
 const StatCard = ({ title, value, subtitle, icon: Icon, active = false }: any) => (
   <div className={`bg-white p-6 rounded-lg border border-[#E4E4E7] flex flex-col justify-between ${active ? 'border-l-4 border-l-[#00799C]' : ''}`}>
     <div className="flex justify-between items-start">
@@ -90,7 +102,12 @@ export const ResidentHome = () => {
   const [diagnosticResult, setDiagnosticResult] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [discrepancy, setDiscrepancy] = useState<any>(null);
-  
+  // Philippine address form shown on the discrepancy banner - pre-filled from the
+  // GPS-derived parts, smallest unit to largest, and editable before approval.
+  const [addressForm, setAddressForm] = useState({
+    houseNo: '', street: '', subdivision: '', barangay: '', cityMunicipality: '', province: '',
+  });
+
   // Device linking state
   const [linkCode, setLinkCode] = useState('');
   const [linkLoading, setLinkLoading] = useState(false);
@@ -156,6 +173,19 @@ export const ResidentHome = () => {
 
     return () => { supabase.removeChannel(channel); };
   }, [profile]);
+
+  // Pre-fill the editable address form from whatever GPS-derived parts the
+  // backend extracted; blank when there's no discrepancy to show.
+  useEffect(() => {
+    setAddressForm({
+      houseNo: discrepancy?.gps_house_no || '',
+      street: discrepancy?.gps_street || '',
+      subdivision: discrepancy?.gps_subdivision || '',
+      barangay: discrepancy?.gps_barangay || '',
+      cityMunicipality: discrepancy?.gps_city_municipality || '',
+      province: discrepancy?.gps_province || '',
+    });
+  }, [discrepancy?.id]);
 
   const handleRefresh = async () => {
     if (!profile?.device_id || refreshing) return;
@@ -307,6 +337,16 @@ export const ResidentHome = () => {
     device,
   });
 
+  // Mirrors resolve_address_discrepancy()'s composition order (smallest unit to
+  // largest) so the optimistic UI update matches what the RPC actually saved.
+  const composePhAddress = (form: typeof addressForm) => {
+    const houseStreet = `${form.houseNo} ${form.street}`.trim();
+    return [houseStreet, form.subdivision, form.barangay, form.cityMunicipality, form.province]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(', ');
+  };
+
   const handleDiscrepancyResolution = async (status: 'approved' | 'rejected') => {
     if (!discrepancy) return;
     try {
@@ -314,12 +354,18 @@ export const ResidentHome = () => {
       const { error } = await supabase.rpc('resolve_address_discrepancy', {
         p_discrepancy_id: discrepancy.id,
         p_status: status,
+        p_house_no: addressForm.houseNo,
+        p_street: addressForm.street,
+        p_subdivision: addressForm.subdivision,
+        p_barangay: addressForm.barangay,
+        p_city_municipality: addressForm.cityMunicipality,
+        p_province: addressForm.province,
       });
       if (error) throw error;
       if (status === 'approved') {
         setDevice((prev) => prev ? {
           ...prev,
-          location_desc: discrepancy.gps_derived_address,
+          location_desc: composePhAddress(addressForm),
           latitude: discrepancy.latitude,
           longitude: discrepancy.longitude,
         } : prev);
@@ -335,17 +381,27 @@ export const ResidentHome = () => {
   return (
     <div className="flex flex-col gap-6">
       {discrepancy && (
-        <div className="bg-[#FEF3C7] border border-[#F59E0B] p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="bg-[#FEF3C7] border border-[#F59E0B] p-4 rounded-lg flex flex-col gap-4">
           <div className="flex gap-3">
             <AlertTriangle className="text-[#D97706] mt-0.5 shrink-0" size={20} />
             <div>
               <h4 className="text-[#92400E] font-bold text-sm">Location Discrepancy Detected</h4>
               <p className="text-[#B45309] text-xs mt-1">
-                The device's GPS indicates it is at <strong className="font-extrabold">{discrepancy.gps_derived_address}</strong>, but its registered location is <strong className="font-extrabold">{discrepancy.registered_address}</strong>. Do you want to update the registered location?
+                The device's GPS indicates it is at <strong className="font-extrabold">{discrepancy.gps_derived_address}</strong>, but its registered location is <strong className="font-extrabold">{discrepancy.registered_address}</strong>. Review and correct the address below, then confirm.
               </p>
             </div>
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <AddressField label="House/Unit No." value={addressForm.houseNo} onChange={(v) => setAddressForm({ ...addressForm, houseNo: v })} />
+            <AddressField label="Street" value={addressForm.street} onChange={(v) => setAddressForm({ ...addressForm, street: v })} />
+            <AddressField label="Subdivision" value={addressForm.subdivision} onChange={(v) => setAddressForm({ ...addressForm, subdivision: v })} />
+            <AddressField label="Barangay" value={addressForm.barangay} onChange={(v) => setAddressForm({ ...addressForm, barangay: v })} />
+            <AddressField label="City/Municipality" value={addressForm.cityMunicipality} onChange={(v) => setAddressForm({ ...addressForm, cityMunicipality: v })} />
+            <AddressField label="Province" value={addressForm.province} onChange={(v) => setAddressForm({ ...addressForm, province: v })} />
+          </div>
+
+          <div className="flex gap-2 w-full sm:w-auto sm:self-end">
              <button onClick={() => handleDiscrepancyResolution('approved')} className="flex-1 sm:flex-none px-4 py-2 bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold rounded shadow-sm transition-colors uppercase tracking-wider">Update</button>
              <button onClick={() => handleDiscrepancyResolution('rejected')} className="flex-1 sm:flex-none px-4 py-2 bg-white hover:bg-gray-50 text-[#92400E] border border-[#D97706] text-xs font-bold rounded shadow-sm transition-colors uppercase tracking-wider">Keep Current</button>
           </div>
