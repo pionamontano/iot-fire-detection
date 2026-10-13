@@ -17,8 +17,8 @@
 -- Own-row profile reads (id = auth.uid()) are unaffected, so the app
 -- can still load the profile and show the "Account Deactivated" screen.
 --
--- Not changed here: get_auth_role() still ignores profiles.status
--- (see 20261019000000_restrict_profile_reads.sql).
+-- get_auth_role() also ignored profiles.status; fixed in
+-- 20261031000000_get_auth_role_requires_approval.sql.
 --
 -- Rollback: re-run the previous definitions from
 -- 20260717000000_init.sql (get_auth_role) and
