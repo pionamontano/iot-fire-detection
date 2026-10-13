@@ -8,7 +8,7 @@ import type { AlertEvent } from '../../lib/supabase';
 import { Activity, Layers, MapPinOff, X } from 'lucide-react';
 import { getDeviceStatus } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
-import { formatAge } from '../../lib/location';
+import { alertTitle, alertActor, alertEventAt, formatEventTime } from '../../lib/alertText';
 import { DeviceMap, MapLegend } from '../../components/DeviceMap';
 import { MAP_READING_COLUMNS, toMapDevices, formatTemp, countByStatus } from '../../lib/mapDevices';
 import type { DeviceWithReadings } from '../../lib/mapDevices';
@@ -256,17 +256,15 @@ export const InteractiveMap = () => {
             let borderClass = isFire ? 'border-l-4 border-[#DC2626]' : 'border-l-4 border-[#F59E0B]';
             let iconClass = isFire ? 'text-[#DC2626]' : 'text-[#D97706]';
             let titleClass = isFire ? 'text-[#B91C1C]' : 'text-[#B45309]';
-            let title = isFire ? 'Fire Alert · Tier 2' : 'Warning · Tier 1';
 
             if (isResolved) {
               bgClass = 'bg-white/60';
               borderClass = 'border border-gray-200';
               iconClass = 'text-[#71717A]';
               titleClass = 'text-[#52525B]';
-              title = `Resolved · ${isFire ? 'Fire' : 'Warning'}`;
             }
 
-            const eventAt = isResolved ? (alert.resolved_at as string) : alert.triggered_at;
+            const eventAt = alertEventAt(alert);
             const isSelected = selectedAlertId === alert.id;
 
             return (
@@ -283,20 +281,19 @@ export const InteractiveMap = () => {
                 }}
                 className={`${bgClass} ${borderClass} rounded-lg p-4 shadow-sm relative transition-shadow cursor-pointer hover:shadow-md ${isSelected ? 'ring-2 ring-inset ring-[#18181B]' : ''}`}
               >
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-2">
-                    <Activity className={`w-3 h-3 ${iconClass}`} />
-                    <span className={`font-extrabold text-xs uppercase ${titleClass}`}>{title}</span>
-                  </div>
-                  <span className="text-[9px] font-bold text-[#71717A]" title={new Date(eventAt).toLocaleString()}>
-                    {formatAge(eventAt, now)}
-                  </span>
+                {/* Same title, readings and time line as the Dashboard's Recent Activity. */}
+                <div className="flex items-center gap-2 mb-2">
+                  <Activity className={`w-3 h-3 shrink-0 ${iconClass}`} />
+                  <span className={`font-extrabold text-[13px] ${titleClass}`}>{alertTitle(alert)}</span>
                 </div>
                 <h4 className="font-bold text-sm text-[#18181B] mb-0.5">{deviceLabel}</h4>
                 <p className="text-xs text-[#71717A] mb-2 truncate" title={locLabel}>{locLabel}</p>
-                <span className={`text-[10px] font-bold uppercase tracking-widest ${iconClass}`}>
+                <p className="text-xs text-[#52525B]">
                   CO {alert.co_ppm} ppm · {formatTemp(alert.temp_celsius)} at trigger
-                </span>
+                </p>
+                <p className="text-[11px] font-medium text-[#71717A] mt-1" title={new Date(eventAt).toLocaleString()}>
+                  {formatEventTime(eventAt, now)} · {alertActor(alert)}
+                </p>
               </div>
             );
           })}

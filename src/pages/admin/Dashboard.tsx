@@ -23,28 +23,10 @@ import { useNowTick } from '../../hooks/useNowTick';
 import { DeviceMap, MapLegend } from '../../components/DeviceMap';
 import { MAP_READING_COLUMNS, toMapDevices, formatTemp } from '../../lib/mapDevices';
 import type { DeviceWithReadings } from '../../lib/mapDevices';
+import { alertTitle, alertActor, alertEventAt, formatEventTime } from '../../lib/alertText';
 
 // Plain counts — no zero-padding ("00", "002"), which read as codes.
 const formatNumber = (n: number): string => n.toLocaleString();
-
-// "Today, 6:33 PM" / "Yesterday, 10:43 PM" / "Oct 3, 10:28 PM". Time alone
-// made entries from different days look out of order.
-const formatEventTime = (iso: string, now: number): string => {
-  const d = new Date(iso);
-  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  const dayDiff = Math.floor((startOfToday.getTime() - new Date(d).setHours(0, 0, 0, 0)) / 86_400_000);
-  if (dayDiff <= 0) return `Today, ${time}`;
-  if (dayDiff === 1) return `Yesterday, ${time}`;
-  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
-};
-
-const RESOLVED_BY: Record<string, string> = {
-  device: 'Auto-cleared by device',
-  responder: 'Resolved by responder',
-  admin: 'Resolved by admin',
-};
 
 type RecentAlert = AlertEvent & { devices?: { label: string | null; device_code: string } | null };
 
@@ -316,12 +298,8 @@ export const Dashboard = () => {
                   {recentAlerts.map((alert) => {
                     const isResolved = !!alert.resolved_at;
                     const isFire = alert.alert_tier === 2;
-                    const kind = isFire ? 'Fire alert' : 'Warning';
                     const code = alert.devices?.device_code ?? 'Unknown device';
                     const label = alert.devices?.label;
-                    const actor = isResolved
-                      ? RESOLVED_BY[alert.resolution_source ?? ''] ?? 'Resolved'
-                      : `Tier ${alert.alert_tier} · Automated`;
                     return (
                       <li key={alert.id}>
                         <Link
@@ -332,7 +310,7 @@ export const Dashboard = () => {
                           <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${isResolved ? 'bg-text-faint' : isFire ? 'bg-tier2-border' : 'bg-tier1-border'}`}></span>
                           <div className="flex flex-col gap-1 min-w-0">
                             <h4 className="text-text font-bold text-[13px] leading-4">
-                              {kind} {isResolved ? 'resolved' : 'triggered'}
+                              {alertTitle(alert)}
                             </h4>
                             <p className="text-text-muted text-xs leading-[18px]">
                               <span className="font-mono font-semibold">{code}</span>{label ? ` · ${label}` : ''}
@@ -340,7 +318,7 @@ export const Dashboard = () => {
                               CO {alert.co_ppm} ppm · {formatTemp(alert.temp_celsius)} at trigger
                             </p>
                             <span className="text-text-subtle text-[11px] font-medium">
-                              {formatEventTime(isResolved ? (alert.resolved_at as string) : alert.triggered_at, now)} · {actor}
+                              {formatEventTime(alertEventAt(alert), now)} · {alertActor(alert)}
                             </span>
                           </div>
                         </Link>
