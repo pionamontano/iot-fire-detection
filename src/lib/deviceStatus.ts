@@ -22,6 +22,23 @@ export const getConnectivityStatus = (
   return 'offline';
 };
 
+// Map pin status. Tier 2 = dual-sensor confirmed fire; Tier 1 = single-sensor
+// warning (spec SW-2.3.1). The map has no distinct "reconnecting" pin, so any
+// non-online connectivity state renders as offline.
+export type MapStatus = 'fire' | 'warning' | 'normal' | 'offline';
+
+export const getMapStatus = (
+  device: { id: string; is_active: boolean; last_seen_at: string | null },
+  activeAlerts: ReadonlyArray<{ device_id: string; alert_tier: 1 | 2 }>,
+  now: number = Date.now()
+): MapStatus => {
+  const deviceAlerts = activeAlerts.filter(a => a.device_id === device.id);
+  if (deviceAlerts.some(a => a.alert_tier === 2)) return 'fire';
+  if (deviceAlerts.length > 0) return 'warning';
+  if (!device.is_active) return 'offline';
+  return getConnectivityStatus(device.last_seen_at, now) === 'online' ? 'normal' : 'offline';
+};
+
 export const formatLastSeen = (
   lastSeenAt: string | null | undefined,
   now: number = Date.now()

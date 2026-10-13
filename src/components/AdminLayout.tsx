@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users,  Settings, Cpu, LogOut, Menu, X, BarChart3, FileText, LifeBuoy } from 'lucide-react';
+import { LayoutDashboard, Users,  Settings, Cpu, LogOut, Menu, X, BarChart3, FileText, LifeBuoy, Map as MapIcon } from 'lucide-react';
 import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
@@ -20,6 +20,7 @@ export const AdminLayout: React.FC = () => {
 
   const mainNavItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Live Map', path: '/admin/map', icon: MapIcon },
     { name: 'User Management', path: '/admin/users', icon: Users },
     { name: 'Device Registration', path: '/admin/devices', icon: Cpu },
     { name: 'System Overview', path: '/admin/alerts', icon: BarChart3 },
@@ -42,7 +43,6 @@ export const AdminLayout: React.FC = () => {
           <span className="text-white font-bold text-xl sm:text-2xl md:text-[32px] leading-7 tracking-[-0.03em] whitespace-nowrap">
             AgapSense{' '}
           </span>
-          <span className="hidden md:inline-block w-px h-4 bg-white/50 mx-4"></span>
         </div>
 
         {/* Right Section */}
