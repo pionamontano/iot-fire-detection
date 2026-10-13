@@ -144,6 +144,7 @@ serve(async (req: Request) => {
       gps_valid = false,
       on_battery = false,
       sensor_ready = true,
+      firmware_version = null,
     } = body;
 
     // 3. Validate required numeric fields before any DB writes
@@ -182,8 +183,16 @@ serve(async (req: Request) => {
         on_battery,
         sensor_ready,
       }),
-      // Touch last_seen_at
-      supabaseAdmin.from('devices').update({ last_seen_at: nowIso, local_ip: clientIp(req) }).eq('id', device.id),
+      // Touch last_seen_at. firmware_version_reported is only overwritten
+      // when the device actually sent one — older firmware builds predating
+      // this field must not blank out a previously reported version.
+      supabaseAdmin.from('devices').update({
+        last_seen_at: nowIso,
+        local_ip: clientIp(req),
+        ...(typeof firmware_version === 'string' && firmware_version
+          ? { firmware_version_reported: firmware_version }
+          : {}),
+      }).eq('id', device.id),
     ];
 
     // 5. Auto-resolution check (strictly below threshold to avoid boundary flapping)

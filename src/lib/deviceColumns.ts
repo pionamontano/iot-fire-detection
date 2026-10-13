@@ -29,6 +29,10 @@
 //   latitude       registered install coordinates (Devices form, Map)
 //   longitude      registered install coordinates (Devices form, Map)
 //   local_ip       Device type / Devices page
+//   firmware_version          OTA target version admin sets         (Devices edit form)
+//   firmware_url               OTA target .bin location               (Devices edit form)
+//   firmware_md5                OTA target .bin integrity check         (Devices edit form)
+//   firmware_version_reported  version the device last reported running (Devices edit form, read-only)
 export const DEVICE_COLUMN_LIST = [
   'id',
   'device_code',
@@ -43,6 +47,10 @@ export const DEVICE_COLUMN_LIST = [
   'latitude',
   'longitude',
   'local_ip',
+  'firmware_version',
+  'firmware_url',
+  'firmware_md5',
+  'firmware_version_reported',
 ] as const;
 
 /** Comma-separated form for PostgREST `select(...)`, e.g. `select(DEVICE_COLUMNS)`. */

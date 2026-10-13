@@ -1,5 +1,12 @@
 // ============================================================
-// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM, OTA  (v2.4)
+// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM, OTA  (v2.5)
+//
+// Changes from v2.4 (this file):
+//  [24] postTelemetry() now includes firmware_version (compiled-in
+//       FIRMWARE_VERSION) so ingest-reading can record what a device
+//       is actually running — the admin UI compares this against the
+//       target firmware_version it set, instead of assuming an OTA
+//       push succeeded just because it was requested.
 //
 // Changes from v2.3 (this file):
 //  [23] performOtaUpdate(): HTTPS OTA via Update.h, triggered from
@@ -197,7 +204,8 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
           "\"rssi\":%d,"
           "\"on_battery\":%s,"
           "\"sensor_ready\":%s,"
-          "\"mq7_phase\":\"%s\""
+          "\"mq7_phase\":\"%s\","
+          "\"firmware_version\":\"%s\""
         "}",
         DEVICE_ID,
         sd.co_ppm, sd.temperature_c,
@@ -206,7 +214,8 @@ int postTelemetry(const SensorData& sd, const GpsFix& fix,
         batteryMv, rssi,
         on_battery      ? "true" : "false",
         sd.sensor_ready ? "true" : "false",
-        mq7Phase
+        mq7Phase,
+        FIRMWARE_VERSION
     );
     return httpsPost(ENDPOINT_INGEST, payload);
 }
