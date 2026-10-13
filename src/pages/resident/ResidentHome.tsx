@@ -276,7 +276,7 @@ export const ResidentHome = () => {
             <button
               type="submit"
               disabled={linkLoading || !linkCode.trim()}
-              className="w-full bg-[#D32F2F] hover:bg-[#B91C1C] text-white font-bold py-3 px-4 rounded-lg transition-colors flex justify-center items-center disabled:opacity-70"
+              className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3 px-4 rounded-lg transition-colors flex justify-center items-center disabled:opacity-70"
             >
               {linkLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : 'Link Device'}
             </button>

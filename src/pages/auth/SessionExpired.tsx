@@ -19,7 +19,7 @@ export const SessionExpired = () => {
 
         <button
           onClick={() => navigate('/login')}
-          className="w-full flex items-center justify-center gap-2 bg-[#B91C1C] text-white py-3 px-4 rounded-lg font-bold text-sm hover:bg-[#DC2626] transition-colors"
+          className="w-full flex items-center justify-center gap-2 bg-primary text-white py-3 px-4 rounded-lg font-bold text-sm hover:bg-primary-dark transition-colors"
         >
           <LogIn className="w-4 h-4" />
           Return to Login

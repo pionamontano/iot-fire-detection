@@ -100,3 +100,9 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* Slim scrollbar for popover lists (the default one with arrows looked heavy). */
+.thin-scroll { scrollbar-width: thin; scrollbar-color: #E5E2E1 transparent; }
+.thin-scroll::-webkit-scrollbar { width: 6px; }
+.thin-scroll::-webkit-scrollbar-thumb { background: #E5E2E1; border-radius: 9999px; }
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }

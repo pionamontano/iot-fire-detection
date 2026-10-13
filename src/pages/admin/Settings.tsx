@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { Save, Clock, ShieldCheck, Activity, Unlock, Bell, BellOff, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { SettingsFormSkeleton } from '../../components/SkeletonLoaders';
@@ -121,16 +122,11 @@ export const Settings = () => {
         <LoadErrorBanner what="settings" error={loadError} onRetry={fetchSettings} />
       )}
       {/* Page Header */}
-      <div>
-        <p className="text-primary-dark font-bold text-xs tracking-[0.05em] uppercase mb-1">System Security Configuration</p>
-        <h2 className="text-text-heading font-extrabold text-[40px] leading-9 tracking-[-0.019em]">
-          System Settings
-        </h2>
-        <p className="text-text-warm text-base leading-[26px] mt-2 max-w-xl">
-          Configure global application parameters and security policies. These parameters define
-          the transition between operational telemetry and emergency protocols.
-        </p>
-      </div>
+      <PageHeader
+        title="Settings"
+        eyebrow="System Security Configuration"
+        description="Global application parameters and security policies."
+      />
 
       {/* Settings Card */}
       <div className="bg-surface-card border border-border rounded-lg overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.05)]">

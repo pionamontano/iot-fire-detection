@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import type { Device } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
@@ -75,22 +76,36 @@ export const Logs = () => {
       const allLogs: LogEvent[] = [];
 
       // Map Alerts
+      // Describe only what the data shows: the units measure CO and
+      // temperature (no smoke sensor), and nothing triggers suppression.
       alerts?.forEach(alert => {
+        const deviceCode = (alert.devices as any)?.device_code || 'Unknown device';
+        const location = (alert.devices as any)?.location_desc || 'an unknown location';
+        const kind = alert.alert_tier === 2
+          ? 'Tier 2 fire alert (CO and temperature thresholds exceeded)'
+          : 'Tier 1 warning (CO or temperature threshold exceeded)';
         allLogs.push({
           id: `alert-${alert.id}`,
           timestamp: alert.triggered_at,
           type: 'Fire Alert',
-          initiator: (alert.devices as any)?.device_code || 'Unknown',
-          description: `Thermal threshold exceeded (${alert.temp_celsius}°C) or smoke detected at ${(alert.devices as any)?.location_desc}. Automated suppression sequence initiated.`,
+          initiator: deviceCode,
+          description: `${kind} at ${location}. CO ${alert.co_ppm} ppm, ${alert.temp_celsius}°C.`,
           status: alert.resolved_at ? 'RESOLVED' : 'CRITICAL',
         });
         if (alert.resolved_at) {
+          const autoCleared = alert.resolution_source === 'device';
           allLogs.push({
             id: `alert-res-${alert.id}`,
             timestamp: alert.resolved_at,
-            type: 'User Action',
-            initiator: 'System / Admin',
-            description: `Incident marked as resolved. Normal operations restored.`,
+            type: autoCleared ? 'Fire Alert' : 'User Action',
+            initiator: autoCleared
+              ? deviceCode
+              : alert.resolution_source === 'responder' ? 'BFP Responder'
+              : alert.resolution_source === 'admin' ? 'Admin'
+              : 'System',
+            description: autoCleared
+              ? `Readings back below thresholds at ${location}; incident auto-resolved.`
+              : `Incident at ${location} marked as resolved.`,
             status: 'INFO',
           });
         }
@@ -116,8 +131,8 @@ export const Logs = () => {
           id: `device-${device.id}`,
           timestamp: device.created_at,
           type: 'Device Reg',
-          initiator: 'Provisioning_Service',
-          description: `New IoT Node [MAC: ${device.id.substring(0, 8).toUpperCase()}] authenticated and assigned to ${device.location_desc}.`,
+          initiator: 'Admin',
+          description: `Device ${device.device_code} registered at ${device.location_desc}.`,
           status: 'INFO',
         });
       });
@@ -183,18 +198,11 @@ export const Logs = () => {
         <LoadErrorBanner what="device registration entries" error={loadError} onRetry={fetchLogs} />
       )}
       {/* ─── Page Header ─── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-[#1C1B1B] font-extrabold text-[40px] leading-9 tracking-[-0.019em]">
-            System Log
-          </h2>
-          <p className="text-[#5B403D] text-base leading-6 mt-2 max-w-[600px]">
-            Track system activity through a chronological record of events, alerts, and user actions.
-          </p>
-        </div>
-
-        {/* Header Actions */}
-        <div className="flex items-center gap-4 shrink-0">
+      <PageHeader
+        title="System Log"
+        description="A chronological record of events, alerts, and user actions."
+        actions={
+        <div className="flex items-center gap-4">
           <div className="relative" ref={filterRef}>
             <button 
               onClick={() => setFilterOpen(f => !f)}
@@ -225,13 +233,14 @@ export const Logs = () => {
           
           <button 
             onClick={handleExport}
-            className="bg-[#DC2626] px-5 py-2.5 rounded flex items-center gap-2 hover:bg-[#B91C1C] transition-colors"
+            className="bg-primary px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-primary-dark transition-colors"
           >
             <Download className="w-4 h-4 text-white" />
             <span className="text-white font-bold text-xs tracking-[0.02em]">Export Logs</span>
           </button>
         </div>
-      </div>
+        }
+      />
 
       {/* ─── Main Log Table ─── */}
       <div className="bg-[#F6F3F2] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
@@ -275,7 +284,7 @@ export const Logs = () => {
                       <td className="px-6 py-5 align-top">
                         <span className={`inline-flex items-center gap-2 font-bold text-xs ${cfg.text}`}>
                           <span className={`w-2 h-2 rounded-full ${cfg.dot}`}></span>
-                          <span className="w-10 break-words">{log.type.replace(' ', '\n')}</span>
+                          <span className="whitespace-nowrap">{log.type}</span>
                         </span>
                       </td>
                       <td className="px-6 py-5 align-top">

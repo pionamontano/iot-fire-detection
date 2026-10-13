@@ -79,7 +79,10 @@ export class FakeDb {
 export function loadHandler(name, { db, env = {}, user = null, fetchImpl, webpush } = {}) {
   let src = fs.readFileSync(path.join(ROOT, name, 'index.ts'), 'utf8');
   src = src.replace(/^import .*$/gm, '');
-  const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  // A type-only export (e.g. `export interface`) makes the transpiler emit an
+  // `export {};` module marker, which new Function() can't parse — drop it.
+  const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+    .replace(/^export \{\};?\s*$/gm, '');
   let handler = null;
   const serve = (h) => { handler = h; };
   const createClient = () => Object.assign(db, {

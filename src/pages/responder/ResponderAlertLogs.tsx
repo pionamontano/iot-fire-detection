@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Device } from '../../lib/supabase';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
+import { useSearchParams } from 'react-router-dom';
 import {
   Download,
   Eye,
@@ -48,8 +49,18 @@ export const ResponderAlertLogs = () => {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('Last 24 Hours');
-  const [deviceFilter, setDeviceFilter] = useState('All Devices');
+  // ?device=<code> comes from the header device search: show that device's
+  // whole history rather than only the last 24 hours.
+  const [searchParams] = useSearchParams();
+  const deviceParam = searchParams.get('device');
+  const [dateFilter, setDateFilter] = useState(deviceParam ? 'All Time' : 'Last 24 Hours');
+  const [deviceFilter, setDeviceFilter] = useState(deviceParam ?? 'All Devices');
+  useEffect(() => {
+    if (!deviceParam) return;
+    setDeviceFilter(deviceParam);
+    setDateFilter('All Time');
+    setCurrentPage(1);
+  }, [deviceParam]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [avgResponseSeconds, setAvgResponseSeconds] = useState<number | null>(null);
   const [selectedLog, setSelectedLog] = useState<LogRow | null>(null);
@@ -183,7 +194,7 @@ export const ResponderAlertLogs = () => {
         </div>
         <button
           onClick={handleExport}
-          className="bg-[#DC2626] px-5 py-2.5 rounded flex items-center gap-2 hover:bg-[#B91C1C] transition-colors shrink-0"
+          className="bg-primary px-5 py-2.5 rounded flex items-center gap-2 hover:bg-primary-dark transition-colors shrink-0"
         >
           <Download className="w-4 h-4 text-white" />
           <span className="text-white font-bold text-xs tracking-[0.02em]">Export Incident History</span>
