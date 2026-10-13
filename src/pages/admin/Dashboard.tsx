@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   BatteryWarning,
   ArrowRight,
+  MapPinOff,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DashboardSkeleton } from '../../components/SkeletonLoaders';
@@ -20,30 +21,12 @@ import type { DeviceStatus } from '../../lib/deviceStatus';
 import { StatusBadge, StatusCountPill } from '../../components/StatusBadge';
 import { useNowTick } from '../../hooks/useNowTick';
 import { DeviceMap, MapLegend } from '../../components/DeviceMap';
-import { MAP_READING_COLUMNS, toMapDevices } from '../../lib/mapDevices';
+import { MAP_READING_COLUMNS, toMapDevices, formatTemp } from '../../lib/mapDevices';
 import type { DeviceWithReadings } from '../../lib/mapDevices';
+import { alertTitle, alertActor, alertEventAt, formatEventTime } from '../../lib/alertText';
 
 // Plain counts — no zero-padding ("00", "002"), which read as codes.
 const formatNumber = (n: number): string => n.toLocaleString();
-
-// "Today, 6:33 PM" / "Yesterday, 10:43 PM" / "Oct 3, 10:28 PM". Time alone
-// made entries from different days look out of order.
-const formatEventTime = (iso: string, now: number): string => {
-  const d = new Date(iso);
-  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  const dayDiff = Math.floor((startOfToday.getTime() - new Date(d).setHours(0, 0, 0, 0)) / 86_400_000);
-  if (dayDiff <= 0) return `Today, ${time}`;
-  if (dayDiff === 1) return `Yesterday, ${time}`;
-  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
-};
-
-const RESOLVED_BY: Record<string, string> = {
-  device: 'Auto-cleared by device',
-  responder: 'Resolved by responder',
-  admin: 'Resolved by admin',
-};
 
 type RecentAlert = AlertEvent & { devices?: { label: string | null; device_code: string } | null };
 
@@ -156,7 +139,7 @@ export const Dashboard = () => {
         <StatCard label="Registered Devices" value={formatNumber(devices.length)} icon={Cpu} />
         {/* Red only when there is actually something burning — a red "0"
             reads as an alarm at a glance. */}
-        <StatCard label="Active Alarms" value={formatNumber(activeAlerts.length)} icon={AlertTriangle} urgent={activeAlerts.length > 0} />
+        <StatCard label="Active Alerts" value={formatNumber(activeAlerts.length)} icon={AlertTriangle} urgent={activeAlerts.length > 0} />
         <StatCard label="Alerts (Last 24h)" value={formatNumber(alerts24h)} icon={Activity} />
       </div>
 
@@ -168,20 +151,24 @@ export const Dashboard = () => {
           {/* Live Device Map preview — full view lives on the Live Map tab */}
           <section className="flex flex-col gap-3">
             <SectionHeader title="Live Device Map" action={<SectionLink to="/admin/map">Open full map</SectionLink>} />
-            <div className={`${CARD} overflow-hidden h-[280px] sm:h-[360px] lg:h-[420px]`}>
+            <div className={`${CARD} overflow-hidden h-[360px] lg:h-[420px]`}>
               <DeviceMap
                 compact
                 devices={mapDevices}
                 activeAlerts={activeAlerts}
                 now={now}
-                onViewDetails={() => navigate('/admin/alerts')}
+                onViewDetails={(d) => navigate(`/admin/alerts?q=${encodeURIComponent(d.device_code)}&device=${d.id}`)}
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
+              {/* No counts here: the Device Status pills below already count
+                  every device, and pin-only counts disagreed with them
+                  whenever a device had no location. */}
               <MapLegend />
               {devicesWithoutLocation.length > 0 && (
-                <span className="text-[11px] text-[#B45309]">
-                  No location for {devicesWithoutLocation.map(d => d.device_code).join(', ')}
+                <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
+                  <MapPinOff className="w-3.5 h-3.5 shrink-0 text-[#B45309]" />
+                  <span><strong className="text-text">No location for {devicesWithoutLocation.map(d => d.device_code).join(', ')}</strong> — not shown on the map.</span>
                 </span>
               )}
             </div>
@@ -205,7 +192,7 @@ export const Dashboard = () => {
             <div className={`${CARD} overflow-hidden`}>
               {/* Column headers — hidden on phones, where rows stack */}
               <div className={`hidden sm:grid ${DEVICE_GRID} bg-surface-alt border-b border-border`}>
-                <div className={TH}>Device UID</div>
+                <div className={TH}>Device ID</div>
                 <div className={TH}>Location</div>
                 <div className={`${TH} text-right`}>Status</div>
               </div>
@@ -227,31 +214,36 @@ export const Dashboard = () => {
                     const onBattery = device.sensor_readings?.[0]?.on_battery;
 
                     return (
-                      <li
-                        key={device.id}
-                        className={`grid grid-cols-[1fr_auto] ${DEVICE_GRID} gap-x-4 gap-y-1 px-4 sm:px-0 py-4 sm:py-0 hover:bg-surface transition-colors ${status === 'fire' ? 'bg-tier2-bg/40' : status === 'warning' ? 'bg-tier1-bg/40' : ''}`}
-                      >
-                        <div className="sm:px-6 sm:py-5 flex items-center">
-                          <span className={`text-text font-mono text-xs leading-4 ${isAlert ? 'font-bold' : 'font-medium'}`}>
-                            {device.device_code}
-                          </span>
-                        </div>
-                        <div className="col-span-2 row-start-2 sm:col-span-1 sm:row-start-auto sm:px-6 sm:py-5 flex flex-wrap items-center gap-2 min-w-0">
-                          <span className={`text-text-muted text-sm leading-5 ${isAlert ? 'font-bold' : 'font-medium'}`}>
-                            {device.location_desc}
-                          </span>
-                          {onBattery && (
-                            <span title="Mains power lost — running on backup battery" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tier1-bg text-[#B45309] text-[10px] font-bold uppercase tracking-wide">
-                              <BatteryWarning className="w-3 h-3" /> On battery
+                      <li key={device.id}>
+                        {/* Whole row opens the device on the Live Map, like the Live Map's feed cards. */}
+                        <Link
+                          to={`/admin/map?device=${device.id}`}
+                          title="Show on map"
+                          className={`grid grid-cols-[1fr_auto] ${DEVICE_GRID} gap-x-4 gap-y-1 px-4 sm:px-0 py-4 sm:py-0 hover:bg-surface transition-colors ${status === 'fire' ? 'bg-tier2-bg/40' : status === 'warning' ? 'bg-tier1-bg/40' : ''}`}
+                        >
+                          <div className="sm:px-6 sm:py-5 flex flex-col justify-center min-w-0">
+                            <span className={`text-text font-mono text-xs leading-4 ${isAlert ? 'font-bold' : 'font-medium'}`}>
+                              {device.device_code}
                             </span>
-                          )}
-                        </div>
-                        <div className="row-start-1 col-start-2 sm:row-start-auto sm:col-start-auto sm:px-6 sm:py-4 flex flex-col items-end justify-center gap-1">
-                          <StatusBadge status={status} />
-                          {note && (
-                            <span className="text-[11px] text-text-subtle whitespace-nowrap">{note}</span>
-                          )}
-                        </div>
+                            {device.label && <span className="text-[11px] leading-4 text-text-subtle mt-0.5 line-clamp-2" title={device.label}>{device.label}</span>}
+                          </div>
+                          <div className="col-span-2 row-start-2 sm:col-span-1 sm:row-start-auto sm:px-6 sm:py-5 flex flex-wrap items-center gap-2 min-w-0">
+                            <span className={`text-text-muted text-sm leading-5 ${isAlert ? 'font-bold' : 'font-medium'}`}>
+                              {device.location_desc}
+                            </span>
+                            {onBattery && (
+                              <span title="Mains power lost — running on backup battery" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tier1-bg text-[#B45309] text-[10px] font-bold uppercase tracking-wide">
+                                <BatteryWarning className="w-3 h-3" /> On battery
+                              </span>
+                            )}
+                          </div>
+                          <div className="row-start-1 col-start-2 sm:row-start-auto sm:col-start-auto sm:px-6 sm:py-4 flex flex-col items-end justify-center gap-1">
+                            <StatusBadge status={status} />
+                            {note && (
+                              <span className="text-[11px] text-text-subtle whitespace-nowrap">{note}</span>
+                            )}
+                          </div>
+                        </Link>
                       </li>
                     );
                   })}
@@ -306,28 +298,30 @@ export const Dashboard = () => {
                   {recentAlerts.map((alert) => {
                     const isResolved = !!alert.resolved_at;
                     const isFire = alert.alert_tier === 2;
-                    const kind = isFire ? 'Fire alert' : 'Warning';
                     const code = alert.devices?.device_code ?? 'Unknown device';
                     const label = alert.devices?.label;
-                    const actor = isResolved
-                      ? RESOLVED_BY[alert.resolution_source ?? ''] ?? 'Resolved'
-                      : `Tier ${alert.alert_tier} · Automated`;
                     return (
-                      <li key={alert.id} className="flex gap-3 p-4">
-                        <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${isResolved ? 'bg-text-faint' : isFire ? 'bg-tier2-border' : 'bg-tier1-border'}`}></span>
-                        <div className="flex flex-col gap-1 min-w-0">
-                          <h4 className="text-text font-bold text-[13px] leading-4">
-                            {kind} {isResolved ? 'resolved' : 'triggered'}
-                          </h4>
-                          <p className="text-text-muted text-xs leading-[18px]">
-                            <span className="font-mono font-semibold">{code}</span>{label ? ` · ${label}` : ''}
-                            <br />
-                            CO {alert.co_ppm} ppm · {alert.temp_celsius}°C at trigger
-                          </p>
-                          <span className="text-text-subtle text-[11px] font-medium">
-                            {formatEventTime(isResolved ? (alert.resolved_at as string) : alert.triggered_at, now)} · {actor}
-                          </span>
-                        </div>
+                      <li key={alert.id}>
+                        <Link
+                          to={alert.device_id ? `/admin/map?device=${alert.device_id}` : '/admin/logs'}
+                          title={alert.device_id ? 'Show on map' : undefined}
+                          className="flex gap-3 p-4 hover:bg-surface transition-colors"
+                        >
+                          <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${isResolved ? 'bg-text-faint' : isFire ? 'bg-tier2-border' : 'bg-tier1-border'}`}></span>
+                          <div className="flex flex-col gap-1 min-w-0">
+                            <h4 className="text-text font-bold text-[13px] leading-4">
+                              {alertTitle(alert)}
+                            </h4>
+                            <p className="text-text-muted text-xs leading-[18px]">
+                              <span className="font-mono font-semibold">{code}</span>{label ? ` · ${label}` : ''}
+                              <br />
+                              CO {alert.co_ppm} ppm · {formatTemp(alert.temp_celsius)} at trigger
+                            </p>
+                            <span className="text-text-subtle text-[11px] font-medium">
+                              {formatEventTime(alertEventAt(alert), now)} · {alertActor(alert)}
+                            </span>
+                          </div>
+                        </Link>
                       </li>
                     );
                   })}
@@ -346,7 +340,7 @@ export const Dashboard = () => {
 const CARD = 'bg-surface-card border border-border rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.04)]';
 const TH = 'px-6 py-3 text-text-body font-black text-[10px] uppercase tracking-[0.1em]';
 // Phones: code + status on one line, location underneath. sm+: 3 columns.
-const DEVICE_GRID = 'sm:grid-cols-[120px_minmax(0,1fr)_auto]';
+const DEVICE_GRID = 'sm:grid-cols-[170px_minmax(0,1fr)_auto]';
 
 const SectionHeader = ({ title, meta, action }: { title: string; meta?: React.ReactNode; action?: React.ReactNode }) => (
   <div className="flex items-center justify-between gap-x-4 gap-y-2 flex-wrap min-h-7">
