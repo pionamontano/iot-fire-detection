@@ -291,6 +291,9 @@ pio device monitor      # serial monitor at 115200 baud
   `WiFiManager`, `ArduinoJson`) are pinned in `lib_deps` and fetched
   automatically by PlatformIO on first build.
 
+> Before installing a node or pushing an OTA update, run the full test list in
+> [`HARDWARE_BENCH_TEST.md`](HARDWARE_BENCH_TEST.md).
+
 ### First Boot Checklist
 
 1. Flash the firmware, then power the board — the boot blink sequence
