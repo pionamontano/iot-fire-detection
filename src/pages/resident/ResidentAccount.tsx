@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Cpu } from 'lucide-react';
+import { Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Cpu, Settings, Mail } from 'lucide-react';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
+import { AdminSupportModal } from '../../components/AdminSupportModal';
 
 export const ResidentAccount = () => {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [saving, setSaving] = useState(false);
@@ -181,8 +183,30 @@ export const ResidentAccount = () => {
               </div>
             </div>
           </div>
+
+          <div className="bg-[#DC2626] rounded-lg p-6 text-white">
+            <Settings className="w-6 h-6 mb-3 text-white/80" />
+            <h3 className="font-bold text-lg mb-1">Need Admin Help?</h3>
+            <p className="text-xs text-white/80 leading-relaxed mb-4">
+              Contact your system administrator to change your role, reset your password, or manage account access.
+            </p>
+            <button
+              onClick={() => setIsSupportModalOpen(true)}
+              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2.5 bg-white text-[#DC2626] text-xs font-bold rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              <Mail className="w-4 h-4" />
+              Contact Administrator
+            </button>
+          </div>
         </div>
       </div>
+
+      <AdminSupportModal
+        isOpen={isSupportModalOpen}
+        onClose={() => setIsSupportModalOpen(false)}
+        profile={profile}
+        userEmail={user?.email}
+      />
     </div>
   );
 };
