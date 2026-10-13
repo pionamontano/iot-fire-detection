@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   Wifi, WifiOff, ShieldAlert, BellRing, Clock,
   MapPin, Activity, CheckCircle2, AlertTriangle,
-  Battery, Signal, Zap, Shield, RefreshCw, Cpu, Loader2
+  Battery, Signal, Zap, RefreshCw, Cpu, Loader2
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -319,7 +319,6 @@ export const ResidentHome = () => {
     // tile is the device's connection to the server (from last_seen_at).
     { label: 'Device Connection', status: isOnline ? 'CONNECTED' : 'NO CONNECTION', icon: Signal, ok: isOnline, noData: false },
     { label: 'Power', status: !hasLiveData ? 'NO DATA' : latestReading?.on_battery ? 'BATTERY' : 'MAINS', icon: Zap, ok: hasLiveData && !latestReading?.on_battery, noData: !hasLiveData },
-    { label: 'Tamper Switch', status: 'SECURE', icon: Shield, ok: true, noData: false },
   ];
 
   const timeSinceRefresh = () => {
