@@ -381,6 +381,63 @@ Enable `-DDEBUG_MODE=1` and watch the serial monitor for `OTA:` lines:
 | `OTA: stream stalled` | Network dropped mid-download |
 | `OTA: Update.end failed` | MD5 mismatch or corrupt image |
 
+### 8.5 The rest of the OTA feature (backend and admin UI)
+
+Firmware is only one half of OTA. The full chain is:
+
+| Piece | Where | Role |
+|---|---|---|
+| `devices.firmware_version`, `firmware_url`, `firmware_md5` | migration `20261023000000_add_device_firmware_fields.sql` | The **target** build for one device. Empty `firmware_version`/`firmware_url` = opted out. |
+| `devices.firmware_version_reported` | migration `20261024000000_add_device_firmware_reported_version.sql` | What the node says it actually runs. Written only by `ingest-reading` from the telemetry field `firmware_version`. |
+| `firmware_releases` table | migration `20261025000000_firmware_releases.sql` | Admin-only log of published builds (version, url, md5, notes). The newest row is "latest". It never talks to devices directly. |
+| `get-device-config` edge function | `supabase/functions/get-device-config/index.ts` | Authenticates the node by `X-Device-Key`, then returns thresholds, contacts and the three firmware target fields. This is the only channel through which a node learns about an update. |
+| Admin Devices page | `src/pages/admin/Devices.tsx` | Publish a release, set a per-device target (edit form), see "Running: x" vs target, and an "outdated devices" indicator comparing reported versions with the latest release. The fleet push button is disabled (see 8.6). |
+| Release workflow | `.github/workflows/firmware-release.yml` | Builds and uploads `firmware.bin` (see 8.2a). |
+
+Not provided (by design or not yet built):
+- **No Storage bucket migration.** The bucket must be created by hand and be public (or use signed URLs).
+- **No rollback.** There is a single target per device. To roll back, publish the older build under a *different* version string and target it; the node compares strings, not order.
+- **No image signing.** MD5 detects corruption or a wrong file, not tampering. Anyone who can write the `devices` row or the Storage object controls what a node runs. Both are admin-only today; keep them so.
+- **No staged or percentage rollout** and no automatic halt if devices stop reporting after an update.
+- **No GSM path.** Updates are Wi-Fi only.
+
+### 8.6 Known limitation: compiled-in device identity (fix deferred)
+
+**The problem.** `DEVICE_ID` and `DEVICE_API_KEY` are compile-time constants from `config.h`
+(9 uses: the `X-Device-Key` header and payloads in `connectivity.cpp`, the config request URL,
+and the BFP SMS text in `gsm.cpp`). The backend identifies a node by its API key. So an OTA image
+carries one specific device's identity; flashing it onto another node makes that node report,
+alert and fetch config as the first device.
+
+**Why it is not fixed yet.**
+- The fix is a cross-cutting change, not a patch: identity must move to per-device storage and
+  every use above must read it at runtime; the provisioning flow must collect it; the host
+  simulation and tests must be updated; and it needs a hardware retest of boot, portal and
+  reconnect paths. Detection and alerting code is safety-relevant, and this repository requires
+  review and a physical retest for changes of that kind.
+- The deployment today is a prototype with one or a few nodes, each flashed over USB with its own
+  `config.h`. For that, OTA gives little benefit and a failed update on a fire detector costs more
+  than a cable.
+- Nothing is at risk while fleet push is off and devices keep an empty `firmware_url`.
+
+**Current safeguards.**
+- The admin "push to fleet" button is disabled (`FLEET_PUSH_ENABLED = false` in `Devices.tsx`).
+- The default for a device is no target, so no node attempts an update.
+- Use per-device targets only for the single node whose credentials the image was built with.
+
+**Proposed fix, when it is worth doing.**
+1. Keep only shared values in `config.h` (Supabase URL, anon key, CA cert, pins, timings).
+2. Add `WiFiManagerParameter` fields for device ID and API key to the captive portal; save them to
+   NVS (`Preferences`); load them at boot into runtime buffers; open the portal if they are missing.
+3. Replace the 9 compile-time uses with those buffers.
+4. Remove the device secrets from the release workflow so one build serves every node.
+5. Give the portal AP a password (see OQ-17: the AP is open today, and it would now receive the key).
+6. Update the host stubs/tests, then re-run the simulation and a hardware bench test.
+
+**When to revisit.** More than a handful of nodes, or when USB reflashing in the field becomes the
+bottleneck. At that point do steps 1-6 first, then set `FLEET_PUSH_ENABLED = true`.
+Tracked as OQ-26 in `docs/open-questions-and-decisions.md`.
+
 ---
 
 ## 9. Troubleshooting
