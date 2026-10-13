@@ -3,3 +3,6 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Bench test secrets (Wi-Fi password, Telegram bot token, test phone number)
+src/config_test_secrets.h

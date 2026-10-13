@@ -20,7 +20,83 @@
 static OneWire           oneWire(DS18B20_PIN);
 static DallasTemperature ds18b20(&oneWire);
 
-// ── MQ-7 state ─────────────────────────────────────────────
+#ifdef MQ7_CONTINUOUS_5V
+// ============================================================
+// MQ-7 — constant-5V variant (AGS-001 hardware: MQ7_HEATER_PIN's PWM is not
+// wired into the sensor's supply — it runs continuously off a fixed 5V rail,
+// confirmed on hardware during bench testing). No heat/measure duty cycle
+// to track, so this just reads continuously and reports MEASURING always —
+// mq7GetPhase()'s signature stays the same so connectivity.cpp/main.cpp need
+// no changes either way.
+// ============================================================
+static uint32_t  mq7StartMs     = 0;
+static bool      mq7WarmupDone  = false;
+static uint32_t  mq7LastRead_ms = 0;
+#define MQ7_WARMUP_MS 60000UL   // datasheet warm-up before readings are trusted
+
+void mq7Init() {
+    ledcSetup(MQ7_PWM_CHANNEL, MQ7_PWM_FREQ, MQ7_PWM_RESOLUTION);
+    ledcAttachPin(MQ7_HEATER_PIN, MQ7_PWM_CHANNEL);
+    ledcWrite(MQ7_PWM_CHANNEL, 255);
+    mq7StartMs = millis();
+    SLOG("MQ-7 init — constant 5V, warm-up %lu ms", MQ7_WARMUP_MS);
+}
+
+// Rs = RL * (Vc - Vout) / Vout, Vc = 5V (this board's actual constant supply)
+// ppm = 100 * (Rs/R0)^(-1.513)  [curve-fitted from MQ-7 datasheet Fig 3]
+float mq7RawToPpm(int rawAdc) {
+    if (rawAdc <= 0) return 0.0f;
+    const float Vc   = 5.0f;
+    const float Vout = (float)rawAdc * Vc / (float)ADC_MAX_RAW;
+    if (Vout <= 0.0f) return 0.0f;
+    float Rs    = MQ7_RL_OHMS * (Vc - Vout) / Vout;
+    float ratio = Rs / MQ7_R0_OHMS;
+    if (ratio <= 0.0f) return 0.0f;
+    float ppm = 100.0f * powf(ratio, -1.513f);
+    ppm = constrain(ppm, 0.0f, 10000.0f);
+    return ppm;
+}
+
+void mq7Update(SensorData* data, SemaphoreHandle_t mutex) {
+    uint32_t now = millis();
+    if (now - mq7LastRead_ms < MQ7_READ_INTERVAL_MS) return;
+    mq7LastRead_ms = now;
+
+    const int N = 32;
+    long sum = 0;
+    for (int i = 0; i < N; i++) {
+        sum += analogRead(MQ7_ANALOG_PIN);
+        delayMicroseconds(100);
+    }
+    int   rawAvg = (int)(sum / N);
+    float ppm    = mq7RawToPpm(rawAvg);
+    SLOG("MQ-7 ADC raw=%d  CO=%.1f ppm", rawAvg, ppm);
+
+    if (!mq7WarmupDone && now - mq7StartMs >= MQ7_WARMUP_MS) {
+        mq7WarmupDone = true;
+        SLOG("MQ-7 warm-up complete — sensor_ready=true");
+    }
+
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        data->co_ppm       = ppm;
+        data->co_valid     = true;
+        data->last_co_ms   = millis();
+        data->sensor_ready = mq7WarmupDone;
+        xSemaphoreGive(mutex);
+    } else {
+        SLOG("ERROR: mutex timeout — MQ-7 write skipped");
+    }
+}
+
+MQ7Phase mq7GetPhase() { return MQ7Phase::MEASURING; }
+
+#else
+// ============================================================
+// MQ-7 — original heat/measure duty-cycle variant (default). Heater voltage
+// is cycled between 5V (HEATING, chemically unstable — no ADC reads) and
+// 1.4V (MEASURING, via MQ7_HEATER_PIN's PWM/transistor) per the MQ-7
+// datasheet's measurement protocol.
+// ============================================================
 static MQ7Phase  mq7Phase         = MQ7Phase::HEATING;
 static uint32_t  mq7PhaseStart    = 0;
 static bool      mq7FirstCycleDone = false;  // tracks warm-up completion
@@ -123,6 +199,7 @@ void mq7Update(SensorData* data, SemaphoreHandle_t mutex) {
 }
 
 MQ7Phase mq7GetPhase() { return mq7Phase; }
+#endif // MQ7_CONTINUOUS_5V
 
 // ── DS18B20 Init ───────────────────────────────────────────
 void ds18b20Init() {
