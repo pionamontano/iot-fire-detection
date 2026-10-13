@@ -84,12 +84,34 @@ serve(async (req) => {
           return new Response("OK", { status: 200 });
         }
 
+        const chatIdStr = chatId.toString();
+
+        // D5.5 (issue #95): refuse, don't move, a chat already linked to a DIFFERENT account —
+        // moving it silently would redirect that other account's fire alerts without their knowledge.
+        const { data: existingOwner } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .eq('telegram_chat_id', chatIdStr)
+          .neq('id', consumed.user_id)
+          .maybeSingle();
+
+        if (existingOwner) {
+          await reply('⚠️ This Telegram chat is already linked to a different AgapSense account. Unlink it there first, then try again.');
+          return new Response("OK", { status: 200 });
+        }
+
         const { error } = await supabaseAdmin
           .from('profiles')
-          .update({ telegram_chat_id: chatId.toString() })
+          .update({ telegram_chat_id: chatIdStr })
           .eq('id', consumed.user_id);
 
         if (error) {
+           // 23505: the unique index caught a race (two concurrent links to the same chat) that the
+           // check above missed — same refusal, not a server error.
+           if (error.code === '23505') {
+             await reply('⚠️ This Telegram chat is already linked to a different AgapSense account. Unlink it there first, then try again.');
+             return new Response("OK", { status: 200 });
+           }
            console.error("Error updating profile:", error);
            return new Response("Database Error", { status: 500 });
         }

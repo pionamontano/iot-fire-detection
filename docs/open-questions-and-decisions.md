@@ -110,9 +110,11 @@ Found while fixing an unrelated bug (the support-request 500, KI-08). These are 
 | CT-6 | Telegram linking UI/webhook text promises alerts; no alert sender uses the link | `telegram-webhook` vs `trigger-alert` | OQ-23 |
 | CT-7 | `docs/AGAPSENSE_SYSTEM_SPECIFICATION.md`/`FEATURES.md` vs current code (paths, files, flows) | spec §5.1 | OQ-14 |
 
-## H. Resolutions for issue #96 (implemented in code — awaiting owner sign-off to deploy)
+## H. Resolutions for issues #96 and #95 (implemented in code — awaiting owner sign-off to deploy)
 
-Per change rule 10 and issue #96's own "no code may change until the behaviour is documented and approved" condition, this is **not deployed**; it exists only as code + tests on this branch pending the owner's review and a separate deploy decision.
+Per change rule 10, this is **not deployed**; it exists only as code + tests on each branch pending the owner's review and a separate deploy decision.
+
+### Issue #96
 
 | Decision | Resolution | Why | Implemented at | Still open |
 |---|---|---|---|---|
@@ -120,4 +122,9 @@ Per change rule 10 and issue #96's own "no code may change until the behaviour i
 | **D6.4** | Do not build admin reopen. Keep the lifecycle guard's existing "closed states have no outgoing transition" rule as-is. If a device re-triggers after an incorrect close, let it raise a **new** incident — `alert_events_one_open_per_device` already supports this once the prior row is closed. | Reopening a closed row is currently blocked by design, not by omission (`20261021000000_incident_lifecycle.sql:140-142`). A new incident gives a cleaner audit trail than mutating a closed one, at no extra engineering cost. | No code change (decision is to leave the existing guard as-is). | Revisit only if real operational use shows "closed by mistake, needs reopening" is a common occurrence rather than a rare edge case. |
 | **D6.3** | Run the existing read-only `supabase/maintenance/incident_lifecycle_dry_run.sql` first to confirm none of the 3 affected rows are test fixtures, then apply `incident_lifecycle_backfill.sql` to set them to `resolved`. | Matches the simplest default already recorded in row D6.3 above; scripts for both the check and the fix already exist. | **Not run.** This touches production data directly and needs the owner to run it (or explicitly direct it to be run) against the real database — not something to execute from this review. | Confirmation the 3 rows are real (not QA/test data) before backfilling, and who runs it / when. |
 
-Issue #95 (per-user Telegram, D5.4/D5.5) is tracked separately and not part of this change.
+### Issue #95
+
+| Decision | Resolution | Why | Implemented at | Still open |
+|---|---|---|---|---|
+| **D5.4** (OQ-23) | Per-user Telegram delivery, additive to the existing station chat: any approved+active admin/responder (any tier) or the device's resident (Tier 2 only) with a linked `telegram_chat_id` now gets the same alert text on their own chat. | Finishes wiring what was already half-built — `profiles.telegram_chat_id`, the webhook, and the "Link Telegram Account" UI for both residents and responders already existed with nothing sending to them (CT-6 / KI-24). | `supabase/functions/trigger-alert/index.ts` (`telegramUsers` dispatch, reuses the same `recipientRoles` filter and approved+active check as push, ledger channel `telegram_user`); tests in `tests/edge/telegram_user.test.mjs` (8 cases). | None blocking — this is the wiring described in OQ-23/CT-6, now done. |
+| **D5.5** (OQ-23) | **Refuse**, not move, a chat-link request when that Telegram chat is already linked to a different profile; reply asking the user to unlink it there first. Backed by a DB uniqueness constraint. | Moving a chat id silently could redirect someone else's fire alerts to a new owner without their knowledge — a safety-relevant failure mode worth avoiding outright. | `supabase/functions/telegram-webhook/index.ts` (pre-check + refusal reply, plus a 23505 fallback for a race); `supabase/migrations/20261026000000_telegram_chat_id_uniqueness_and_guard.sql` (partial unique index on `telegram_chat_id`, and `protect_profile_fields()` now also guards `telegram_chat_id` so only the service role or an admin can set it — closing the adjacent gap where a user could overwrite their own link directly via PostgREST, bypassing the webhook's token flow); tests in `tests/edge/telegram_webhook.test.mjs` (5 cases) and `supabase/tests/local/telegram_chat_id.test.sql` (DB-level; **not run locally** — no local PostgreSQL/`psql` available in this environment, written to the repo's existing SQL test convention but unexecuted). | The SQL test file should be run once against a real local Postgres to confirm it passes before relying on it. |

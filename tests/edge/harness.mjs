@@ -42,7 +42,12 @@ export class FakeDb {
       if (state.op === 'update') { const hit = rows(); hit.forEach(r => Object.assign(r, state.payload)); return { data: hit, error: null }; }
       if (state.op === 'insert') { const arr = [].concat(state.payload).map(r => ({ id: 'new-' + Math.random().toString(36).slice(2), ...r })); (db.tables[table] ??= []).push(...arr); return { data: arr, error: null }; }
       if (state.op === 'upsert') { return { data: [].concat(state.payload), error: null }; }
-      if (state.op === 'delete') { return { data: [], error: null }; }
+      if (state.op === 'delete') {
+        const hit = rows();
+        const hitSet = new Set(hit);
+        db.tables[table] = (db.tables[table] ?? []).filter(r => !hitSet.has(r));
+        return { data: hit, error: null };
+      }
     };
     const add = (desc, fn) => { fn.desc = desc; state.filters.push(fn); return b; };
     const b = {
@@ -51,6 +56,12 @@ export class FakeDb {
       neq: (c, v) => add(`${c}=neq.${v}`, r => r[c] !== v),
       is: (c, v) => add(`${c}=is.${v}`, r => (r[c] ?? null) === v),
       in: (c, vs) => add(`${c}=in.(${vs})`, r => vs.includes(r[c])),
+      gt: (c, v) => add(`${c}=gt.${v}`, r => r[c] > v),
+      not: (c, op, v) => add(`${c}=not.${op}.${v}`, r => {
+        if (op === 'is') return (r[c] ?? null) !== v;
+        if (op === 'eq') return r[c] !== v;
+        throw new Error('fake DB: unsupported not() operator ' + op);
+      }),
       or: (expr) => add(`or(${expr})`, r => splitTop(expr).some(c => evalCond(c, r))),
       update(p) { state.op = 'update'; state.payload = p; return b; },
       insert(p) { state.op = 'insert'; state.payload = p; return b; },
