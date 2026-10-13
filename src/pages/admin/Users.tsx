@@ -7,14 +7,14 @@ import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Profile, RegistrationRequest, Device } from '../../lib/supabase';
 import {
   UserPlus, Cpu,
-  Loader2, Link, CheckCircle,
+  Loader2, Link, CheckCircle, Users as UsersIcon, UserX,
   Search, X, AlertCircle, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 // One placeholder for every missing value on this page.
 const EMPTY = '—';
-const Empty = () => <span className="text-[#8D7F7D]">{EMPTY}</span>;
+const Empty = () => <span className="text-text-warm">{EMPTY}</span>;
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return EMPTY;
@@ -29,22 +29,34 @@ const formatDate = (dateStr: string | null) => {
 // typing a reason, so it is not a real reason to show.
 const DEFAULT_REJECT_NOTE = 'Rejected';
 
-const TH_BASE = 'px-6 py-4 text-xs font-bold text-[#534341] uppercase tracking-wider';
-const TH = `${TH_BASE} text-left`;
-const INPUT = 'w-full px-3 py-2 border border-[#E5E2E1] rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-sm';
-const BTN_SECONDARY = 'px-4 py-2 border border-[#E5E2E1] text-[#534341] rounded-lg hover:bg-[#FCF9F8] font-bold text-sm transition-colors disabled:opacity-50';
-const BTN_PRIMARY = 'px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark font-bold text-sm transition-colors flex items-center shadow-sm disabled:opacity-50';
+// ─── Shared styles (theme tokens from index.css, same as Dashboard) ───
+
+const CARD = 'bg-surface-card border border-border rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04)]';
+const TH = 'px-6 py-3 text-text-body font-black text-[10px] uppercase tracking-[0.1em]';
+const LABEL = 'block text-sm font-bold text-text mb-1';
+const FIELD = 'w-full h-10 px-3 border border-border rounded-lg bg-surface-card text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary';
+const BTN = 'h-10 px-4 rounded-lg font-bold text-sm transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-50';
+const BTN_SECONDARY = `${BTN} border border-border text-text-body bg-surface-card hover:bg-surface`;
+const BTN_PRIMARY = `${BTN} bg-primary text-white hover:bg-primary-dark shadow-sm`;
+const BTN_SUCCESS = `${BTN} bg-success-dark text-white hover:bg-[#065F46] shadow-sm`;
+// Row-level actions: compact pills on desktop, full-width tap targets on cards.
+const ACTION = 'h-9 px-3 rounded-lg font-bold text-sm transition-colors inline-flex items-center justify-center gap-1.5 flex-1 xl:flex-none';
+const ACTION_APPROVE = `${ACTION} bg-success/10 text-success-dark hover:bg-success/20`;
+const ACTION_REJECT = `${ACTION} bg-tier2-bg text-primary hover:bg-tier2-bg/70`;
+const ACTION_LINK = `${ACTION} border border-border text-teal-light hover:text-teal hover:bg-surface xl:border-0 xl:px-0 xl:hover:bg-transparent`;
+
+// No nowrap here: table cells already keep one line, card fields may need to wrap.
+const PILL = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-bold max-w-full';
+const PILL_OK = `${PILL} bg-success/10 text-success-dark border-success/30`;
+const PILL_WARN = `${PILL} bg-tier1-bg text-tier1-text border-amber-light/40`;
 
 type TabType = 'approved' | 'pending' | 'rejected';
 type RoleFilter = 'all' | Profile['role'];
 
-const getRoleBadgeColor = (role: string) => {
-  switch (role) {
-    case 'admin': return 'bg-purple-100 text-purple-800 border-purple-200';
-    case 'bfp_responder': return 'bg-blue-100 text-blue-800 border-blue-200';
-    case 'resident': return 'bg-green-100 text-green-800 border-green-200';
-    default: return 'bg-gray-100 text-gray-800 border-gray-200';
-  }
+const ROLE_BADGE: Record<string, string> = {
+  admin: 'bg-purple-100 text-purple-800 border-purple-200',
+  bfp_responder: 'bg-blue-100 text-blue-800 border-blue-200',
+  resident: 'bg-green-100 text-green-800 border-green-200',
 };
 
 const getRoleLabel = (role: string) => {
@@ -57,37 +69,133 @@ const getRoleLabel = (role: string) => {
 };
 
 const RoleBadge = ({ role }: { role: string }) => (
-  <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border ${getRoleBadgeColor(role)}`}>
+  <span className={`${PILL} font-semibold ${ROLE_BADGE[role] ?? 'bg-gray-100 text-gray-800 border-gray-200'}`}>
     {getRoleLabel(role)}
   </span>
 );
 
 const Avatar = ({ name }: { name: string }) => (
-  <div className="w-10 h-10 shrink-0 rounded-full bg-[#FCF9F8] border border-[#E5E2E1] flex items-center justify-center font-bold text-[#534341]">
+  <div className="w-10 h-10 shrink-0 rounded-full bg-surface border border-border flex items-center justify-center font-bold text-text-body">
     {name.charAt(0).toUpperCase()}
   </div>
 );
 
+const Identity = ({ name, sub, badge }: { name: string; sub: React.ReactNode; badge?: React.ReactNode }) => (
+  <div className="flex items-center gap-3 min-w-0">
+    <Avatar name={name} />
+    <div className="min-w-0">
+      <div className="text-sm font-bold text-text flex items-center gap-2 flex-wrap">
+        <span className="truncate">{name}</span>
+        {badge}
+      </div>
+      <div className="text-sm text-text-warm truncate">{sub}</div>
+    </div>
+  </div>
+);
+
 const ErrorNote = ({ message }: { message: string }) => (
-  <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-center gap-2">
-    <ShieldAlert className="w-4 h-4 shrink-0" />
+  <div className="mb-4 p-3 bg-tier2-bg text-tier2-text text-sm rounded-lg flex items-start gap-2">
+    <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
     {message}
   </div>
 );
 
+// Bottom sheet on phones, centred dialog from sm up; body scrolls if tall.
 const Modal = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-[#E5E2E1]">
-      <div className="px-6 py-4 border-b border-[#E5E2E1] flex justify-between items-center">
-        <h3 className="text-xl font-black text-[#231918]">{title}</h3>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 z-50" onClick={onClose}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={(e) => e.stopPropagation()}
+      className="bg-surface-card w-full sm:max-w-md max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-xl shadow-2xl border border-border"
+    >
+      <div className="px-5 sm:px-6 py-4 border-b border-border flex justify-between items-center gap-4 shrink-0">
+        <h3 className="text-lg sm:text-xl font-black text-text">{title}</h3>
+        <button onClick={onClose} className="p-1 -m-1 text-text-faint hover:text-text-body" aria-label="Close">
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">{children}</div>
+      <div className="p-5 sm:p-6 overflow-y-auto">{children}</div>
     </div>
   </div>
 );
+
+// Stacked full-width buttons on phones (primary on top), a right-aligned row from sm up.
+const ModalActions = ({ children }: { children: React.ReactNode }) => (
+  <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3 [&>button]:w-full sm:[&>button]:w-auto">
+    {children}
+  </div>
+);
+
+type Column<T> = {
+  header: string;
+  cell: (row: T) => React.ReactNode;
+  // Wraps freely (long text) instead of staying on one line.
+  wrap?: boolean;
+};
+
+// One list per tab, one definition per list: a table from xl up (where the
+// sidebar still leaves room for every column), labelled cards below it.
+function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
+  rows: T[];
+  rowKey: (row: T) => string;
+  identity: Column<T>;
+  columns: Column<T>[];
+  // Return null for rows with nothing to do: the table shows a dash, the card no footer.
+  actions?: (row: T) => React.ReactNode;
+  empty: React.ReactNode;
+}) {
+  if (rows.length === 0) {
+    return <div className="px-6 py-12 text-center text-text-body">{empty}</div>;
+  }
+  return (
+    <>
+      <table className="hidden xl:table min-w-full divide-y divide-border">
+        <thead className="bg-surface">
+          <tr>
+            {[identity, ...columns].map(c => <th key={c.header} className={`${TH} text-left`}>{c.header}</th>)}
+            {actions && <th className={`${TH} text-right`}>Actions</th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map(row => (
+            <tr key={rowKey(row)} className="hover:bg-surface/60 transition-colors">
+              {[identity, ...columns].map(c => (
+                <td key={c.header} className={`px-6 py-4 text-sm text-text ${c.wrap ? 'max-w-xs' : 'whitespace-nowrap'}`}>{c.cell(row)}</td>
+              ))}
+              {actions && (
+                <td className="px-6 py-4 whitespace-nowrap text-right">
+                  <div className="inline-flex items-center gap-2">{actions(row) ?? <Empty />}</div>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <ul className="xl:hidden grid grid-cols-1 lg:grid-cols-2 gap-3 p-3 sm:p-4">
+        {rows.map(row => {
+          const rowActions = actions?.(row);
+          return (
+          <li key={rowKey(row)} className="border border-border rounded-lg p-4 flex flex-col gap-4 bg-surface-card">
+            {identity.cell(row)}
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {columns.map(c => (
+                <div key={c.header} className={`min-w-0 ${c.wrap ? 'col-span-2' : ''}`}>
+                  <dt className="text-text-body font-black text-[10px] uppercase tracking-[0.1em] mb-1">{c.header}</dt>
+                  <dd className="text-sm text-text break-words">{c.cell(row)}</dd>
+                </div>
+              ))}
+            </dl>
+            {rowActions && <div className="flex gap-2 pt-3 border-t border-border-warm">{rowActions}</div>}
+          </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
 
 export const Users = () => {
   const { profile: currentProfile } = useAuth();
@@ -395,26 +503,34 @@ export const Users = () => {
       || deviceCode.toLowerCase().includes(term);
   });
 
-  const tabClass = (tab: TabType) =>
-    `px-6 py-2.5 text-sm rounded-md transition-colors flex items-center gap-2 ${
-      activeTab === tab
-        ? 'bg-[rgba(244,161,133,0.27)] text-primary font-bold'
-        : 'text-[#534341] font-semibold hover:text-[#231918] hover:bg-gray-50'
-    }`;
+  const TABS: { id: TabType; label: string; short: string; count?: number }[] = [
+    { id: 'approved', label: 'Approved Users', short: 'Approved' },
+    { id: 'pending', label: 'Pending Requests', short: 'Pending', count: pendingCount },
+    { id: 'rejected', label: 'Rejected Requests', short: 'Rejected' },
+  ];
 
   const rejectionReason = (notes: string | null) =>
     notes && notes.trim() && notes !== DEFAULT_REJECT_NOTE ? notes : null;
 
+  const requestIdentity: Column<RegistrationRequest> = {
+    header: 'User',
+    cell: (req) => <Identity name={req.full_name} sub={req.email} />,
+  };
+
+  const searchEmpty = (filtered: boolean, none: string) => (
+    <p className="font-medium">{filtered ? 'Nothing matches your search' : none}</p>
+  );
+
   return (
     <>
-      <div className="space-y-8">
+      <div className="space-y-6 md:space-y-8">
         <PageHeader
           title="User Management"
           description="Manage accounts and registration requests."
           actions={
             <button
               onClick={() => { setAddUserError(null); setShowAddModal(true); }}
-              className="h-11 bg-primary text-white px-4 rounded-lg flex items-center gap-2 font-semibold text-sm hover:bg-primary-dark transition-colors shadow-sm"
+              className={`${BTN_PRIMARY} h-11 w-full sm:w-auto`}
             >
               <UserPlus className="w-4 h-4" />
               Add User
@@ -422,38 +538,45 @@ export const Users = () => {
           }
         />
 
-        <div>
+        <div className="space-y-4 md:space-y-6">
           {deviceLoadError && (
-            <div className="mb-6"><LoadErrorBanner what="the device list (needed for device assignment)" error={deviceLoadError} onRetry={fetchData} /></div>
+            <LoadErrorBanner what="the device list (needed for device assignment)" error={deviceLoadError} onRetry={fetchData} />
           )}
-          {/* Tabs */}
-          <div role="tablist" className="flex flex-wrap gap-1 bg-white p-1 rounded-lg border border-[#E5E2E1] shadow-sm mb-6 w-fit max-w-full">
-            <button role="tab" aria-selected={activeTab === 'approved'} onClick={() => switchTab('approved')} className={tabClass('approved')}>
-              Approved Users
-            </button>
-            <button role="tab" aria-selected={activeTab === 'pending'} onClick={() => switchTab('pending')} className={tabClass('pending')}>
-              Pending Requests
-              {pendingCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-primary text-white">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-            <button role="tab" aria-selected={activeTab === 'rejected'} onClick={() => switchTab('rejected')} className={tabClass('rejected')}>
-              Rejected Requests
-            </button>
+
+          {/* Tabs: equal-width segments on phones, content-width from sm up */}
+          <div role="tablist" className="flex gap-1 bg-surface-card p-1 rounded-lg border border-border shadow-sm w-full sm:w-fit">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                onClick={() => switchTab(tab.id)}
+                className={`h-10 px-2 sm:px-5 flex-1 sm:flex-none whitespace-nowrap text-sm rounded-md transition-colors inline-flex items-center justify-center gap-2 min-w-0 ${
+                  activeTab === tab.id
+                    ? 'bg-[rgba(244,161,133,0.27)] text-primary font-bold'
+                    : 'text-text-body font-semibold hover:text-text hover:bg-surface'
+                }`}
+              >
+                <span className="truncate sm:hidden">{tab.short}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
+                {!!tab.count && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-primary text-white">{tab.count}</span>
+                )}
+              </button>
+            ))}
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-[#E5E2E1] overflow-hidden">
-            <div className="p-4 border-b border-[#E5E2E1] bg-[#FCF9F8] flex flex-wrap gap-3 items-center">
-              <div className="relative w-full sm:w-80">
-                <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <div className={`${CARD} overflow-hidden`}>
+            <div className="p-3 sm:p-4 border-b border-border bg-surface flex flex-col sm:flex-row gap-3">
+              <div className="relative w-full sm:max-w-sm">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-faint pointer-events-none" />
                 <input
-                  type="text"
-                  placeholder={activeTab === 'approved' ? 'Search by name, phone or device code...' : 'Search by name or email...'}
+                  type="search"
+                  placeholder={activeTab === 'approved' ? 'Search name, phone or device code' : 'Search name or email'}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-[#E5E2E1] rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-sm bg-white"
+                  aria-label="Search"
+                  className={`${FIELD} pl-9`}
                 />
               </div>
               {activeTab === 'approved' && (
@@ -461,7 +584,7 @@ export const Users = () => {
                   value={roleFilter}
                   onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
                   aria-label="Filter by role"
-                  className="px-3 py-2 border border-[#E5E2E1] rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-sm bg-white"
+                  className={`${FIELD} sm:w-48`}
                 >
                   <option value="all">All roles</option>
                   <option value="resident">Resident / Owner</option>
@@ -471,224 +594,138 @@ export const Users = () => {
               )}
             </div>
 
-            <div className="overflow-x-auto">
-              {loading ? (
-                <div className="flex justify-center items-center h-64">
-                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                </div>
-              ) : activeTab === 'pending' ? (
-                // PENDING REQUESTS TABLE
-                <table className="min-w-full divide-y divide-[#E5E2E1]">
-                  <thead className="bg-[#FCF9F8]">
-                    <tr>
-                      <th className={TH}>User</th>
-                      <th className={TH}>Requested Role</th>
-                      <th className={TH}>Contact</th>
-                      <th className={TH}>Details</th>
-                      <th className={TH}>Submitted</th>
-                      <th className={`${TH_BASE} text-right`}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-[#E5E2E1]">
-                    {pendingRequests.map((req) => (
-                      <tr key={req.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <Avatar name={req.full_name} />
-                            <div className="ml-4">
-                              <div className="text-sm font-bold text-[#231918]">{req.full_name}</div>
-                              <div className="text-sm text-[#8D7F7D]">{req.email}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <RoleBadge role={req.requested_role} />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#231918]">
-                          {req.contact_number || <Empty />}
-                        </td>
-                        <td className="px-6 py-4">
-                          {req.requested_role === 'resident' ? (
-                            <div className="text-sm text-[#534341]">
-                              <span className="font-medium text-[#231918]">Device code:</span> {req.device_code || EMPTY}
-                            </div>
-                          ) : (
-                            <div className="text-sm text-[#534341]">
-                              <span className="font-medium text-[#231918]">{req.organization || EMPTY}</span>
-                              {req.position && <><br/>{req.position}</>}
-                              {req.verification_info && <div className="text-xs text-gray-500 mt-1">ID: {req.verification_info}</div>}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#8D7F7D]">
-                          {formatDate(req.created_at)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            onClick={() => openApprove(req)}
-                            className="text-[#047857] hover:text-[#065F46] bg-[#ECFDF5] px-3 py-1.5 rounded mr-2 font-bold transition-colors"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => openReject(req)}
-                            className="text-[#DC2626] hover:text-[#991B1B] bg-[#FEF2F2] px-3 py-1.5 rounded font-bold transition-colors"
-                          >
-                            Reject
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {pendingRequests.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-[#534341]">
-                          <CheckCircle className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                          <p className="font-medium">{term ? 'No pending requests match your search' : 'No pending requests'}</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              ) : activeTab === 'rejected' ? (
-                // REJECTED REQUESTS TABLE
-                <table className="min-w-full divide-y divide-[#E5E2E1]">
-                  <thead className="bg-[#FCF9F8]">
-                    <tr>
-                      <th className={TH}>User</th>
-                      <th className={TH}>Requested Role</th>
-                      <th className={TH}>Reason</th>
-                      <th className={TH}>Submitted</th>
-                      <th className={TH}>Rejected</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-[#E5E2E1]">
-                    {rejectedRequests.map((req) => {
-                      const reason = rejectionReason(req.admin_notes);
+            {loading ? (
+              <div className="flex justify-center items-center h-64">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : activeTab === 'pending' ? (
+              <DataList
+                rows={pendingRequests}
+                rowKey={(r) => r.id}
+                identity={requestIdentity}
+                columns={[
+                  { header: 'Requested Role', cell: (r) => <RoleBadge role={r.requested_role} /> },
+                  { header: 'Contact', cell: (r) => r.contact_number || <Empty /> },
+                  { header: 'Submitted', cell: (r) => <span className="text-text-warm">{formatDate(r.created_at)}</span> },
+                  {
+                    header: 'Details',
+                    wrap: true,
+                    cell: (r) => r.requested_role === 'resident' ? (
+                      <span className="text-text-body"><span className="font-medium text-text">Device code:</span> {r.device_code || EMPTY}</span>
+                    ) : (
+                      <div className="text-text-body">
+                        <span className="font-medium text-text">{r.organization || EMPTY}</span>
+                        {r.position && <div>{r.position}</div>}
+                        {r.verification_info && <div className="text-xs text-text-warm mt-1">ID: {r.verification_info}</div>}
+                      </div>
+                    ),
+                  },
+                ]}
+                actions={(r) => (
+                  <>
+                    <button onClick={() => openApprove(r)} className={ACTION_APPROVE}>Approve</button>
+                    <button onClick={() => openReject(r)} className={ACTION_REJECT}>Reject</button>
+                  </>
+                )}
+                empty={
+                  <>
+                    <CheckCircle className="mx-auto h-12 w-12 text-border mb-4" />
+                    {searchEmpty(!!term, 'No pending requests')}
+                  </>
+                }
+              />
+            ) : activeTab === 'rejected' ? (
+              <DataList
+                rows={rejectedRequests}
+                rowKey={(r) => r.id}
+                identity={requestIdentity}
+                columns={[
+                  { header: 'Requested Role', cell: (r) => <RoleBadge role={r.requested_role} /> },
+                  { header: 'Submitted', cell: (r) => <span className="text-text-warm">{formatDate(r.created_at)}</span> },
+                  { header: 'Rejected', cell: (r) => <span className="text-text-warm">{formatDate(r.reviewed_at)}</span> },
+                  {
+                    header: 'Reason',
+                    wrap: true,
+                    cell: (r) => {
+                      const reason = rejectionReason(r.admin_notes);
+                      return reason
+                        ? <span className="text-text">{reason}</span>
+                        : <span className="text-text-warm italic">No reason given</span>;
+                    },
+                  },
+                ]}
+                empty={
+                  <>
+                    <UserX className="mx-auto h-12 w-12 text-border mb-4" />
+                    {searchEmpty(!!term, 'No rejected requests')}
+                  </>
+                }
+              />
+            ) : (
+              <DataList
+                rows={approvedUsers}
+                rowKey={(u) => u.id}
+                identity={{
+                  header: 'User',
+                  cell: (u) => (
+                    <Identity
+                      name={u.full_name}
+                      sub={`Joined ${formatDate(u.created_at)}`}
+                      badge={u.id === currentProfile?.id && (
+                        <span className="text-xs bg-border text-text-body px-2 py-0.5 rounded-full font-semibold">You</span>
+                      )}
+                    />
+                  ),
+                }}
+                columns={[
+                  { header: 'Role', cell: (u) => <RoleBadge role={u.role} /> },
+                  {
+                    header: 'Device',
+                    cell: (u) => {
+                      if (u.role !== 'resident') return <Empty />;
+                      if (!u.device_id) return <span className={PILL_WARN}><Cpu className="w-3 h-3" /> Unassigned</span>;
+                      const device = deviceById.get(u.device_id);
                       return (
-                        <tr key={req.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <Avatar name={req.full_name} />
-                              <div className="ml-4">
-                                <div className="text-sm font-bold text-[#231918]">{req.full_name}</div>
-                                <div className="text-sm text-[#8D7F7D]">{req.email}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <RoleBadge role={req.requested_role} />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className={`text-sm ${reason ? 'text-[#231918]' : 'text-[#8D7F7D] italic'}`}>{reason || 'No reason given'}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-[#8D7F7D]">
-                            {formatDate(req.created_at)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-[#8D7F7D]">
-                            {formatDate(req.reviewed_at)}
-                          </td>
-                        </tr>
+                        <span className={PILL_OK} title={device?.label || undefined}>
+                          <Cpu className="w-3 h-3" /> {device?.device_code || 'Assigned'}
+                        </span>
                       );
-                    })}
-                    {rejectedRequests.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-[#534341]">
-                          <p className="font-medium">{term ? 'No rejected requests match your search' : 'No rejected requests'}</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              ) : (
-                // APPROVED USERS TABLE
-                <table className="min-w-full divide-y divide-[#E5E2E1]">
-                  <thead className="bg-[#FCF9F8]">
-                    <tr>
-                      <th className={TH}>User</th>
-                      <th className={TH}>Role</th>
-                      <th className={TH}>Contact</th>
-                      <th className={TH}>Device</th>
-                      <th className={TH}>Telegram Alerts</th>
-                      <th className={`${TH_BASE} text-right`}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-[#E5E2E1]">
-                    {approvedUsers.map((user) => {
-                      const device = user.device_id ? deviceById.get(user.device_id) : undefined;
-                      return (
-                        <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <Avatar name={user.full_name} />
-                              <div className="ml-4">
-                                <div className="text-sm font-bold text-[#231918]">
-                                  {user.full_name}
-                                  {user.id === currentProfile?.id && (
-                                    <span className="ml-2 text-xs bg-[#E5E2E1] text-[#534341] px-2 py-0.5 rounded-full">You</span>
-                                  )}
-                                </div>
-                                <div className="text-sm text-[#8D7F7D]">Joined {formatDate(user.created_at)}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <RoleBadge role={user.role} />
-                          </td>
-                          <td className="px-6 py-4 text-sm text-[#231918]">
-                            <div className="whitespace-nowrap">{user.contact_number || <Empty />}</div>
-                            {user.address && (
-                              <div className="text-xs text-[#8D7F7D] mt-0.5 max-w-[16rem] truncate" title={user.address}>{user.address}</div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            {user.role !== 'resident' ? (
-                              <Empty />
-                            ) : user.device_id ? (
-                              <span className="inline-flex items-center text-[#047857] bg-[#ECFDF5] px-2.5 py-1 rounded-md text-xs font-bold border border-[#A7F3D0]" title={device?.label || undefined}>
-                                <Cpu className="w-3 h-3 mr-1" /> {device?.device_code || 'Assigned'}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center text-[#D97706] bg-[#FFFBEB] px-2.5 py-1 rounded-md text-xs font-bold border border-[#FDE68A]">
-                                <Cpu className="w-3 h-3 mr-1" /> Unassigned
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            {user.role === 'admin' ? (
-                              <Empty />
-                            ) : user.telegram_chat_id ? (
-                              <span className="text-[#047857] font-semibold">Connected</span>
-                            ) : (
-                              <span className="text-[#D97706] font-semibold">Not connected</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            {user.role === 'resident' ? (
-                              <button
-                                onClick={() => openAssign(user)}
-                                className="text-[#00799C] hover:text-[#005c77] inline-flex items-center font-bold"
-                              >
-                                <Link className="w-4 h-4 mr-1" />
-                                {user.device_id ? 'Reassign' : 'Assign'} Device
-                              </button>
-                            ) : (
-                              <Empty />
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {approvedUsers.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-[#534341]">
-                          <p className="font-medium">{term || roleFilter !== 'all' ? 'No users match your filters' : 'No approved users yet'}</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                    },
+                  },
+                  {
+                    header: 'Contact',
+                    cell: (u) => (
+                      <>
+                        <div className="whitespace-nowrap">{u.contact_number || <Empty />}</div>
+                        {u.address && (
+                          <div className="text-xs text-text-warm mt-0.5 xl:max-w-[16rem] xl:truncate" title={u.address}>{u.address}</div>
+                        )}
+                      </>
+                    ),
+                  },
+                  {
+                    header: 'Telegram Alerts',
+                    cell: (u) => u.role === 'admin'
+                      ? <Empty />
+                      : u.telegram_chat_id
+                        ? <span className="text-success-dark font-semibold">Connected</span>
+                        : <span className="text-amber font-semibold">Not connected</span>,
+                  },
+                ]}
+                actions={(u) => u.role === 'resident' ? (
+                  <button onClick={() => openAssign(u)} className={ACTION_LINK}>
+                    <Link className="w-4 h-4" />
+                    {u.device_id ? 'Reassign' : 'Assign'} Device
+                  </button>
+                ) : null}
+                empty={
+                  <>
+                    <UsersIcon className="mx-auto h-12 w-12 text-border mb-4" />
+                    {searchEmpty(!!term || roleFilter !== 'all', 'No approved users yet')}
+                  </>
+                }
+              />
+            )}
           </div>
         </div>
       </div>
@@ -697,23 +734,24 @@ export const Users = () => {
       {showApproveModal && selectedRequest && (
         <Modal title="Approve Request" onClose={closeRequestModals}>
           {requestError && <ErrorNote message={requestError} />}
-          <p className="text-[#534341] mb-6">
-            You are about to approve <strong>{selectedRequest.full_name}</strong> as <strong>{getRoleLabel(selectedRequest.requested_role)}</strong>.
+          <p className="text-text-body">
+            You are about to approve <strong className="text-text">{selectedRequest.full_name}</strong> as <strong className="text-text">{getRoleLabel(selectedRequest.requested_role)}</strong>.
           </p>
 
           {selectedRequest.requested_role === 'resident' && (
-            <div className="mb-6">
-              <label className="block text-sm font-bold text-[#231918] mb-2">Assign Device (Optional)</label>
+            <div className="mt-5">
+              <label className={LABEL} htmlFor="approve-device">Assign Device (Optional)</label>
               {selectedRequest.device_code && (
-                <p className={`text-xs mb-2 font-medium ${selectedDeviceForApproval ? 'text-[#047857]' : 'text-[#D97706]'}`}>
+                <p className={`text-xs mb-2 font-medium ${selectedDeviceForApproval ? 'text-success-dark' : 'text-amber'}`}>
                   Device code entered at sign-up: {selectedRequest.device_code}
                   {!selectedDeviceForApproval && ' (not found among unassigned devices)'}
                 </p>
               )}
               <select
+                id="approve-device"
                 value={selectedDeviceForApproval}
                 onChange={(e) => setSelectedDeviceForApproval(e.target.value)}
-                className={INPUT}
+                className={FIELD}
               >
                 <option value="">Do not assign yet</option>
                 {devices.map((device) => (
@@ -725,19 +763,15 @@ export const Users = () => {
             </div>
           )}
 
-          <div className="flex gap-3 justify-end">
+          <ModalActions>
             <button onClick={closeRequestModals} className={BTN_SECONDARY} disabled={processingRequest}>
               Cancel
             </button>
-            <button
-              onClick={handleApprove}
-              disabled={processingRequest}
-              className="px-4 py-2 bg-[#047857] text-white rounded-lg hover:bg-[#065F46] font-bold text-sm transition-colors flex items-center shadow-sm disabled:opacity-50"
-            >
-              {processingRequest ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            <button onClick={handleApprove} disabled={processingRequest} className={BTN_SUCCESS}>
+              {processingRequest && <Loader2 className="w-4 h-4 animate-spin" />}
               Approve
             </button>
-          </div>
+          </ModalActions>
         </Modal>
       )}
 
@@ -745,26 +779,28 @@ export const Users = () => {
       {showRejectModal && selectedRequest && (
         <Modal title="Reject Request" onClose={closeRequestModals}>
           {requestError && <ErrorNote message={requestError} />}
-          <p className="text-[#534341] mb-4">
-            You are about to reject <strong>{selectedRequest.full_name}</strong>. Add a reason (optional) — it is shown on the Rejected Requests tab.
+          <p className="text-text-body mb-4">
+            You are about to reject <strong className="text-text">{selectedRequest.full_name}</strong>. Add a reason (optional) — it is shown on the Rejected Requests tab.
           </p>
 
+          <label className={LABEL} htmlFor="reject-reason">Reason</label>
           <textarea
+            id="reject-reason"
             value={adminNotes}
             onChange={(e) => setAdminNotes(e.target.value)}
             placeholder="e.g. Invalid organization ID"
-            className={`${INPUT} mb-6 resize-none h-24`}
+            className={`${FIELD} h-24 py-2 resize-none`}
           />
 
-          <div className="flex gap-3 justify-end">
+          <ModalActions>
             <button onClick={closeRequestModals} className={BTN_SECONDARY} disabled={processingRequest}>
               Cancel
             </button>
             <button onClick={handleReject} disabled={processingRequest} className={BTN_PRIMARY}>
-              {processingRequest ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {processingRequest && <Loader2 className="w-4 h-4 animate-spin" />}
               Reject
             </button>
-          </div>
+          </ModalActions>
         </Modal>
       )}
 
@@ -774,45 +810,44 @@ export const Users = () => {
           {assignError && <ErrorNote message={assignError} />}
 
           <form onSubmit={handleAssignDevice}>
-            <div className="mb-6">
-              <div className="text-sm text-[#534341] mb-4">
-                Assigning a device to <span className="font-bold text-[#231918]">{selectedUser.full_name}</span>
-                {selectedUser.device_id && (
-                  <> (currently <span className="font-bold text-[#231918]">{deviceById.get(selectedUser.device_id)?.device_code || 'assigned'}</span>)</>
-                )}
-              </div>
-
-              <label className="block text-sm font-bold text-[#231918] mb-2">Unassigned Devices</label>
-              <select
-                required
-                value={selectedDevice}
-                onChange={(e) => setSelectedDevice(e.target.value)}
-                className={INPUT}
-              >
-                <option value="">Select a device</option>
-                {devices.map((device) => (
-                  <option key={device.id} value={device.id}>
-                    {formatDeviceOption(device)}
-                  </option>
-                ))}
-              </select>
-              {devices.length === 0 && (
-                <p className="text-xs text-[#D97706] mt-2 flex items-center">
-                  <AlertCircle className="w-3 h-3 mr-1" />
-                  No unassigned devices available.
-                </p>
+            <p className="text-sm text-text-body mb-4">
+              Assigning a device to <span className="font-bold text-text">{selectedUser.full_name}</span>
+              {selectedUser.device_id && (
+                <> (currently <span className="font-bold text-text">{deviceById.get(selectedUser.device_id)?.device_code || 'assigned'}</span>)</>
               )}
-            </div>
+            </p>
 
-            <div className="flex justify-end gap-3">
+            <label className={LABEL} htmlFor="assign-device">Unassigned Devices</label>
+            <select
+              id="assign-device"
+              required
+              value={selectedDevice}
+              onChange={(e) => setSelectedDevice(e.target.value)}
+              className={FIELD}
+            >
+              <option value="">Select a device</option>
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {formatDeviceOption(device)}
+                </option>
+              ))}
+            </select>
+            {devices.length === 0 && (
+              <p className="text-xs text-amber mt-2 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                No unassigned devices available.
+              </p>
+            )}
+
+            <ModalActions>
               <button type="button" onClick={() => setShowAssignDeviceModal(false)} className={BTN_SECONDARY}>
                 Cancel
               </button>
               <button type="submit" disabled={assignLoading || !selectedDevice} className={BTN_PRIMARY}>
-                {assignLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                {assignLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                 {selectedUser.device_id ? 'Reassign Device' : 'Assign Device'}
               </button>
-            </div>
+            </ModalActions>
           </form>
         </Modal>
       )}
@@ -825,75 +860,86 @@ export const Users = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-[#231918] mb-1">Full Name</label>
+                <label className={LABEL} htmlFor="new-name">Full Name</label>
                 <input
+                  id="new-name"
                   type="text"
                   required
+                  autoComplete="off"
                   value={newUser.fullName}
                   onChange={(e) => setNewUser({...newUser, fullName: e.target.value})}
-                  className={INPUT}
+                  className={FIELD}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-[#231918] mb-1">Email</label>
+                <label className={LABEL} htmlFor="new-email">Email</label>
                 <input
+                  id="new-email"
                   type="email"
                   required
+                  autoComplete="off"
                   value={newUser.email}
                   onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                  className={INPUT}
+                  className={FIELD}
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-[#231918] mb-1">Role</label>
-                <select
-                  value={newUser.role}
-                  onChange={(e) => setNewUser({...newUser, role: e.target.value as Profile['role']})}
-                  className={INPUT}
-                >
-                  <option value="resident">Resident / Owner</option>
-                  <option value="bfp_responder">BFP Responder</option>
-                  <option value="admin">Administrator</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={LABEL} htmlFor="new-role">Role</label>
+                  <select
+                    id="new-role"
+                    value={newUser.role}
+                    onChange={(e) => setNewUser({...newUser, role: e.target.value as Profile['role']})}
+                    className={FIELD}
+                  >
+                    <option value="resident">Resident / Owner</option>
+                    <option value="bfp_responder">BFP Responder</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={LABEL} htmlFor="new-phone">Contact Number</label>
+                  <input
+                    id="new-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    value={newUser.contactNumber}
+                    onChange={handlePhoneChange}
+                    maxLength={11}
+                    placeholder="09XXXXXXXXX"
+                    className={FIELD}
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-[#231918] mb-1">Contact Number</label>
+                <label className={LABEL} htmlFor="new-password">Temporary Password</label>
                 <input
-                  type="tel"
-                  value={newUser.contactNumber}
-                  onChange={handlePhoneChange}
-                  maxLength={11}
-                  placeholder="09XXXXXXXXX"
-                  className={INPUT}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-[#231918] mb-1">Temporary Password</label>
-                <input
+                  id="new-password"
                   type="password"
                   required
                   minLength={6}
+                  autoComplete="new-password"
                   value={newUser.password}
                   onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                  className={INPUT}
+                  className={FIELD}
                 />
-                <p className="text-xs text-[#8D7F7D] mt-1">At least 6 characters. Share it with the user so they can sign in.</p>
+                <p className="text-xs text-text-warm mt-1">At least 6 characters. Share it with the user so they can sign in.</p>
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-3">
+            <ModalActions>
               <button type="button" onClick={() => setShowAddModal(false)} className={BTN_SECONDARY}>
                 Cancel
               </button>
               <button type="submit" disabled={addUserLoading} className={BTN_PRIMARY}>
-                {addUserLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                {addUserLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                 Add User
               </button>
-            </div>
+            </ModalActions>
           </form>
         </Modal>
       )}
