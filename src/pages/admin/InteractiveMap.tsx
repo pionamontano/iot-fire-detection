@@ -5,7 +5,7 @@ import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { AlertEvent } from '../../lib/supabase';
-import { Search, Activity, Layers } from 'lucide-react';
+import { Activity, Layers, MapPinOff, X } from 'lucide-react';
 import { getDeviceStatus } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
 import { formatAge } from '../../lib/location';
@@ -23,7 +23,14 @@ export const InteractiveMap = () => {
   // Controls
   const [hideOffline, setHideOffline] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'fires' | 'warnings'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Short-lived message over the map, e.g. when a feed card's device has no
+  // position to fly to (otherwise the click looks like it did nothing).
+  const [mapNotice, setMapNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!mapNotice) return;
+    const id = setTimeout(() => setMapNotice(null), 6000);
+    return () => clearTimeout(id);
+  }, [mapNotice]);
   // selectedDeviceId is a one-shot request for the map to fly to a device
   // (cleared once handled); selectedAlertId is the feed card the user picked
   // and stays highlighted. Highlighting off selectedDeviceId made the ring
@@ -38,7 +45,6 @@ export const InteractiveMap = () => {
   useEffect(() => {
     if (!focusParam || devices.length === 0) return;
     setHideOffline(false);
-    setSearchQuery('');
     setSelectedDeviceId(focusParam);
     const next = new URLSearchParams(searchParams);
     next.delete('device');
@@ -94,14 +100,10 @@ export const InteractiveMap = () => {
   // Filter devices to display
   const displayedDevices = mapDevices.filter(d => {
     const status = getDeviceStatus(d, activeAlerts, now);
-    if (hideOffline && status === 'offline') return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const haystack = [d.device_code, d.label, d.location_desc].filter(Boolean).join(' ').toLowerCase();
-      if (!haystack.includes(q)) return false;
-    }
-    return true;
+    return !(hideOffline && status === 'offline');
   });
+  const locatedDevices = mapDevices.filter(d => d.location.kind !== 'unavailable');
+  const shownCount = displayedDevices.filter(d => d.location.kind !== 'unavailable').length;
 
   // Filter feed alerts. Tier 2 = dual-sensor confirmed fire; Tier 1 =
   // single-sensor warning (spec SW-2.3.1). Tier 1 was previously labeled
@@ -112,15 +114,23 @@ export const InteractiveMap = () => {
     return true;
   });
 
-  // Clicking a feed card locates that device on the map: clear filters that
-  // could be hiding its marker (offline toggle, stale search text), then
-  // hand off to the map to fly to it and open its popup.
-  const handleFeedCardClick = (alertId: string, deviceId: string | null | undefined) => {
-    if (!deviceId) return;
-    setSelectedAlertId(alertId);
+  // Clicking a feed card locates that device on the map: clear the offline
+  // filter that could be hiding its marker, then hand off to the map to fly
+  // to it and open its popup. No position → say so instead of doing nothing.
+  const handleFeedCardClick = (alert: AlertEvent) => {
+    setSelectedAlertId(alert.id);
+    const device = mapDevices.find(d => d.id === alert.device_id);
+    if (!device) {
+      setMapNotice('This alert\'s device is no longer registered, so it can\'t be shown on the map.');
+      return;
+    }
+    if (device.location.kind === 'unavailable') {
+      setMapNotice(`${device.device_code} has no known location yet, so it can't be shown on the map.`);
+      return;
+    }
+    setMapNotice(null);
     setHideOffline(false);
-    setSearchQuery('');
-    setSelectedDeviceId(deviceId);
+    setSelectedDeviceId(device.id);
   };
 
   return (
@@ -129,11 +139,6 @@ export const InteractiveMap = () => {
       {loadError && (
         <div className="absolute left-1/2 top-4 z-[1100] w-[min(92%,640px)] -translate-x-1/2">
           <LoadErrorBanner what="devices and alerts" error={loadError} onRetry={fetchData} />
-        </div>
-      )}
-      {devicesWithoutLocation.length > 0 && (
-        <div role="status" className="absolute top-20 md:top-auto md:bottom-20 left-1/2 z-[1100] w-[min(92%,640px)] -translate-x-1/2 rounded-md border border-amber-300 bg-amber-50/95 px-3 py-2 text-xs text-amber-900">
-          <strong>Location unavailable for {devicesWithoutLocation.length} device{devicesWithoutLocation.length > 1 ? 's' : ''}</strong> (not shown on the map): {devicesWithoutLocation.map(d => d.device_code).join(', ')}
         </div>
       )}
       {/* ─── MAP LAYER ─── */}
@@ -147,31 +152,45 @@ export const InteractiveMap = () => {
           onSelectionHandled={() => setSelectedDeviceId(null)}
         >
           {/* ─── FLOATING OVERLAYS (TOP) ─── */}
-          <div className="absolute top-3 left-3 right-3 sm:top-6 sm:left-6 sm:right-6 flex justify-between pointer-events-none" style={{ zIndex: 1000 }}>
-            <div className="flex flex-wrap gap-2 sm:gap-3 pointer-events-auto w-full sm:w-auto">
-              {/* Search */}
-              <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg flex items-center h-[42px] px-3 flex-1 min-w-0 sm:flex-none">
-                <Search className="w-4 h-4 text-[#A1A1AA] mr-2" />
-                <input
-                  type="text"
-                  placeholder="Search device ID or location..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent border-none outline-none text-sm w-full sm:w-56 min-w-0 text-[#3F3F46] placeholder:text-[#A1A1AA]"
-                />
-              </div>
+          {/* Search lives in the header only; the map just has the offline filter. */}
+          <div className="absolute top-3 left-3 right-14 sm:top-6 sm:left-6 sm:right-auto sm:max-w-[420px] flex flex-col items-start gap-2 pointer-events-none" style={{ zIndex: 1000 }}>
+            <div className={`${OVERLAY_CARD} flex items-center gap-1 h-[42px] p-1 pointer-events-auto`}>
+              <OverlayToggle label="Hide Offline" active={hideOffline} onClick={() => setHideOffline(!hideOffline)} />
+              {hideOffline && (
+                <>
+                  <span className="px-2 text-[10px] font-bold uppercase tracking-widest text-[#52525B] whitespace-nowrap" role="status">
+                    {shownCount} of {locatedDevices.length} devices shown
+                  </span>
+                  <button
+                    onClick={() => setHideOffline(false)}
+                    aria-label="Clear filter"
+                    title="Clear filter"
+                    className="h-full aspect-square flex items-center justify-center rounded text-[#71717A] hover:bg-gray-100 hover:text-[#18181B] transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+            </div>
 
-              {/* Toggles */}
-              <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg flex items-center h-[42px] overflow-hidden p-1">
-                <button
-                  onClick={() => setHideOffline(!hideOffline)}
-                  aria-pressed={hideOffline}
-                  className={`px-4 h-full rounded text-xs font-bold uppercase transition-colors ${hideOffline ? 'bg-primary text-white' : 'text-[#AF101A] hover:bg-primary-dark/10'}`}
-                >
-                  Hide Offline
+            {mapNotice && (
+              <div role="status" className={`${OVERLAY_CARD} flex items-start gap-2 px-3 py-2 text-xs text-[#18181B] pointer-events-auto`}>
+                <MapPinOff className="w-4 h-4 shrink-0 text-[#B45309]" />
+                <span className="flex-1">{mapNotice}</span>
+                <button onClick={() => setMapNotice(null)} aria-label="Dismiss" className="text-[#71717A] hover:text-[#18181B] transition-colors">
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-            </div>
+            )}
+
+            {devicesWithoutLocation.length > 0 && (
+              <div role="status" className={`${OVERLAY_CARD} flex items-start gap-2 px-3 py-2 text-xs text-[#52525B] pointer-events-auto`}>
+                <MapPinOff className="w-4 h-4 shrink-0 text-[#B45309]" />
+                <span>
+                  <strong className="text-[#18181B]">No location for {devicesWithoutLocation.map(d => d.device_code).join(', ')}</strong> — not shown on the map.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* ─── LEGEND OVERLAY (BOTTOM LEFT) ─── */}
@@ -226,7 +245,6 @@ export const InteractiveMap = () => {
             }
 
             const eventAt = isResolved ? (alert.resolved_at as string) : alert.triggered_at;
-            const deviceId = alert.device_id;
             const isSelected = selectedAlertId === alert.id;
 
             return (
@@ -234,11 +252,11 @@ export const InteractiveMap = () => {
                 key={alert.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => handleFeedCardClick(alert.id, deviceId)}
+                onClick={() => handleFeedCardClick(alert)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    handleFeedCardClick(alert.id, deviceId);
+                    handleFeedCardClick(alert);
                   }
                 }}
                 className={`${bgClass} ${borderClass} rounded-lg p-4 shadow-sm relative transition-shadow cursor-pointer hover:shadow-md ${isSelected ? 'ring-2 ring-[#00799C]' : ''}`}
@@ -288,6 +306,21 @@ export const InteractiveMap = () => {
     </div>
   );
 };
+
+// Shared look for everything floating over the map (toolbar, notices, legend).
+const OVERLAY_CARD = 'bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg';
+
+// Same pressed/unpressed style as the feed's FilterBtn so all toggles on the
+// page read as one control family.
+const OverlayToggle = ({ label, active, onClick }: { label: string, active: boolean, onClick: () => void }) => (
+  <button
+    onClick={onClick}
+    aria-pressed={active}
+    className={`px-3 h-full rounded text-[10px] font-extrabold uppercase tracking-widest transition-colors ${active ? 'bg-[#18181B] text-white' : 'text-[#71717A] hover:bg-gray-100'}`}
+  >
+    {label}
+  </button>
+);
 
 const FilterBtn = ({ label, active, onClick }: { label: string, active: boolean, onClick: () => void }) => (
   <button
