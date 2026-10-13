@@ -29,6 +29,11 @@ export const toMapDevices = (devices: DeviceWithReadings[], now: number): Device
     return { ...d, latitude: location.lat, longitude: location.lng, location };
   });
 
+// One temperature format for the map popup and the alert feed: at most one
+// decimal (28.38 → "28.4°C", 30 → "30°C").
+export const formatTemp = (celsius: number | null | undefined): string =>
+  celsius == null ? '—' : `${Number(celsius.toFixed(1))}°C`;
+
 // Popup header text and color per status; colors and labels come from the
 // shared DEVICE_STATUS so the map matches every other status display.
 export const MAP_POPUP_HEADER: Record<DeviceStatus, { text: string; bg: string }> = {

@@ -174,7 +174,7 @@ export const Dashboard = () => {
                 devices={mapDevices}
                 activeAlerts={activeAlerts}
                 now={now}
-                onViewDetails={() => navigate('/admin/alerts')}
+                onViewDetails={(d) => navigate(`/admin/alerts?q=${encodeURIComponent(d.device_code)}&device=${d.id}`)}
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">

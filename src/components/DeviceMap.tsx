@@ -7,7 +7,7 @@ import { describeLocation, isValidCoordinate, markerOpacity, formatAge } from '.
 import { getDeviceStatus, DEVICE_STATUS, DEVICE_STATUS_ORDER } from '../lib/deviceStatus';
 import type { DeviceStatus } from '../lib/deviceStatus';
 import type { Device, AlertEvent } from '../lib/supabase';
-import { MAP_DEFAULT_CENTER as DEFAULT_CENTER, MAP_DEFAULT_ZOOM as DEFAULT_ZOOM, MAP_POPUP_HEADER } from '../lib/mapDevices';
+import { MAP_DEFAULT_CENTER as DEFAULT_CENTER, MAP_DEFAULT_ZOOM as DEFAULT_ZOOM, MAP_POPUP_HEADER, formatTemp } from '../lib/mapDevices';
 import type { DeviceOnMap } from '../lib/mapDevices';
 
 // Shared live device map, used both as the Dashboard preview and as the
@@ -30,7 +30,16 @@ const createIcon = (status: DeviceStatus) => {
   return L.divIcon({ html, className: 'custom-leaflet-marker', iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] });
 };
 
-const iconCache: Record<DeviceStatus, L.DivIcon> = {
+// Zoom used when focusing a single device (feed card click, ?device=).
+const FOCUS_ZOOM = 17;
+
+// Keep auto-panned popups clear of the floating overlays (children) the Live
+// Map draws on top of the map (search/toggle bar at the top, legend at the bottom);
+// otherwise the popup's header and device name end up hidden under them.
+const POPUP_PAD_TOP_LEFT: L.PointExpression = [24, 96];
+const POPUP_PAD_BOTTOM_RIGHT: L.PointExpression = [24, 72];
+
+const iconCache:Record<DeviceStatus, L.DivIcon> = {
   fire: createIcon('fire'),
   warning: createIcon('warning'),
   online: createIcon('online'),
@@ -108,7 +117,13 @@ export const DeviceMap = ({
               opacity={markerOpacity(device.location.kind)}
               ref={(el) => { markerRefs.current[device.id] = el; }}
             >
-              <Popup className="custom-popup" closeButton={false} minWidth={240}>
+              <Popup
+                className="custom-popup"
+                closeButton={false}
+                minWidth={240}
+                autoPanPaddingTopLeft={children ? POPUP_PAD_TOP_LEFT : undefined}
+                autoPanPaddingBottomRight={children ? POPUP_PAD_BOTTOM_RIGHT : undefined}
+              >
                 <DevicePopup
                   device={device}
                   status={status}
@@ -179,7 +194,7 @@ const DevicePopup = ({
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-white/60 border border-gray-100 rounded p-2">
             <span className="block text-[9px] font-bold text-[#71717A] uppercase">Temp</span>
-            <span className={`block font-extrabold text-sm ${valueColor}`}>{temp != null ? `${temp}°C` : '—'}</span>
+            <span className={`block font-extrabold text-sm ${valueColor}`}>{formatTemp(temp)}</span>
           </div>
           <div className="bg-white/60 border border-gray-100 rounded p-2">
             <span className="block text-[9px] font-bold text-[#71717A] uppercase">CO Level</span>
@@ -221,15 +236,29 @@ const MapFocusController = ({
   useEffect(() => {
     if (!selectedDeviceId) return;
     const device = devices.find(d => d.id === selectedDeviceId);
-    if (device && isValidCoordinate(device.latitude, device.longitude)) {
-      map.flyTo([device.latitude as number, device.longitude as number], 17, { duration: 1 });
-      const timer = setTimeout(() => {
-        markerRefs.current[selectedDeviceId]?.openPopup();
-        onDone();
-      }, 600);
-      return () => clearTimeout(timer);
+    if (!device || !isValidCoordinate(device.latitude, device.longitude)) {
+      onDone();
+      return;
     }
-    onDone();
+    const target = L.latLng(device.latitude as number, device.longitude as number);
+    const zoom = Math.max(map.getZoom(), FOCUS_ZOOM);
+    const open = () => {
+      markerRefs.current[selectedDeviceId]?.openPopup();
+      onDone();
+    };
+
+    // Open the popup only once the camera has settled. Opening it mid-flight
+    // (the old fixed 600ms timer) let the popup's autoPan abort the flyTo at
+    // a fractional zoom and pan from there, which made the map and popup
+    // visibly jump. Already there → no animation at all.
+    map.closePopup();
+    if (map.getZoom() === zoom && map.getCenter().distanceTo(target) < 1) {
+      open();
+      return;
+    }
+    map.once('moveend', open);
+    map.flyTo(target, zoom, { duration: 0.8 });
+    return () => { map.off('moveend', open); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeviceId]);
   return null;
@@ -239,12 +268,14 @@ const MapBoundsUpdater = ({ devices }: { devices: Device[] }) => {
   const map = useMap();
   // `devices` is a freshly filtered array on every parent render (e.g. every
   // useNowTick tick), so depending on it directly re-fits bounds constantly
-  // and cancels any in-progress flyTo from MapFocusController. Depend on a
-  // string of actual positions instead, which only changes when a device's
-  // coordinates do.
+  // and cancels any in-progress flyTo from MapFocusController. Depend on the
+  // set of devices that have a position instead. Coordinates are deliberately
+  // left out: GPS jitter between readings (or a realtime refetch) used to
+  // re-fit the whole map, which threw away the view the user had zoomed to
+  // and closed any open popup. Markers still move; only the camera stays.
   const positionsKey = devices
     .filter(d => d.latitude != null && d.longitude != null)
-    .map(d => `${d.id}:${d.latitude},${d.longitude}`)
+    .map(d => d.id)
     .join('|');
   const fit = () => {
     const validDevices = devices.filter(d => d.latitude != null && d.longitude != null);

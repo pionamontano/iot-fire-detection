@@ -10,7 +10,7 @@ import { getDeviceStatus } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
 import { formatAge } from '../../lib/location';
 import { DeviceMap, MapLegend } from '../../components/DeviceMap';
-import { MAP_READING_COLUMNS, toMapDevices } from '../../lib/mapDevices';
+import { MAP_READING_COLUMNS, toMapDevices, formatTemp } from '../../lib/mapDevices';
 import type { DeviceWithReadings } from '../../lib/mapDevices';
 
 export const InteractiveMap = () => {
@@ -24,7 +24,12 @@ export const InteractiveMap = () => {
   const [hideOffline, setHideOffline] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'fires' | 'warnings'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  // selectedDeviceId is a one-shot request for the map to fly to a device
+  // (cleared once handled); selectedAlertId is the feed card the user picked
+  // and stays highlighted. Highlighting off selectedDeviceId made the ring
+  // flash on and off within ~600ms, and on every card for that device.
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
 
   // ?device=<id> (from the header search's "Show on map") focuses that
   // device once the devices have loaded.
@@ -92,7 +97,8 @@ export const InteractiveMap = () => {
     if (hideOffline && status === 'offline') return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      if (!d.device_code.toLowerCase().includes(q) && !d.location_desc.toLowerCase().includes(q)) return false;
+      const haystack = [d.device_code, d.label, d.location_desc].filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(q)) return false;
     }
     return true;
   });
@@ -109,8 +115,9 @@ export const InteractiveMap = () => {
   // Clicking a feed card locates that device on the map: clear filters that
   // could be hiding its marker (offline toggle, stale search text), then
   // hand off to the map to fly to it and open its popup.
-  const handleFeedCardClick = (deviceId: string | null | undefined) => {
+  const handleFeedCardClick = (alertId: string, deviceId: string | null | undefined) => {
     if (!deviceId) return;
+    setSelectedAlertId(alertId);
     setHideOffline(false);
     setSearchQuery('');
     setSelectedDeviceId(deviceId);
@@ -135,7 +142,7 @@ export const InteractiveMap = () => {
           devices={displayedDevices}
           activeAlerts={activeAlerts}
           now={now}
-          onViewDetails={() => navigate('/admin/alerts')}
+          onViewDetails={(d) => navigate(`/admin/alerts?q=${encodeURIComponent(d.device_code)}&device=${d.id}`)}
           selectedDeviceId={selectedDeviceId}
           onSelectionHandled={() => setSelectedDeviceId(null)}
         >
@@ -220,21 +227,21 @@ export const InteractiveMap = () => {
 
             const eventAt = isResolved ? (alert.resolved_at as string) : alert.triggered_at;
             const deviceId = alert.device_id;
-            const isSelected = !!deviceId && selectedDeviceId === deviceId;
+            const isSelected = selectedAlertId === alert.id;
 
             return (
               <div
                 key={alert.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => handleFeedCardClick(deviceId)}
+                onClick={() => handleFeedCardClick(alert.id, deviceId)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    handleFeedCardClick(deviceId);
+                    handleFeedCardClick(alert.id, deviceId);
                   }
                 }}
-                className={`${bgClass} ${borderClass} rounded-lg p-4 shadow-sm relative transition-all cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${isSelected ? 'ring-2 ring-[#00799C]' : ''}`}
+                className={`${bgClass} ${borderClass} rounded-lg p-4 shadow-sm relative transition-shadow cursor-pointer hover:shadow-md ${isSelected ? 'ring-2 ring-[#00799C]' : ''}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
@@ -242,13 +249,13 @@ export const InteractiveMap = () => {
                     <span className={`font-extrabold text-xs uppercase ${titleClass}`}>{title}</span>
                   </div>
                   <span className="text-[9px] font-bold text-[#71717A]" title={new Date(eventAt).toLocaleString()}>
-                    {formatAge(eventAt)}
+                    {formatAge(eventAt, now)}
                   </span>
                 </div>
                 <h4 className="font-bold text-sm text-[#18181B] mb-0.5">{deviceLabel}</h4>
                 <p className="text-xs text-[#71717A] mb-2 truncate" title={locLabel}>{locLabel}</p>
                 <span className={`text-[10px] font-bold uppercase tracking-widest ${iconClass}`}>
-                  CO {alert.co_ppm} ppm · {alert.temp_celsius}°C at trigger
+                  CO {alert.co_ppm} ppm · {formatTemp(alert.temp_celsius)} at trigger
                 </span>
               </div>
             );
