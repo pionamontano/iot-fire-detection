@@ -141,7 +141,9 @@ export const ResidentHome = () => {
     const channel = supabase
       .channel('resident-readings')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sensor_readings', filter: `device_id=eq.${profile.device_id}` }, (payload) => {
-        setLatestReading(payload.new as SensorReading);
+        const newReading = payload.new as SensorReading;
+        setLatestReading(newReading);
+        setRecentReadings(prev => [newReading, ...prev].slice(0, 24));
         setLastRefreshed(new Date());
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alert_events', filter: `device_id=eq.${profile.device_id}` }, (payload) => {
