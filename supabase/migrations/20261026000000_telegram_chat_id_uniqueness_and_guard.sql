@@ -16,7 +16,26 @@
 --
 -- Rollback: drop index telegram_chat_id_unique; restore protect_profile_fields() to the
 -- 20260717000000 definition (role/status/device_id only).
+--
+-- Pre-existing duplicates: before this migration, telegram_chat_id had no uniqueness guard and
+-- was writable by any authenticated user, so some environments ended up with two profiles sharing
+-- one chat_id. The unique index can't be created over those rows, so we deduplicate first: the
+-- most recently created profile keeps the link, and older duplicates are cleared (their owners
+-- will need to re-link via the webhook's token flow).
 -- =============================================================
+
+WITH ranked AS (
+  SELECT id,
+    row_number() OVER (
+      PARTITION BY telegram_chat_id
+      ORDER BY created_at DESC, id
+    ) AS rn
+  FROM public.profiles
+  WHERE telegram_chat_id IS NOT NULL
+)
+UPDATE public.profiles
+SET telegram_chat_id = NULL
+WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
 
 CREATE UNIQUE INDEX IF NOT EXISTS telegram_chat_id_unique
   ON public.profiles (telegram_chat_id)
