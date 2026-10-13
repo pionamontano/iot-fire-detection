@@ -281,7 +281,6 @@ export const ResidentDeviceInfo = () => {
             <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-[#52525B] mb-4">Device Specs</h3>
             <div className="flex flex-col gap-3">
               {[
-                { label: 'Device ID', value: device.id.substring(0, 12) + '...' },
                 { label: 'Device Code', value: device.device_code },
                 { label: 'Active', value: device.is_active ? 'Yes' : 'No' },
                 { label: 'Registered', value: new Date(device.created_at).toLocaleDateString() },
