@@ -335,13 +335,29 @@ int postSmsStatus(const char* role, bool success, const char* alertEventId) {
 // Downloads firmware_url (an ESP32 .bin in Supabase Storage) and
 // flashes it via the built-in Update library. Only ever reached
 // from fetchRemoteConfig(), i.e. only over Wi-Fi, never over the
-// SIM800 GSM fallback, and only while alertTier == CLEAR so a
-// live fire alert is never interrupted by a flash/reboot cycle.
+// SIM800 GSM fallback, and only while alertTier == CLEAR. The
+// whole download+flash runs on the connectivity task, blocking
+// the alert FSM (Step 4 of connectivityUpdate) for its duration —
+// alertTier == CLEAR only guarantees no *existing* alert is live
+// when the download starts, not that one can't start mid-download.
+// So sensorData/sensorMtx (when passed — null at boot, where no
+// alert FSM is running yet) are polled every chunk: a raw
+// isTier1()/isTier2() threshold crossing aborts the OTA immediately
+// and returns control to connectivityUpdate within one chunk
+// interval, so the normal debounced FSM picks the reading up on
+// its next tick instead of waiting out the whole transfer.
 // esp_task_wdt_reset() is fed every chunk since Update.write()
 // does not yield long enough on its own for a multi-hundred-KB
 // image under WDT_TIMEOUT_S. On success this never returns —
 // ESP.restart() reboots into the new image.
-static bool performOtaUpdate(const char* url) {
+//
+// expectedMd5 (hex, 32 chars; may be empty to skip) is checked by
+// Update.end() against the downloaded image — HTTPS only proves
+// the bytes came from Supabase, not that they're the firmware
+// actually built, so this catches a corrupted transfer or a wrong/
+// unexpected binary sitting at firmware_url before it's activated.
+static bool performOtaUpdate(const char* url, const char* expectedMd5, ConnectivityCtx* ctx,
+                              SensorData* sensorData, SemaphoreHandle_t sensorMtx) {
     if (!url || !url[0]) return false;
 
     WiFiClientSecure client;
@@ -368,6 +384,13 @@ static bool performOtaUpdate(const char* url) {
         return false;
     }
 
+    if (expectedMd5 && strlen(expectedMd5) == 32 && !Update.setMD5(expectedMd5)) {
+        CLOG("OTA: setMD5 rejected '%s' — aborting", expectedMd5);
+        Update.abort();
+        http.end();
+        return false;
+    }
+
     CLOG("OTA: downloading %d bytes...", len);
     WiFiClient* stream = http.getStreamPtr();
     uint8_t buf[1024];
@@ -389,6 +412,21 @@ static bool performOtaUpdate(const char* url) {
             lastData = millis();
         }
         esp_task_wdt_reset();
+
+        if (ctx && sensorData && sensorMtx &&
+            xSemaphoreTake(sensorMtx, 0) == pdTRUE) {
+            SensorData sd = *sensorData;
+            xSemaphoreGive(sensorMtx);
+            if (sd.sensor_ready && sd.co_valid && sd.temp_valid &&
+                (isTier1(sd.co_ppm, sd.temperature_c, ctx) ||
+                 isTier2(sd.co_ppm, sd.temperature_c, ctx))) {
+                CLOG("OTA: aborting — sensor reading crossed alert threshold mid-download");
+                Update.abort();
+                http.end();
+                return false;
+            }
+        }
+
         if (millis() - lastData > HTTP_TIMEOUT_MS) {
             CLOG("OTA: stream stalled — aborting");
             Update.abort();
@@ -399,9 +437,13 @@ static bool performOtaUpdate(const char* url) {
     }
     http.end();
 
-    if (written != len || !Update.end(true)) {
-        CLOG("OTA: incomplete/invalid (written=%d/%d): %s",
-             written, len, Update.errorString());
+    if (written != len) {
+        CLOG("OTA: incomplete download (written=%d/%d)", written, len);
+        Update.abort();
+        return false;
+    }
+    if (!Update.end()) {
+        CLOG("OTA: Update.end failed: %s", Update.errorString());
         return false;
     }
 
@@ -412,7 +454,7 @@ static bool performOtaUpdate(const char* url) {
 }
 
 // ── Remote Config Fetch ────────────────────────────────────
-bool fetchRemoteConfig(ConnectivityCtx* ctx) {
+bool fetchRemoteConfig(ConnectivityCtx* ctx, SensorData* sensorData, SemaphoreHandle_t sensorMtx) {
     WiFiClientSecure client;
     client.setCACert(SUPABASE_ROOT_CA);
     client.setTimeout(10);
@@ -460,12 +502,13 @@ bool fetchRemoteConfig(ConnectivityCtx* ctx) {
 
     const char* fwVersion = doc["firmware_version"] | "";
     const char* fwUrl     = doc["firmware_url"]     | "";
+    const char* fwMd5     = doc["firmware_md5"]     | "";
     if (fwVersion[0] && fwUrl[0] &&
         strcmp(fwVersion, FIRMWARE_VERSION) != 0 &&
         ctx->alertTier == AlertTier::CLEAR) {
         CLOG("OTA: new firmware %s available (current %s)",
              fwVersion, FIRMWARE_VERSION);
-        performOtaUpdate(fwUrl);
+        performOtaUpdate(fwUrl, fwMd5, ctx, sensorData, sensorMtx);
         // performOtaUpdate() only returns on failure — defaults above
         // are already applied, so just carry on with this cycle.
     }
@@ -578,7 +621,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
     if (ctx->deviceState == DeviceState::ONLINE &&
         now - ctx->lastConfigFetch_ms >= CONFIG_FETCH_INTERVAL_MS) {
         ctx->lastConfigFetch_ms = now;
-        fetchRemoteConfig(ctx);
+        fetchRemoteConfig(ctx, sensorData, sensorMtx);
     }
 
     // ── Step 3: Snapshot shared data under mutexes ──────────

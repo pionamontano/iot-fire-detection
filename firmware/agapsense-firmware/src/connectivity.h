@@ -111,8 +111,14 @@ int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int
  *  alert_events row. Returns HTTP code. */
 int postSmsStatus(const char* role, bool success, const char* alertEventId);
 
-/** GET remote config from get-device-config Edge Function. */
-bool fetchRemoteConfig(ConnectivityCtx* ctx);
+/** GET remote config from get-device-config Edge Function. If an
+ *  OTA update is offered, sensorData/sensorMtx (when non-null) let
+ *  it bail out early rather than block through a newly-forming
+ *  fire alert — pass null at boot, where no alert FSM is running
+ *  yet anyway. */
+bool fetchRemoteConfig(ConnectivityCtx* ctx,
+                       SensorData* sensorData = nullptr,
+                       SemaphoreHandle_t sensorMtx = nullptr);
 
 /** Read battery voltage ADC and return millivolts. */
 int  readBatteryMv();
