@@ -5,7 +5,7 @@
 - **System Name:** AgapSense (IoT-Based Fire Detection and Location Tracking System)
 - **Purpose and Scope:** To provide a comprehensive, evidence-based technical reference of the AgapSense repository, covering the web frontend, backend database, edge functions, and IoT firmware.
 - **Intended Audience:** Developers, evaluators, and stakeholders reviewing the capstone project implementation.
-- **Version / Date:** Document generated based on static code analysis on the current branch.
+- **Version / Date:** Updated 2026-10-13 to match the current code (originally generated at the baseline commit below). The more detailed, evidence-based reference is `system-specification.md` (v0.2 draft).
 - **Source-code Baseline:** Branch: `main`, Commit: `df2cfe4ba4d1ec960cd528e8d1238e1212f08275`.
 - **Documentation Methodology:** Read-only inspection of source code, configurations, database migrations, and firmware logic.
 - **Status Definitions:**
@@ -14,7 +14,7 @@
   - **Unverified:** The available repository evidence is insufficient to establish the behavior.
   - **Not Implemented:** The relevant implementation is absent from the inspected scope.
 
-*Note: This specification describes the current codebase and is not automatically a statement of the system's intended future behavior.*
+*Note: Sections were revised on 2026-10-13 against the current code (post audit-remediation). Items implemented in the repository but not yet deployed are marked **[repo only]**. This specification describes the current codebase and is not automatically a statement of the system's intended future behavior.*
 
 ## Section 2 — System Overview
 - **System Purpose:** Provide real-time fire alerts and location tracking for residential areas using dual-path communication (Wi-Fi/GSM) and multi-sensor fusion (CO/Temp).
@@ -105,57 +105,58 @@ sequenceDiagram
 ```
 
 ### Authentication Lifecycle
-- **Registration:** Handled in `src/pages/RegisterResident.tsx` and `src/pages/RegisterResponder.tsx`. Creates a `profiles` entry linking to `auth.users(id)`.
-- **Login and Logout:** Handled in `src/pages/Login.tsx` and `src/contexts/AuthContext.tsx`. Session persistence is managed by `@supabase/supabase-js`.
+- **Registration:** Handled in `src/pages/auth/RegisterResident.tsx` and `src/pages/auth/RegisterResponder.tsx`, which call the `register` Edge Function (creates the auth user, a `pending` `profiles` row and a `registration_requests` row). Only `resident` and `bfp_responder` can self-register.
+- **Login and Logout:** Handled in `src/pages/auth/Login.tsx` (which calls the `login` Edge Function) and `src/contexts/AuthContext.tsx`. Session persistence is managed by `@supabase/supabase-js`. Per-role idle timeout (`useIdleTimeout.ts`, keys `timeout_admin` / `timeout_bfp` / `timeout_resident`) signs the user out and redirects to `/session-expired`.
 - **Role Assignment:** Enforced strictly via PostgreSQL CHECK constraints on `profiles.role` and accessed via the database function `get_auth_role()`.
 - **Protected Routes:** `src/components/AuthGuard.tsx` checks `profile.status` and `profile.role` to redirect users attempting unauthorized access.
-- **Login Lockout:** The system tracks failed attempts in `login_attempts`. Enforced via a trigger/RPC combination in migrations `20260924080000` and `20260924090000`.
+- **Login Lockout:** Enforced server-side by the `login` Edge Function using `check_login_lockout` and `login_attempts` (migrations `20260924080000`, `20260924090000`). Within 15 minutes: 3 failures → 10 s delay, 5 → 30 s, 7 → 900 s lock. An admin can unlock early (`admin_unlock_login`). Direct calls to GoTrue bypass the lockout (accepted risk).
+- **Backend approval gap:** `get_auth_role()` in the repository does not check `profiles.status`; RLS alone does not deny pending/rejected accounts (the UI and Edge Functions do). Live behaviour is uninspected.
 
 ## Section 6 — Functional Specifications by Module
 
 ### A. Admin Dashboard
 1. **Module Name and Purpose:** Admin Dashboard (`/dashboard`). Overview of system metrics.
 2. **Intended Roles:** Admin.
-3. **Entry Route:** `src/pages/Dashboard.tsx`.
+3. **Entry Route:** `src/pages/admin/Dashboard.tsx`.
 4. **Main UI Components:** Stat cards, map preview, recent alerts feed.
-5. **User Actions:** View aggregate metrics.
-6. **Business Rules:** Shows counts of total users, offline devices, active alerts, and 24h fire events.
+5. **User Actions:** View aggregate metrics; related admin pages are Map, Devices, Users, System Overview (`Alerts.tsx`: rename, power toggle, manual resolve via `transition_incident`), Logs and Security Settings.
+6. **Business Rules:** Shows device connectivity (Online < 2 min, Reconnecting 2–15 min, Offline > 15 min via `src/lib/deviceStatus.ts`), active alerts, user count, recent readings and a battery badge when the device reports `on_battery`.
 7. **Input Validation:** None.
 8. **Data Sources:** `devices`, `alert_events`, `profiles`, `sensor_readings`.
 9. **Backend Functions:** Uses Realtime subscriptions for live updates.
 10. **Success/Failure Behavior:** Displays skeletons while loading.
 11. **Permissions:** Admin only.
-12. **Source File References:** `src/pages/Dashboard.tsx`.
+12. **Source File References:** `src/pages/admin/Dashboard.tsx`.
 13. **Implementation Status:** Verified.
 
 ### B. BFP Responder Dashboard
 1. **Module Name and Purpose:** Responder Dashboard (`/responder`). Monitors live alerts and manages incident status.
 2. **Intended Roles:** BFP Responder.
-3. **Entry Route:** `src/pages/ResponderDashboard.tsx`.
+3. **Entry Route:** `src/pages/responder/ResponderDashboard.tsx` (also `ResponderAlertLogs.tsx`, `ResponderSettings.tsx`).
 4. **Main UI Components:** Feed of unresolved alerts, interactive map.
-5. **User Actions:** Acknowledge alerts, change incident status (e.g. false alarm).
-6. **Business Rules:** Unresolved alerts (where `resolved_at` is null) are displayed. Responders can take ownership.
-7. **Input Validation:** Handled by RLS.
+5. **User Actions:** Acknowledge, mark responding, resolve or mark false alarm (with confirmation on close); edit own profile, Telegram link and station information.
+6. **Business Rules:** Unresolved alerts (where `resolved_at` is null) are displayed. Lifecycle is `active → acknowledged → responding → resolved | false_alarm`; closed incidents are immutable.
+7. **Input Validation:** Enforced inside `transition_incident()` (approved + active checked).
 8. **Data Sources:** `devices`, `alert_events`, `sensor_readings`.
-9. **Backend Functions:** Updates `alert_events.incident_status` directly.
+9. **Backend Functions:** `transition_incident()` RPC (client helper `src/lib/incidents.ts`, migration `20261021000000`) **[repo only until deployed]**; direct column UPDATE on `alert_events` is still granted until migration `20261022000000` is applied.
 10. **Success/Failure Behavior:** Live UI updates via Supabase Channels.
 11. **Permissions:** BFP Responder only.
-12. **Source File References:** `src/pages/ResponderDashboard.tsx`.
+12. **Source File References:** `src/pages/responder/ResponderDashboard.tsx`.
 13. **Implementation Status:** Verified.
 
 ### C. Resident Dashboard
 1. **Module Name and Purpose:** Resident Home (`/home`). Real-time device telemetry.
 2. **Intended Roles:** Resident.
-3. **Entry Route:** `src/pages/ResidentHome.tsx`.
-4. **Main UI Components:** Live sensor cards (CO, Temp), active alerts list.
-5. **User Actions:** Link a device, refresh data, approve/reject address discrepancies.
+3. **Entry Route:** `src/pages/resident/ResidentHome.tsx` (also `ResidentSetup`, `ResidentAlertSettings`, `ResidentDeviceInfo`, `ResidentSystemLog`, `ResidentAccount`).
+4. **Main UI Components:** Live sensor cards (CO, Temp) — replaced by "Initializing sensors..." while `sensor_ready` is false — power card (Mains / Battery), last 24 readings, active alerts list.
+5. **User Actions:** Complete mandatory first-login setup (mobile number), link a device, edit thresholds and contact number, enable Web Push / Telegram link, approve/reject address discrepancies.
 6. **Business Rules:** Can only view data where `device_id` matches their own profile's `device_id`.
 7. **Input Validation:** Device linking requires correct device code.
 8. **Data Sources:** `devices_safe` view, `sensor_readings`, `alert_events`.
 9. **Backend Functions:** `link-device` edge function.
-10. **Success/Failure Behavior:** Show connection lost if device hasn't pinged in >5 minutes.
+10. **Success/Failure Behavior:** Connectivity uses the shared 2 min / 15 min Online / Reconnecting / Offline helper. Some displayed figures (e.g. "System Uptime") are hard-coded placeholders.
 11. **Permissions:** Resident only.
-12. **Source File References:** `src/pages/ResidentHome.tsx`.
+12. **Source File References:** `src/pages/resident/ResidentHome.tsx`.
 13. **Implementation Status:** Verified.
 
 ## Section 7 — Business Logic and System Rules
@@ -164,9 +165,9 @@ sequenceDiagram
 - **Rule Identifier:** RULE-T1-ALERT
 - **Trigger:** New sensor reading ingested via `/trigger-alert` Edge Function.
 - **Inputs:** `co_ppm`, `temp_celsius`.
-- **Processing Logic:** If *either* CO OR Temperature exceeds threshold (but not both), `alert_tier` is 1. The Edge Function recalculates and overrides the firmware-supplied tier based on database thresholds to ensure backend authority.
-- **Result:** Triggers yellow LED, sends Telegram warning. Does NOT send SMS.
-- **Relevant Database Records:** Inserts into `alert_events`.
+- **Processing Logic:** If *either* CO OR Temperature is at or above its threshold (but not both), `alert_tier` is 1. If neither is, the request is rejected (HTTP 400 `below_threshold`). The Edge Function recalculates and overrides the firmware-supplied tier based on database thresholds to ensure backend authority.
+- **Result:** Triggers yellow LED, sends Telegram warning and Web Push to admins and responders. Does NOT send SMS.
+- **Relevant Database Records:** `alert_events` via `raise_alert()` (one open incident per device; tier only increases; notifications de-duplicated by the `claim_notification` ledger).
 - **Source File:** `firmware/agapsense-firmware/src/connectivity.cpp`, `supabase/functions/trigger-alert/index.ts`.
 - **Verification Status:** Verified.
 
@@ -175,8 +176,8 @@ sequenceDiagram
 - **Trigger:** New sensor reading ingested via `/trigger-alert` Edge Function.
 - **Inputs:** `co_ppm`, `temp_celsius`.
 - **Processing Logic:** If *both* CO AND Temperature exceed thresholds, `alert_tier` is 2. The Edge Function recalculates and overrides the firmware-supplied tier based on database thresholds to ensure backend authority.
-- **Result:** Triggers red LED + buzzer, sends Telegram, and firmware dispatches SMS to owner and BFP.
-- **Relevant Database Records:** Inserts into `alert_events` with `alert_tier=2`.
+- **Result:** Triggers red LED + buzzer, sends Telegram and Web Push (admins, responders, linked resident), and firmware dispatches SMS to the owner and to the device's BFP number (5-minute SMS-only debounce).
+- **Relevant Database Records:** `alert_events` with `alert_tier=2` (upgrades an open Tier 1 incident).
 - **Source File:** `firmware/agapsense-firmware/src/connectivity.cpp`, `supabase/functions/trigger-alert/index.ts`.
 - **Verification Status:** Verified.
 
@@ -185,7 +186,7 @@ sequenceDiagram
 - **Trigger:** Device sends new coordinates to `/ingest-reading`.
 - **Inputs:** `latitude`, `longitude`.
 - **Processing Logic:** Haversine distance is calculated between incoming coordinates and device's registered `latitude`/`longitude`.
-- **Result:** If distance > 100 meters, a new `address_discrepancies` row is created, alerting the resident.
+- **Result:** If distance > 100 meters, a new `address_discrepancies` row is created, alerting the resident. Approving it overwrites the device's registered address and coordinates.
 - **Relevant Database Records:** `address_discrepancies`.
 - **Source File:** `supabase/functions/ingest-reading/index.ts`.
 - **Verification Status:** Verified.
@@ -203,20 +204,22 @@ sequenceDiagram
 ## Section 8 — IoT Device and Sensor Data Processing
 - **Device Architecture:** ESP32 running FreeRTOS tasks.
 - **Data Transmission:** Wi-Fi POST requests to Supabase Edge Functions. GSM module used as secondary for SMS alerts.
-- **Sensor Readings:** `MQ-7` for CO utilizes an alternating heating cycle (60 s at 5.0 V high-heat purge, 90 s at 1.4 V measurement phase) tracked via the `sensor_ready` flag. Routine telemetry is transmitted unconditionally (every 30 s), but alert evaluations (`evaluateAlerts()`) are suppressed during the preheat/purge phase to prevent false positives. `DS18B20` provides continuous ambient temperature monitoring.
-- **Threshold Processing:** Firmware pulls `co_alert_ppm` and `temp_alert_c` from the backend (`fetchRemoteConfig()`). It evaluates thresholds locally on the device (`evaluateAlerts()`).
-- **Alert Conditions:** Uses a debounce counter (`ALERT_DEBOUNCE_COUNT`) to prevent transient spikes from triggering immediate alerts.
+- **Sensor Readings:** `MQ-7` for CO utilizes an alternating heating cycle (60 s at 5.0 V heating, 90 s at ~1.4 V measuring via PWM 72/255). `sensor_ready` becomes true only after the first complete cycle (~150 s after power-on). Routine telemetry is transmitted every 30 s regardless; alert evaluation is suppressed until `sensor_ready` is true. Backend auto-resolution also requires `sensor_ready`. `DS18B20` provides continuous ambient temperature monitoring.
+- **Threshold Processing:** Firmware pulls thresholds and the owner/BFP numbers from `get-device-config` at boot and every 10 minutes (compiled-in defaults if offline at boot). It evaluates thresholds locally; the backend recomputes the tier and is authoritative.
+- **Alert Conditions:** 3 consecutive readings (`ALERT_DEBOUNCE_COUNT`) to enter an alert or escalate Tier 1 → 2; 2 consecutive safe readings (`ALERT_RESOLUTION_COUNT`) to clear. Alert POSTs retry with backoff; SMS outcomes are reported via `confirm-sms-status`.
+- **Indicators:** yellow LED (Tier 1), red LED + buzzer (Tier 2), blue LED solid when online, blinking when degraded, off when offline.
+- **Provisioning and power:** WiFiManager captive portal (open AP `AgapSense-Setup`); `on_battery` flag when battery ADC < 4000 mV; 30 s watchdog; OTA update when the backend firmware target differs. Readings generated offline are not buffered.
 
 ## Section 9 — GPS, Geolocation, and Address Processing
-- **Sources:** Physical GPS module attached to ESP32. Coordinates are stored in `sensor_readings`.
+- **Sources:** NEO-6M GPS attached to the ESP32. A fix is live only if valid and < 5 s old; otherwise the last good fix is sent with `gps_valid=false` (initial value 0,0 before any fix). Coordinates are stored in `sensor_readings`; the UI labels locations live / last-known / registered / unavailable (`src/lib/location.ts`).
 - **Reverse Geocoding:** The Edge Function calls OpenStreetMap Nominatim: `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`. Reverse geocoding queries are deduplicated using a 4-decimal-place grid cache (`~11m`) and stationary-device checks before calling Nominatim.
 - **Tiered Address Generation:** The backend function explicitly parses `house_number`, `road`, `suburb/village` (treated as barangay), and `city/municipality` to build a tiered location string instead of using the raw `display_name`.
 - **Discrepancies:** Handled via the `address_discrepancies` table (Rule RULE-ADDR-DRIFT).
 
 ## Section 10 — Notification and Communication Specifications
-- **Telegram:** Edge Function `trigger-alert` sends HTTP POST to Telegram Bot API using `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Used for both Tier 1 and Tier 2 alerts. Contains Google Maps navigation links.
-- **SMS:** The ESP32 firmware directly drives a GSM module via AT commands (`gsm.cpp`). Triggered only on Tier 2 alerts. Sends messages to the owner (Resident) and BFP Responder numbers returned by the `trigger-alert` edge function response.
-- **Push Notifications:** Experimental implementations found in `push_subscriptions` table and Edge Functions, partially integrated into frontend via `navigator.serviceWorker`.
+- **Telegram:** Edge Function `trigger-alert` sends HTTP POST to Telegram Bot API using `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (one shared station chat). Used for Tier 1 and Tier 2 with distinct text; messages contain `https://maps.google.com/?q=lat,lng`. Per-user `profiles.telegram_chat_id` linking exists (`telegram-webhook`) but no code sends alerts to it.
+- **SMS:** The ESP32 firmware directly drives a GSM module via AT commands (`gsm.cpp`). Triggered only on Tier 2 alerts. Two separate messages: a plain-language evacuation message to the owner (resident) number and a technical message to the device's BFP number (`devices.bfp_contact`), both with a maps link; numbers come from the `trigger-alert` response (and `get-device-config`). SMS only — no data-over-GSM fallback.
+- **Push Notifications:** Web Push (VAPID) via `register-push` / `send-push-notification`, service worker `public/sw.js`. Opt-in UI exists on Admin Settings and Resident Alert Settings (no responder opt-in UI found). Delivery not verified.
 
 ## Section 11 — Database and Data Model
 
@@ -266,17 +269,19 @@ erDiagram
 - **Validation:** Enforces `x-device-key` header matches `devices.api_key`. Validates finite numbers.
 - **Auth Checks:** Uses Supabase Service Role Key (bypasses RLS).
 - **DB Operations:** Inserts into `sensor_readings`. Evaluates distance and optionally inserts into `address_discrepancies`.
-- **Side Effects:** Resolves open alerts if readings fall below safe thresholds.
+- **Side Effects:** Updates `last_seen_at`; resolves the open incident when a `sensor_ready` reading is strictly below both thresholds (owner policy pending); creates address-drift prompts.
 - **Source:** `supabase/functions/ingest-reading/index.ts`.
 
 **Function: `trigger-alert`**
 - **Caller:** ESP32 Firmware (`postAlert()`).
 - **HTTP Method:** POST.
-- **Inputs:** `tier`, `co_ppm`, `temp_celsius`, `latitude`, `longitude`, `gps_valid`.
-- **Validation:** Validates `x-device-key`. Validates tier is 1 or 2.
+- **Inputs:** `tier` (ignored — recomputed), `co_ppm`, `temp_celsius`, `latitude`, `longitude`, `gps_valid`.
+- **Validation:** Validates `x-device-key`; rejects readings below both thresholds (`below_threshold`).
 - **Auth Checks:** Uses Supabase Service Role Key.
-- **DB Operations:** Inserts into `alert_events`.
-- **Side Effects:** Reverse Geocodes. Sends Telegram HTTP POST. Returns `owner_contact` and `bfp_contact` to firmware.
+- **DB Operations:** `raise_alert()` upsert into `alert_events` (falls back to select-then-insert until the migration is applied); notification ledger claims.
+- **Side Effects:** Reverse Geocodes. Sends Telegram HTTP POST and Web Push. Returns `owner_contact`, `bfp_contact` and the alert event id to firmware.
+
+**Other device-facing functions:** `get-device-config` (thresholds, numbers, firmware target) and `confirm-sms-status` (per-SMS delivery outcome). **User/admin-facing:** `login`, `register`, `manage-registration`, `create-user`, `assign-device`, `link-device`, `telegram-webhook`, `register-push`, `send-push-notification`, `admin-support-request` (in-app `support_requests` inbox).
 - **Source:** `supabase/functions/trigger-alert/index.ts`.
 
 ## Section 13 — Real-Time Updates and State Management
@@ -293,11 +298,11 @@ erDiagram
 
 ## Section 15 — Error Handling, Validation, and Security
 - **Input Validation:** Frontend uses standard HTML5 validations. Edge Functions strict-check numeric values (`isValidNumber()`).
-- **Security:** Hardware communication is secured via the `x-device-key` header (tied to `devices.api_key`), ensuring only authenticated physical devices can ingest readings.
+- **Security:** Every device-facing Edge Function (`ingest-reading`, `trigger-alert`, `get-device-config`, `confirm-sms-status`) requires the `x-device-key` header matching an active device's `api_key`; the ESP32 also pins a root CA for HTTPS. Keys are generated server-side and can be regenerated by an admin.
 - **RLS Bypasses:** Some endpoints inherently bypass RLS by using the `service_role` key inside Edge Functions (e.g., to create an alert on behalf of a device).
 
 ## Section 16 — Non-Functional Characteristics and Limitations
-- **Reliability:** Firmware gracefully degrades functionality. If Wi-Fi fails, alerts can fall back to GSM SMS.
+- **Reliability:** Tier 2 SMS goes through the SIM800L independently of Wi-Fi, so SMS can still be sent when Wi-Fi is down, using the last fetched (or compiled-in default) numbers; the alert POST is retried when connectivity returns. Hardware behaviour is unverified. Readings generated offline are lost.
 - **Scalability:** Leveraging Supabase Edge Functions allows decoupled processing of telemetry spikes.
 - **Limitations:** Dependent on Nominatim's rate limits for reverse geocoding. High frequency bursts could lead to HTTP 429 Too Many Requests. Unverified: Max capacity of simultaneous device WebSocket connections.
 
@@ -327,11 +332,11 @@ sequenceDiagram
 ## Section 18 — Requirements Traceability Matrix
 | Requirement ID | Feature or Behavior | User Role | Frontend Implementation | Backend Implementation | Verification Status |
 |---|---|---|---|---|---|
-| AUTH-001 | Approval Gateway | Admin | `PendingApproval.tsx` | RLS policies on `profiles` | Verified |
+| AUTH-001 | Approval Gateway | Admin | `PendingApproval.tsx`, `AuthGuard.tsx` | `register`, `manage-registration`; profile RLS | UI verified; backend enforcement conflicting (KI-09) |
 | DEVICE-001 | Tiered Alert Logic | System | Maps & Dashboard UI | `connectivity.cpp`, `trigger-alert` | Verified |
 | GPS-001 | Address Discrepancy | Resident | `ResidentHome.tsx` | `ingest-reading` | Verified |
 | RBAC-001 | Role Access Routing | System | `AuthGuard.tsx` | `get_auth_role()` | Verified |
-| ALERT-001 | Acknowledge Alert | Responder | `ResponderDashboard.tsx` | `20261012000001` migration | Verified |
+| ALERT-001 | Incident lifecycle | Responder | `ResponderDashboard.tsx` | `transition_incident()` (`20261021000000`) | Verified (repo only) |
 
 ## Section 19 — Manual Verification Reference
 
@@ -362,9 +367,13 @@ sequenceDiagram
 - **Verification Status:** Unverified (requires manual testing).
 
 ## Section 20 — Known Gaps, Ambiguities, and Implementation Discrepancies
-- **Push Notifications:** The `push_subscriptions` table and associated Edge Functions exist, but the corresponding frontend Service Worker implementation for Web Push is absent or incomplete.
+- **Push Notifications:** The service worker (`public/sw.js`) exists; opt-in UI is only on Admin Settings and Resident Alert Settings, and delivery has never been verified.
+- **Per-user Telegram:** Account linking exists but no alert is sent to linked chats (issue #95).
+- **Backend approval enforcement:** `get_auth_role()` ignores `profiles.status` (KI-09).
+- **Placeholder metrics:** resident "System Uptime", responder "connectivity %" and map "Signal / Latency" are hard-coded.
+- **No data buffering / no GSM data path:** offline readings are lost; GSM carries SMS only.
 - **Hardware Dependency:** The repository assumes standard Wi-Fi coverage; however, actual field deployment robustness (GSM failover reliability) remains unverified.
-- **RLS Edge Cases:** A few database tables (`settings`, `station_settings`) rely heavily on Admin roles; there is no documented frontend GUI to alter `station_settings`, indicating missing admin UI features.
+- **RLS Edge Cases:** A few database tables (`settings`, `station_settings`) rely heavily on Admin roles; `ResponderSettings.tsx` edits `station_settings`, but its columns (`station_name`, `email`) do not match the migrations (KI-07).
 - **Security Consideration - API Keys:** The `devices.api_key` is stored in plaintext in the database. While it is protected from non-admins via Row Level Security and the `devices_safe` view, storing authentication secrets in plaintext means that any database compromise or admin account breach would expose all device API keys.
 
 ## Section 21 — Glossary and Reference Index
