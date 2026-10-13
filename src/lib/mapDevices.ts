@@ -1,7 +1,7 @@
 // Data helpers for the shared live device map (src/components/DeviceMap.tsx).
 import { resolveDeviceLocation } from './location';
 import type { ReadingLocationInput, ResolvedLocation } from './location';
-import type { MapStatus } from './deviceStatus';
+import type { DeviceStatus } from './deviceStatus';
 import type { Device } from './supabase';
 
 // Malolos City, Bulacan — where the deployed units are.
@@ -29,9 +29,12 @@ export const toMapDevices = (devices: DeviceWithReadings[], now: number): Device
     return { ...d, latitude: location.lat, longitude: location.lng, location };
   });
 
-export const MAP_STATUS_STYLE: Record<MapStatus, { color: string; label: string; header: string; headerBg: string }> = {
-  fire: { color: '#DC2626', label: 'Fire (Tier 2)', header: 'Fire detected', headerBg: 'bg-[#DC2626]' },
-  warning: { color: '#F59E0B', label: 'Warning (Tier 1)', header: 'Warning — threshold breached', headerBg: 'bg-[#D97706]' },
-  normal: { color: '#10B981', label: 'Normal', header: 'System normal', headerBg: 'bg-[#005F7B]' },
-  offline: { color: '#71717A', label: 'Offline', header: 'Offline', headerBg: 'bg-[#52525B]' },
+// Popup header text and color per status; colors and labels come from the
+// shared DEVICE_STATUS so the map matches every other status display.
+export const MAP_POPUP_HEADER: Record<DeviceStatus, { text: string; bg: string }> = {
+  fire: { text: 'Fire detected', bg: 'bg-[#DC2626]' },
+  warning: { text: 'Warning — threshold breached', bg: 'bg-[#D97706]' },
+  online: { text: 'Online — system normal', bg: 'bg-[#047857]' },
+  reconnecting: { text: 'Reconnecting', bg: 'bg-[#1D4ED8]' },
+  offline: { text: 'Offline', bg: 'bg-[#52525B]' },
 };

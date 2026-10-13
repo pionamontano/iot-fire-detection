@@ -69,7 +69,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
           </p>
           <button 
             onClick={() => signOut()} 
-            className="w-full py-3 bg-[#D32F2F] text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-sm hover:bg-[#B91C1C] transition-colors"
+            className="w-full py-3 bg-primary text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-sm hover:bg-primary-dark transition-colors"
           >
             Sign Out
           </button>

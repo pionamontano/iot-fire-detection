@@ -1,9 +1,10 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users,  Settings, Cpu, LogOut, Menu, X, BarChart3, FileText, LifeBuoy, Map as MapIcon } from 'lucide-react';
+import { LayoutDashboard, Users,  Settings, Cpu, Menu, X, BarChart3, FileText, LifeBuoy, Map as MapIcon } from 'lucide-react';
 import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
+import { BrandMark } from './BrandMark';
 
 export const AdminLayout: React.FC = () => {
   const { signOut } = useAuth();
@@ -30,7 +31,6 @@ export const AdminLayout: React.FC = () => {
 
   const secondaryNavItems = [
     { name: 'Settings', path: '/admin/settings/security', icon: Settings },
-    { name: 'Log out', path: '#logout', icon: LogOut },
   ];
 
   return (
@@ -38,27 +38,17 @@ export const AdminLayout: React.FC = () => {
       
       {/* ─── Top Navigation Bar ─── */}
       <header className="shrink-0 h-[69px] z-50 bg-primary flex items-center justify-between px-3 md:px-8 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-        {/* Brand — shown once, here; the sidebar no longer repeats it */}
-        <NavLink to="/dashboard" className="flex items-center gap-2 min-w-0 shrink-0" aria-label="AgapSense dashboard">
-          <span className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0">
-            <svg width="16" height="20" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M12 0C12 0 4 8 4 16C4 20.4183 7.58172 24 12 24C16.4183 24 20 20.4183 20 16C20 8 12 0 12 0Z" fill="#D32F2F"/>
-              <path d="M12 12C12 12 8 16 8 20C8 22.2091 9.79086 24 12 24C14.2091 24 16 22.2091 16 20C16 16 12 12 12 12Z" fill="#FF8A65"/>
-            </svg>
-          </span>
-          <span className="text-white font-bold text-xl sm:text-2xl md:text-[28px] leading-7 tracking-[-0.03em] whitespace-nowrap">
-            AgapSense
-          </span>
-          <span className="hidden lg:inline-block w-px h-5 bg-white/40 mx-3"></span>
-          <span className="hidden lg:inline text-white/80 font-bold text-[10px] tracking-[0.1em] uppercase whitespace-nowrap">
-            Smarter detection, faster response
-          </span>
-        </NavLink>
+        {/* Brand — shown once, here; the sidebar is navigation only */}
+        <BrandMark homePath="/dashboard" />
 
         {/* Right Section */}
         <div className="flex items-center gap-3 md:gap-6">
           {/* Search */}
-          <HeaderSearchBar devicesPath="/admin/devices" />
+          <HeaderSearchBar
+            resultPath={(d) => `/admin/alerts?q=${encodeURIComponent(d.device_code)}&device=${d.id}`}
+            allResultsPath={(q) => `/admin/alerts?q=${encodeURIComponent(q)}`}
+            mapPath={(d) => `/admin/map?device=${d.id}`}
+          />
 
           {/* Notification Bell */}
           <NotificationDropdown alertsPath="/admin/alerts" />
@@ -112,34 +102,23 @@ export const AdminLayout: React.FC = () => {
 
             {/* Secondary Nav */}
             <div className="px-3 pt-6 pb-6 border-t border-border-light mt-auto shrink-0">
-              {secondaryNavItems.map((item) =>
-                item.path === '#logout' ? (
-                  <button
-                    key={item.name}
-                    onClick={() => setShowLogoutModal(true)}
-                    className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-[#52525B] hover:bg-border-light/30 hover:text-text-heading transition-all duration-200 w-full"
-                  >
-                    <item.icon className="w-[18px] h-[18px]" />
-                    <span>{item.name}</span>
-                  </button>
-                ) : (
-                  <NavLink
-                    key={item.name}
-                    to={item.path}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 text-sm font-medium ${
-                        isActive
-                          ? 'bg-[rgba(244,161,133,0.27)] text-primary'
-                          : 'text-[#52525B] hover:bg-border-light/30 hover:text-text-heading'
-                      }`
-                    }
-                  >
-                    <item.icon className="w-[18px] h-[18px]" />
-                    <span>{item.name}</span>
-                  </NavLink>
-                )
-              )}
+              {secondaryNavItems.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.path}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 text-sm font-medium ${
+                      isActive
+                        ? 'bg-[rgba(244,161,133,0.27)] text-primary'
+                        : 'text-[#52525B] hover:bg-border-light/30 hover:text-text-heading'
+                    }`
+                  }
+                >
+                  <item.icon className="w-[18px] h-[18px]" />
+                  <span>{item.name}</span>
+                </NavLink>
+              ))}
             </div>
           </div>
         </aside>

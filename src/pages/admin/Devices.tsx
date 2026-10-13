@@ -851,7 +851,7 @@ export const Devices = () => {
               <button
                 onClick={saveEditDevice}
                 disabled={savingEdit}
-                className="px-4 py-2 text-sm font-bold text-white bg-[#AF101A] hover:bg-[#8F0C14] rounded transition-colors disabled:opacity-60"
+                className="px-4 py-2 text-sm font-bold text-white bg-primary hover:bg-primary-dark rounded transition-colors disabled:opacity-60"
               >
                 {savingEdit ? 'Saving...' : 'Save Changes'}
               </button>

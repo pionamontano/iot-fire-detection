@@ -1,9 +1,10 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, BellRing, Settings, LogOut, Menu, X, Cpu, FileText } from 'lucide-react';
+import { LayoutDashboard, BellRing, Settings, Menu, X, Cpu, FileText } from 'lucide-react';
 import { NotificationDropdown, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
+import { BrandMark } from './BrandMark';
 
 export const ResidentLayout = () => {
   const { signOut, profile } = useAuth();
@@ -27,7 +28,7 @@ export const ResidentLayout = () => {
   return (
     <div className="h-screen w-screen bg-[#F4F4F5] flex flex-col font-sans overflow-hidden">
       {/* Top Header */}
-      <header className="bg-[#B91C1C] h-16 shadow-sm flex items-center justify-between px-3 lg:px-8 relative z-20 w-full min-w-0">
+      <header className="bg-primary h-16 shadow-sm flex items-center justify-between px-3 lg:px-8 relative z-20 w-full min-w-0">
         <div className="flex items-center gap-2 lg:gap-4 min-w-0 shrink-0">
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -36,9 +37,8 @@ export const ResidentLayout = () => {
             {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
           
-          <div className="flex items-center gap-1 min-w-0">
-            <span className="text-white text-xl sm:text-2xl lg:text-[32px] font-bold tracking-tight whitespace-nowrap" style={{ letterSpacing: '-0.03em' }}>AgapSense</span>
-          </div>
+          {/* Brand — shown once, here; the sidebar is navigation only */}
+          <BrandMark homePath="/home" />
         </div>
 
         {/* Profile & Notifications */}
@@ -70,24 +70,8 @@ export const ResidentLayout = () => {
           transform transition-transform duration-300 ease-in-out
           ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}>
-          {/* Logo/Brand Area */}
-          <div className="px-6 py-8 shrink-0">
-            <div className="flex items-center gap-2 mb-1">
-              <svg width="20" height="26" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 0C12 0 4 8 4 16C4 20.4183 7.58172 24 12 24C16.4183 24 20 20.4183 20 16C20 8 12 0 12 0Z" fill="#D32F2F"/>
-                <path d="M12 12C12 12 8 16 8 20C8 22.2091 9.79086 24 12 24C14.2091 24 16 22.2091 16 20C16 16 12 12 12 12Z" fill="#FF8A65"/>
-              </svg>
-              <h1 className="text-[#18181B] font-black text-3xl tracking-[-0.03em]">
-                AgapSense
-              </h1>
-            </div>
-            <p className="text-[#B91C1C] text-[10px] font-bold tracking-[0.1em] uppercase mt-2">
-              Smarter detection, faster response
-            </p>
-          </div>
-
           {/* Main Navigation */}
-          <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
+          <nav className="flex-1 px-4 pt-6 space-y-1 overflow-y-auto" aria-label="Main">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
@@ -112,18 +96,12 @@ export const ResidentLayout = () => {
           <div className="p-4 border-t border-[#E4E4E7] shrink-0 mt-auto">
             <NavLink
               to="/account"
-              className="flex items-center gap-3 px-3 py-2 rounded-md text-[#52525B] hover:bg-[#F4F4F5] transition-colors text-sm font-medium mb-1"
+              onClick={() => setIsSidebarOpen(false)}
+              className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${isActive ? 'bg-[#FEE2E2] text-primary font-bold' : 'text-[#52525B] hover:bg-[#F4F4F5] font-medium'}`}
             >
               <Settings size={18} />
               Settings
             </NavLink>
-            <button
-              onClick={() => setShowLogoutModal(true)}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-[#52525B] hover:bg-[#FEE2E2] hover:text-[#DC2626] transition-colors text-sm font-medium"
-            >
-              <LogOut size={18} />
-              Log out
-            </button>
           </div>
         </aside>
 
@@ -151,7 +129,7 @@ export const ResidentLayout = () => {
               </button>
               <button
                 onClick={handleLogout}
-                className="px-5 py-2 bg-[#B91C1C] hover:bg-[#991B1B] text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
+                className="px-5 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
               >
                 Log out
               </button>

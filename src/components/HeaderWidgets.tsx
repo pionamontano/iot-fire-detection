@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Search, X, Cpu, Settings, LogOut, Flame, ArrowRight } from 'lucide-react';
+import { Bell, Search, X, Cpu, Settings, LogOut, Flame, ArrowRight, Map as MapIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { AlertEvent, Device } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { formatAge } from '../lib/location';
-import { getConnectivityStatus } from '../lib/deviceStatus';
+import { getConnectivityStatus, DEVICE_STATUS } from '../lib/deviceStatus';
+import type { DeviceStatus } from '../lib/deviceStatus';
 
 // ═══════════════════════════════════════════
 // ─── Notification Dropdown ───
@@ -21,16 +22,29 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
+  // The badge counts every unresolved alert, not just those among the 10
+  // most recent shown in the list (which undercounted during busy periods).
+  const [unresolvedCount, setUnresolvedCount] = useState(0);
+
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('alert_events')
-      .select('*, devices(device_code, label, location_desc)')
-      .order('triggered_at', { ascending: false })
-      .limit(10);
+    const [listRes, countRes] = await Promise.all([
+      supabase
+        .from('alert_events')
+        .select('*, devices(device_code, label, location_desc)')
+        .order('triggered_at', { ascending: false })
+        .limit(10),
+      supabase
+        .from('alert_events')
+        .select('id', { count: 'exact', head: true })
+        .is('resolved_at', null),
+    ]);
 
-    if (!error && data) {
-      setAlerts(data as unknown as typeof alerts);
+    if (!listRes.error && listRes.data) {
+      setAlerts(listRes.data as unknown as typeof alerts);
+    }
+    if (!countRes.error && countRes.count !== null) {
+      setUnresolvedCount(countRes.count);
     }
     setLoading(false);
   }, []);
@@ -56,7 +70,6 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const unresolvedCount = alerts.filter(a => !a.resolved_at).length;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -179,14 +192,22 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
 // ─── Search Bar ───
 // ═══════════════════════════════════════════
 interface HeaderSearchBarProps {
-  devicesPath: string;
+  /** Page for one picked device (e.g. System Overview filtered to it). */
+  resultPath: (device: Device) => string;
+  /** Page listing every device matching the typed text. Omit if the portal has none. */
+  allResultsPath?: (query: string) => string;
+  /** Live Map focused on the device. Omit if the portal has no map page. */
+  mapPath?: (device: Device) => string;
 }
 
-export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath }) => {
+// Device search in the top bar. Enter opens the highlighted result (the
+// first by default) instead of dropping the query on an unrelated page;
+// arrow keys move the highlight, Escape closes.
+export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ resultPath, allResultsPath, mapPath }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Device[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [highlighted, setHighlighted] = useState(0);
   const searchRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -209,7 +230,6 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
       return;
     }
 
-    setLoading(true);
     const term = searchQuery.trim();
     const { data, error } = await supabase
       .from('devices_safe')
@@ -219,9 +239,9 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
 
     if (!error && data) {
       setResults(data);
+      setHighlighted(0);
       setIsOpen(true);
     }
-    setLoading(false);
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,70 +252,108 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
     debounceRef.current = setTimeout(() => handleSearch(value), 300);
   };
 
+  const go = (path: string) => {
+    navigate(path);
+    setIsOpen(false);
+    setQuery('');
+    setResults([]);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && query.trim()) {
-      navigate(devicesPath);
-      setIsOpen(false);
-    }
-    if (e.key === 'Escape') {
+    if (e.key === 'ArrowDown' && results.length > 0) {
+      e.preventDefault();
+      setIsOpen(true);
+      setHighlighted(h => (h + 1) % results.length);
+    } else if (e.key === 'ArrowUp' && results.length > 0) {
+      e.preventDefault();
+      setHighlighted(h => (h - 1 + results.length) % results.length);
+    } else if (e.key === 'Enter') {
+      const pick = results[highlighted];
+      if (isOpen && pick) go(resultPath(pick));
+      else if (query.trim() && allResultsPath) go(allResultsPath(query.trim()));
+    } else if (e.key === 'Escape') {
       setIsOpen(false);
     }
   };
+
+  const listId = 'header-device-search-results';
 
   return (
     <div className="hidden md:block relative" ref={searchRef}>
       <input
         type="text"
-        placeholder="Search devices..."
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-controls={listId}
+        aria-activedescendant={isOpen && results[highlighted] ? `${listId}-${results[highlighted].id}` : undefined}
+        aria-label="Search devices"
+        placeholder="Search device ID or location…"
         value={query}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
-        onFocus={() => query.trim().length >= 2 && results.length > 0 && setIsOpen(true)}
+        onFocus={() => { if (results.length > 0) setIsOpen(true); }}
         className="bg-surface-alt rounded-md pl-9 pr-4 py-[7px] text-sm text-text placeholder-text-faint w-64 focus:outline-none focus:ring-2 focus:ring-white/30"
       />
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-faint" />
 
       {isOpen && (
         <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-[#E5E2E1] z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="px-4 py-2.5 border-b border-[#E5E2E1] bg-[#F6F3F2]">
-            <span className="text-[10px] font-bold text-[#A1A1AA] uppercase tracking-[0.1em]">
-              {loading ? 'Searching...' : `${results.length} result${results.length !== 1 ? 's' : ''} found`}
-            </span>
-          </div>
-
-          {results.length === 0 && !loading ? (
+          {results.length === 0 ? (
             <div className="p-6 text-center">
               <Cpu className="w-6 h-6 text-[#E5E2E1] mx-auto mb-2" />
               <p className="text-xs text-[#5B403D] font-medium">No devices match "{query}"</p>
             </div>
           ) : (
-            <div className="max-h-[250px] overflow-y-auto">
-              {results.map(device => (
-                <button
-                  key={device.id}
-                  onClick={() => {
-                    navigate(devicesPath);
-                    setIsOpen(false);
-                    setQuery('');
-                  }}
-                  className="w-full text-left px-4 py-3 border-b border-[#F0EDEC] last:border-0 hover:bg-[#FCF9F8] transition-colors flex items-center gap-3"
-                >
-                  <div className="w-8 h-8 bg-[#F6F3F2] rounded flex items-center justify-center shrink-0">
-                    <Cpu className="w-4 h-4 text-[#B91C1C]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-[#1C1B1B] truncate">{device.device_code}</p>
-                    <p className="text-[10px] text-[#5B403D] truncate">{device.label} · {device.location_desc}</p>
-                  </div>
-                  {/* Same online rule as the dashboard badges — is_active alone showed
-                      devices that had been offline for weeks as green. */}
-                  <div
-                    title={device.is_active && getConnectivityStatus(device.last_seen_at) === 'online' ? 'Online' : 'Offline'}
-                    className={`w-2 h-2 rounded-full shrink-0 ${device.is_active && getConnectivityStatus(device.last_seen_at) === 'online' ? 'bg-[#10B981]' : 'bg-[#A1A1AA]'}`}
-                  />
-                </button>
-              ))}
-            </div>
+            <ul id={listId} role="listbox" className="max-h-[300px] overflow-y-auto">
+              {results.map((device, i) => {
+                const connectivity: DeviceStatus = device.is_active ? getConnectivityStatus(device.last_seen_at) : 'offline';
+                const st = DEVICE_STATUS[connectivity];
+                return (
+                  <li
+                    key={device.id}
+                    id={`${listId}-${device.id}`}
+                    role="option"
+                    aria-selected={i === highlighted}
+                    onMouseEnter={() => setHighlighted(i)}
+                    className={`flex items-center border-b border-[#F0EDEC] last:border-0 ${i === highlighted ? 'bg-[#FCF9F8]' : ''}`}
+                  >
+                    <button
+                      onClick={() => go(resultPath(device))}
+                      className="flex-1 min-w-0 text-left px-4 py-3 flex items-center gap-3"
+                    >
+                      <span className="w-8 h-8 bg-[#F6F3F2] rounded flex items-center justify-center shrink-0">
+                        <Cpu className="w-4 h-4 text-primary" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-xs font-bold text-[#1C1B1B] truncate">{device.device_code}</span>
+                        <span className="block text-[10px] text-[#5B403D] truncate">{device.label} · {device.location_desc}</span>
+                      </span>
+                      {/* Connectivity only: alerts aren't loaded here. Same
+                          online rule and colors as everywhere else. */}
+                      <span title={st.label} className="w-2 h-2 rounded-full shrink-0" style={{ background: st.color }} />
+                    </button>
+                    {mapPath && (
+                      <button
+                        onClick={() => go(mapPath(device))}
+                        title="Show on map"
+                        aria-label={`Show ${device.device_code} on map`}
+                        className="p-3 text-[#A1A1AA] hover:text-primary transition-colors shrink-0"
+                      >
+                        <MapIcon className="w-4 h-4" />
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {allResultsPath && results.length > 0 && (
+            <button
+              onClick={() => go(allResultsPath(query.trim()))}
+              className="w-full px-4 py-2.5 border-t border-[#E5E2E1] bg-[#F6F3F2] text-xs font-bold text-primary hover:bg-[#FEE2E2] transition-colors text-left"
+            >
+              See all devices matching "{query.trim()}" →
+            </button>
           )}
         </div>
       )}
@@ -342,7 +400,7 @@ export const UserMenuDropdown: React.FC<UserMenuProps> = ({ settingsPath, onSign
   };
 
   return (
-    <div className="relative hidden md:block" ref={menuRef}>
+    <div className="relative shrink-0" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm hover:bg-white/30 transition-colors shrink-0"

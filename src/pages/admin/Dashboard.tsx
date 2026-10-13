@@ -15,22 +15,13 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DashboardSkeleton } from '../../components/SkeletonLoaders';
-import { getConnectivityStatus } from '../../lib/deviceStatus';
-import { formatAge } from '../../lib/location';
+import { getDeviceStatus, getStatusNote, DEVICE_STATUS_ORDER } from '../../lib/deviceStatus';
+import type { DeviceStatus } from '../../lib/deviceStatus';
+import { StatusBadge, StatusCountPill } from '../../components/StatusBadge';
 import { useNowTick } from '../../hooks/useNowTick';
 import { DeviceMap, MapLegend } from '../../components/DeviceMap';
 import { MAP_READING_COLUMNS, toMapDevices } from '../../lib/mapDevices';
 import type { DeviceWithReadings } from '../../lib/mapDevices';
-
-type DeviceStatus = 'online' | 'reconnecting' | 'alert' | 'offline';
-
-// Helper to determine device status based on alerts and last_seen_at
-const getDeviceStatus = (device: DeviceWithReadings, activeAlerts: AlertEvent[], now: number): DeviceStatus => {
-  const hasAlert = activeAlerts.some(a => a.device_id === device.id);
-  if (hasAlert) return 'alert';
-  if (!device.is_active) return 'offline';
-  return getConnectivityStatus(device.last_seen_at, now);
-};
 
 // Plain counts — no zero-padding ("00", "002"), which read as codes.
 const formatNumber = (n: number): string => n.toLocaleString();
@@ -136,12 +127,13 @@ export const Dashboard = () => {
   }
 
   const statusById = new Map(devices.map(d => [d.id, getDeviceStatus(d, activeAlerts, now)]));
-  const statusCounts = { online: 0, reconnecting: 0, alert: 0, offline: 0 };
+  const statusCounts: Record<DeviceStatus, number> = { fire: 0, warning: 0, online: 0, reconnecting: 0, offline: 0 };
   for (const s of statusById.values()) statusCounts[s]++;
+  const isAlerting = (s: DeviceStatus | undefined) => s === 'fire' || s === 'warning';
   // Alerting devices first so they're never cut off by the row limit; the
   // rest keep device-code order from the query.
   const sortedDevices = [...devices].sort(
-    (a, b) => Number(statusById.get(b.id) === 'alert') - Number(statusById.get(a.id) === 'alert')
+    (a, b) => Number(isAlerting(statusById.get(b.id))) - Number(isAlerting(statusById.get(a.id)))
   );
   const mapDevices = toMapDevices(devices, now);
   const devicesWithoutLocation = mapDevices.filter(d => d.location.kind === 'unavailable');
@@ -201,10 +193,10 @@ export const Dashboard = () => {
               title="Device Status"
               meta={devices.length > 0 && (
                 <>
-                  {statusCounts.alert > 0 && <CountPill status="alert" count={statusCounts.alert} />}
-                  <CountPill status="online" count={statusCounts.online} />
-                  {statusCounts.reconnecting > 0 && <CountPill status="reconnecting" count={statusCounts.reconnecting} />}
-                  <CountPill status="offline" count={statusCounts.offline} />
+                  {/* Online and offline always shown; the rest only when present */}
+                  {DEVICE_STATUS_ORDER.filter(st => statusCounts[st] > 0 || st === 'online' || st === 'offline').map(st => (
+                    <StatusCountPill key={st} status={st} count={statusCounts[st]} />
+                  ))}
                 </>
               )}
               action={<SectionLink to="/admin/devices">View all devices</SectionLink>}
@@ -230,13 +222,14 @@ export const Dashboard = () => {
                 <ul className="divide-y divide-border-warm">
                   {sortedDevices.slice(0, DEVICE_ROWS_LIMIT).map((device) => {
                     const status = statusById.get(device.id) ?? 'offline';
-                    const isAlert = status === 'alert';
+                    const isAlert = isAlerting(status);
+                    const note = getStatusNote(device, status, now);
                     const onBattery = device.sensor_readings?.[0]?.on_battery;
 
                     return (
                       <li
                         key={device.id}
-                        className={`grid grid-cols-[1fr_auto] ${DEVICE_GRID} gap-x-4 gap-y-1 px-4 sm:px-0 py-4 sm:py-0 hover:bg-surface transition-colors ${isAlert ? 'bg-tier2-bg/40' : ''}`}
+                        className={`grid grid-cols-[1fr_auto] ${DEVICE_GRID} gap-x-4 gap-y-1 px-4 sm:px-0 py-4 sm:py-0 hover:bg-surface transition-colors ${status === 'fire' ? 'bg-tier2-bg/40' : status === 'warning' ? 'bg-tier1-bg/40' : ''}`}
                       >
                         <div className="sm:px-6 sm:py-5 flex items-center">
                           <span className={`text-text font-mono text-xs leading-4 ${isAlert ? 'font-bold' : 'font-medium'}`}>
@@ -255,10 +248,8 @@ export const Dashboard = () => {
                         </div>
                         <div className="row-start-1 col-start-2 sm:row-start-auto sm:col-start-auto sm:px-6 sm:py-4 flex flex-col items-end justify-center gap-1">
                           <StatusBadge status={status} />
-                          {status !== 'online' && status !== 'alert' && (
-                            <span className="text-[11px] text-text-subtle whitespace-nowrap">
-                              {device.last_seen_at ? `Last seen ${formatAge(device.last_seen_at, now)}` : 'Never seen'}
-                            </span>
+                          {note && (
+                            <span className="text-[11px] text-text-subtle whitespace-nowrap">{note}</span>
                           )}
                         </div>
                       </li>
@@ -372,34 +363,6 @@ const SectionLink = ({ to, children }: { to: string; children: React.ReactNode }
     {children} <ArrowRight className="w-3.5 h-3.5" />
   </Link>
 );
-
-const STATUS_STYLE: Record<DeviceStatus, { bg: string; dot: string; text: string; label: string }> = {
-  online: { bg: 'bg-teal-light/10', dot: 'bg-[#10B981]', text: 'text-teal-light', label: 'Online' },
-  reconnecting: { bg: 'bg-tier1-bg/70', dot: 'bg-tier1-border', text: 'text-[#B45309]', label: 'Reconnecting' },
-  alert: { bg: 'bg-tier2-bg', dot: 'bg-tier2-border', text: 'text-tier2-border', label: 'Alert' },
-  offline: { bg: 'bg-surface-cream', dot: 'bg-text-subtle', text: 'text-text-muted', label: 'Offline' },
-};
-
-const StatusBadge = ({ status }: { status: DeviceStatus }) => {
-  const c = STATUS_STYLE[status];
-  return (
-    <span className={`${c.bg} px-2.5 py-1 rounded-full inline-flex items-center gap-1.5 whitespace-nowrap`}>
-      <span className={`w-2 h-2 rounded-full ${c.dot}`}></span>
-      <span className={`${c.text} font-bold text-[11px] leading-4 uppercase tracking-[0.08em]`}>{c.label}</span>
-    </span>
-  );
-};
-
-// Same palette as StatusBadge, so the summary and the rows read as one system.
-const CountPill = ({ status, count }: { status: DeviceStatus; count: number }) => {
-  const c = STATUS_STYLE[status];
-  return (
-    <span className={`${c.bg} ${c.text} px-2 py-0.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold whitespace-nowrap`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`}></span>
-      {count} {c.label.toLowerCase()}
-    </span>
-  );
-};
 
 const StatCard = ({
   label,

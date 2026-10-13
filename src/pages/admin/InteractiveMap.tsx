@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { AlertEvent } from '../../lib/supabase';
 import { Search, Activity, Layers } from 'lucide-react';
-import { getMapStatus } from '../../lib/deviceStatus';
+import { getDeviceStatus } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
 import { formatAge } from '../../lib/location';
 import { DeviceMap, MapLegend } from '../../components/DeviceMap';
@@ -25,6 +25,21 @@ export const InteractiveMap = () => {
   const [filterType, setFilterType] = useState<'all' | 'fires' | 'warnings'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+
+  // ?device=<id> (from the header search's "Show on map") focuses that
+  // device once the devices have loaded.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusParam = searchParams.get('device');
+  useEffect(() => {
+    if (!focusParam || devices.length === 0) return;
+    setHideOffline(false);
+    setSearchQuery('');
+    setSelectedDeviceId(focusParam);
+    const next = new URLSearchParams(searchParams);
+    next.delete('device');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusParam, devices.length]);
 
   useEffect(() => {
     fetchData();
@@ -73,7 +88,7 @@ export const InteractiveMap = () => {
 
   // Filter devices to display
   const displayedDevices = mapDevices.filter(d => {
-    const status = getMapStatus(d, activeAlerts, now);
+    const status = getDeviceStatus(d, activeAlerts, now);
     if (hideOffline && status === 'offline') return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -144,7 +159,7 @@ export const InteractiveMap = () => {
                 <button
                   onClick={() => setHideOffline(!hideOffline)}
                   aria-pressed={hideOffline}
-                  className={`px-4 h-full rounded text-xs font-bold uppercase transition-colors ${hideOffline ? 'bg-[#AF101A] text-white' : 'text-[#AF101A] hover:bg-[#AF101A]/10'}`}
+                  className={`px-4 h-full rounded text-xs font-bold uppercase transition-colors ${hideOffline ? 'bg-primary text-white' : 'text-[#AF101A] hover:bg-primary-dark/10'}`}
                 >
                   Hide Offline
                 </button>

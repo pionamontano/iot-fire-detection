@@ -678,7 +678,7 @@ export const Users = () => {
               <button
                 onClick={handleReject}
                 disabled={processingRequest}
-                className="px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] font-bold text-sm transition-colors flex items-center shadow-sm"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark font-bold text-sm transition-colors flex items-center shadow-sm"
               >
                 {processingRequest ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Confirm Reject
@@ -745,7 +745,7 @@ export const Users = () => {
                 <button
                   type="submit"
                   disabled={assignLoading || !selectedDevice}
-                  className="px-4 py-2 bg-[#D32F2F] text-white rounded-lg hover:bg-[#B91C1C] font-bold text-sm transition-colors flex items-center shadow-sm disabled:opacity-50"
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark font-bold text-sm transition-colors flex items-center shadow-sm disabled:opacity-50"
                 >
                   {assignLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Assign Device
@@ -847,7 +847,7 @@ export const Users = () => {
                 <button
                   type="submit"
                   disabled={addUserLoading}
-                  className="px-4 py-2 bg-[#D32F2F] text-white rounded-lg hover:bg-[#B91C1C] font-bold text-sm transition-colors flex items-center shadow-sm"
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark font-bold text-sm transition-colors flex items-center shadow-sm"
                 >
                   {addUserLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Create User

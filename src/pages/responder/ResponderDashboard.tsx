@@ -4,6 +4,8 @@ import type { Device, AlertEvent } from '../../lib/supabase';
 import { resolveDeviceLocation, describeLocation, isValidCoordinate, markerOpacity } from '../../lib/location';
 import type { ReadingLocationInput, ResolvedLocation } from '../../lib/location';
 import { useNowTick } from '../../hooks/useNowTick';
+import { getDeviceStatus, getStatusNote, DEVICE_STATUS, DEVICE_STATUS_ORDER } from '../../lib/deviceStatus';
+import type { DeviceStatus } from '../../lib/deviceStatus';
 import { availableTransitions, closeConfirmMessage, transitionIncident } from '../../lib/incidents';
 import type { IncidentTarget } from '../../lib/incidents';
 import { ResponderDashboardSkeleton } from '../../components/SkeletonLoaders';
@@ -19,29 +21,14 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
-// ─── Map Marker Icons ───
-const createCustomIcon = (type: 'online' | 'alert' | 'fault' | 'offline') => {
-  let color = '#10B981'; // Green (Online)
-  let glow = 'rgba(16, 185, 129, 0.3)';
-  let size = 10;
-
-  if (type === 'alert') {
-    color = '#DC2626'; // Red (Fire Alert)
-    glow = 'rgba(220, 38, 38, 0.4)';
-    size = 16;
-  } else if (type === 'fault') {
-    color = '#F59E0B'; // Amber (Fault)
-    glow = 'rgba(245, 158, 11, 0.3)';
-    size = 14;
-  } else if (type === 'offline') {
-    color = '#71717A'; // Gray (Offline)
-    glow = 'transparent';
-    size = 12;
-  }
-
+// ─── Map Marker Icons ─── (colors from the shared status model)
+const PIN_SIZE: Record<DeviceStatus, number> = { fire: 16, warning: 14, online: 10, reconnecting: 12, offline: 12 };
+const createCustomIcon = (status: DeviceStatus) => {
+  const color = DEVICE_STATUS[status].color;
+  const size = PIN_SIZE[status];
   const html = `
     <div style="position: relative; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">
-      ${type === 'alert' ? `<div style="position: absolute; width: 48px; height: 48px; background: ${glow}; border-radius: 50%; animation: pulse 2s infinite;"></div>` : ''}
+      ${status === 'fire' ? `<div style="position: absolute; width: 48px; height: 48px; background: rgba(220, 38, 38, 0.4); border-radius: 50%; animation: pulse 2s infinite;"></div>` : ''}
       <div style="width: ${size}px; height: ${size}px; background: ${color}; border: 2px solid white; border-radius: 50%; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); position: relative; z-index: 10;"></div>
     </div>
   `;
@@ -55,15 +42,13 @@ const createCustomIcon = (type: 'online' | 'alert' | 'fault' | 'offline') => {
   });
 };
 
-const fireIcon = createCustomIcon('alert');
-const faultIcon = createCustomIcon('fault');
-const normalIcon = createCustomIcon('online');
-const offlineIcon = createCustomIcon('offline');
+const iconByStatus = Object.fromEntries(DEVICE_STATUS_ORDER.map(st => [st, createCustomIcon(st)])) as Record<DeviceStatus, L.DivIcon>;
 
 type DeviceWithStatus = Device & {
-  status: 'fire' | 'fault' | 'normal' | 'offline';
+  status: DeviceStatus;
   activeAlert?: AlertEvent;
-  connectivity: number;
+  /** This device's open alerts, so status can be re-evaluated on each clock tick. */
+  deviceAlerts: AlertEvent[];
   // Raw readings are kept so the location (and its 15-minute live-fix window) can be re-evaluated on
   // every clock tick instead of being frozen at fetch time.
   sensor_readings?: ReadingLocationInput[];
@@ -96,17 +81,6 @@ const TickingTimer = ({ triggeredAt }: { triggeredAt: string }) => {
 
   return <span>Triggered {timeText}</span>;
 };
-
-const timeAgo = (dateStr: string) => {
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return 'JUST NOW';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} MIN AGO`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h AGO`;
-  return `${Math.floor(hours / 24)}d AGO`;
-};
-
 
 export const ResponderDashboard = () => {
   const [devices, setDevices] = useState<DeviceWithStatus[]>([]);
@@ -247,25 +221,16 @@ export const ResponderDashboard = () => {
     const unresolvedAlerts = allAlerts.filter(a => !a.resolved_at && a.incident_status !== 'resolved' && a.incident_status !== 'false_alarm');
 
     const enriched: DeviceWithStatus[] = (devicesRes.data || []).map((d: any) => {
-      const alert = unresolvedAlerts.find(a => a.device_id === d.id);
-      let status: DeviceWithStatus['status'] = 'normal';
-      if (alert) {
-        status = alert.alert_tier === 2 ? 'fire' : 'fault';
-      } else if (!d.is_active) {
-        status = 'offline';
-      } else if (d.last_seen_at) {
-        const lastSeen = new Date(d.last_seen_at).getTime();
-        if (Date.now() - lastSeen > 5 * 60 * 1000) status = 'offline';
-      } else {
-        status = 'offline';
-      }
-      
-      // Simulate connectivity % based on status
-      const connectivity = status === 'offline' ? 0 : status === 'fire' ? 98 : status === 'fault' ? 92 : 100;
+      // Shared status rules (2 / 15 min connectivity, Tier 2 = fire, Tier 1
+      // = warning). This page used its own 5-minute cutoff and labelled
+      // Tier 1 "HIGH TEMP".
+      const deviceAlerts = unresolvedAlerts.filter(a => a.device_id === d.id);
+      const alert = deviceAlerts.find(a => a.alert_tier === 2) ?? deviceAlerts[0];
+      const status = getDeviceStatus(d, deviceAlerts);
 
       // Location is resolved at render time (see mapDevices) from d.sensor_readings + the registered
       // coordinates. No position is ever invented here.
-      return { ...d, status, activeAlert: alert, connectivity };
+      return { ...d, status, activeAlert: alert, deviceAlerts };
     });
 
     const todayStart = new Date();
@@ -292,10 +257,17 @@ export const ResponderDashboard = () => {
     };
   }, [fetchData]);
 
+  // Re-evaluate status on every clock tick so a silent device moves to
+  // Reconnecting / Offline without waiting for new data.
+  const liveDevices = useMemo(
+    () => devices.map(d => ({ ...d, status: getDeviceStatus(d, d.deviceAlerts, now) })),
+    [devices, now]
+  );
+
   // Counts
-  const activeAlarmCount = devices.filter(d => d.status === 'fire').length;
-  const preAlertsCount = devices.filter(d => d.status === 'fault').length;
-  const devicesOnline = devices.filter(d => d.status !== 'offline').length;
+  const activeAlarmCount = liveDevices.filter(d => d.status === 'fire').length;
+  const preAlertsCount = liveDevices.filter(d => d.status === 'warning').length;
+  const devicesOnline = liveDevices.filter(d => d.status !== 'offline').length;
   const totalDevices = devices.length;
   const coveragePercent = totalDevices > 0 ? (devicesOnline / totalDevices) * 100 : 0;
   const coverageColor =
@@ -312,10 +284,10 @@ export const ResponderDashboard = () => {
 
   // Resolve each device's location (live / last-known / registered / unavailable). Re-evaluated on every
   // 30 s tick so a fix older than 15 minutes stops being shown as live even when no new data arrives.
-  const mapDevices = useMemo<DeviceOnMap[]>(() => devices.map(d => {
+  const mapDevices = useMemo<DeviceOnMap[]>(() => liveDevices.map(d => {
     const location = resolveDeviceLocation({ readings: d.sensor_readings, device: d, now });
     return { ...d, latitude: location.lat, longitude: location.lng, location };
-  }), [devices, now]);
+  }), [liveDevices, now]);
   const devicesWithoutLocation = mapDevices.filter(d => d.location.kind === 'unavailable');
 
   if (loading) {
@@ -406,15 +378,16 @@ export const ResponderDashboard = () => {
             {mapDevices.map(device => {
               if (device.location.kind === 'unavailable' || !isValidCoordinate(device.latitude, device.longitude)) return null;
               const locInfo = describeLocation(device.location, now);
-              const icon = device.status === 'fire' ? fireIcon : device.status === 'fault' ? faultIcon : device.status === 'offline' ? offlineIcon : normalIcon;
+              const icon = iconByStatus[device.status];
+              const note = getStatusNote(device, device.status, now);
               return (
                 <Marker key={device.id} position={[device.latitude as number, device.longitude as number]} icon={icon} opacity={markerOpacity(device.location.kind)}>
                   <Popup>
                     <div className="font-sans">
                       <strong className="block text-sm font-bold">{device.device_code}</strong>
                       <span className="text-xs text-gray-600 block mt-1">{device.location_desc}</span>
-                      <span className="text-xs font-bold mt-1 block capitalize" style={{ color: device.status === 'fire' ? '#DC2626' : device.status === 'fault' ? '#F59E0B' : device.status === 'offline' ? '#A1A1AA' : '#10B981' }}>
-                        {device.status === 'fire' ? 'FIRE DETECTED' : device.status === 'fault' ? 'HIGH TEMP' : device.status === 'offline' ? 'OFFLINE' : 'HEALTHY'} - {device.last_seen_at ? timeAgo(device.last_seen_at) : 'NO TELEMETRY'}
+                      <span className="text-xs font-bold mt-1 block" style={{ color: DEVICE_STATUS[device.status].color }}>
+                        {DEVICE_STATUS[device.status].longLabel}{note ? ` · ${note}` : ''}
                       </span>
                       <span className="text-xs block mt-1" style={{ color: locInfo.approximate ? '#B45309' : '#047857' }}>
                         <strong>{locInfo.label}</strong> - {locInfo.detail}
@@ -434,10 +407,9 @@ export const ResponderDashboard = () => {
 
           {/* Map Legend */}
           <div className="absolute bottom-4 left-4 z-[1000] bg-[#1C1B1B]/80 backdrop-blur-sm rounded-md px-4 py-3 flex flex-col gap-2">
-            <LegendDot color="#DC2626" label="Fire" />
-            <LegendDot color="#F59E0B" label="Fault" />
-            <LegendDot color="#10B981" label="Normal" />
-            <LegendDot color="#71717A" label="Offline" />
+            {DEVICE_STATUS_ORDER.map(st => (
+              <LegendDot key={st} color={DEVICE_STATUS[st].color} label={DEVICE_STATUS[st].longLabel} />
+            ))}
           </div>
         </div>
 

@@ -4,10 +4,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Activity } from 'lucide-react';
 import { describeLocation, isValidCoordinate, markerOpacity, formatAge } from '../lib/location';
-import { getMapStatus } from '../lib/deviceStatus';
-import type { MapStatus } from '../lib/deviceStatus';
+import { getDeviceStatus, DEVICE_STATUS, DEVICE_STATUS_ORDER } from '../lib/deviceStatus';
+import type { DeviceStatus } from '../lib/deviceStatus';
 import type { Device, AlertEvent } from '../lib/supabase';
-import { MAP_DEFAULT_CENTER as DEFAULT_CENTER, MAP_DEFAULT_ZOOM as DEFAULT_ZOOM, MAP_STATUS_STYLE } from '../lib/mapDevices';
+import { MAP_DEFAULT_CENTER as DEFAULT_CENTER, MAP_DEFAULT_ZOOM as DEFAULT_ZOOM, MAP_POPUP_HEADER } from '../lib/mapDevices';
 import type { DeviceOnMap } from '../lib/mapDevices';
 
 // Shared live device map, used both as the Dashboard preview and as the
@@ -16,8 +16,8 @@ import type { DeviceOnMap } from '../lib/mapDevices';
 // handful of point sensors an interpolated surface would invent readings
 // for places nobody is measuring.
 
-const createIcon = (status: MapStatus) => {
-  const { color } = MAP_STATUS_STYLE[status];
+const createIcon = (status: DeviceStatus) => {
+  const { color } = DEVICE_STATUS[status];
   const pulse = status === 'fire'
     ? `<div style="position: absolute; width: 48px; height: 48px; background: rgba(220, 38, 38, 0.4); border-radius: 50%; animation: pulse 2s infinite;"></div>`
     : '';
@@ -30,19 +30,20 @@ const createIcon = (status: MapStatus) => {
   return L.divIcon({ html, className: 'custom-leaflet-marker', iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] });
 };
 
-const iconCache: Record<MapStatus, L.DivIcon> = {
+const iconCache: Record<DeviceStatus, L.DivIcon> = {
   fire: createIcon('fire'),
   warning: createIcon('warning'),
-  normal: createIcon('normal'),
+  online: createIcon('online'),
+  reconnecting: createIcon('reconnecting'),
   offline: createIcon('offline'),
 };
 
 export const MapLegend = () => (
   <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg py-2 px-3 sm:px-4 flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-1">
-    {(Object.keys(MAP_STATUS_STYLE) as MapStatus[]).map(s => (
+    {DEVICE_STATUS_ORDER.map(s => (
       <div key={s} className="flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full" style={{ background: MAP_STATUS_STYLE[s].color }}></div>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[#52525B]">{MAP_STATUS_STYLE[s].label}</span>
+        <div className="w-2 h-2 rounded-full" style={{ background: DEVICE_STATUS[s].color }}></div>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#52525B]">{DEVICE_STATUS[s].longLabel}</span>
       </div>
     ))}
   </div>
@@ -98,7 +99,7 @@ export const DeviceMap = ({
 
         {devices.map(device => {
           if (device.location.kind === 'unavailable' || !isValidCoordinate(device.latitude, device.longitude)) return null;
-          const status = getMapStatus(device, activeAlerts, now);
+          const status = getDeviceStatus(device, activeAlerts, now);
           return (
             <Marker
               key={device.id}
@@ -140,12 +141,12 @@ const DevicePopup = ({
   onViewDetails,
 }: {
   device: DeviceOnMap;
-  status: MapStatus;
+  status: DeviceStatus;
   activeAlert: AlertEvent | undefined;
   now: number;
   onViewDetails: () => void;
 }) => {
-  const style = MAP_STATUS_STYLE[status];
+  const header = MAP_POPUP_HEADER[status];
   const locInfo = describeLocation(device.location, now);
   const isAlerting = status === 'fire' || status === 'warning';
   // An active alert's trigger values take precedence; otherwise show the
@@ -159,8 +160,8 @@ const DevicePopup = ({
 
   return (
     <div className="flex flex-col bg-white/90 backdrop-blur-md rounded-lg overflow-hidden border border-black/10 shadow-xl">
-      <div className={`flex items-center justify-between px-4 py-2 text-white ${style.headerBg}`}>
-        <span className="font-extrabold text-[10px] tracking-widest uppercase">{style.header}</span>
+      <div className={`flex items-center justify-between px-4 py-2 text-white ${header.bg}`}>
+        <span className="font-extrabold text-[10px] tracking-widest uppercase">{header.text}</span>
         <Activity className="w-3 h-3" />
       </div>
       <div className="p-4 flex flex-col gap-3 bg-[#FCF9F8]/80">
@@ -193,7 +194,7 @@ const DevicePopup = ({
 
         <button
           onClick={onViewDetails}
-          className={`w-full py-2 rounded text-[10px] font-extrabold uppercase tracking-widest text-white transition-colors ${status === 'fire' ? 'bg-[#AF101A] hover:bg-[#8F0C14]' : 'bg-[#00799C] hover:bg-[#005F7B]'}`}
+          className={`w-full py-2 rounded text-[10px] font-extrabold uppercase tracking-widest text-white transition-colors ${status === 'fire' ? 'bg-primary hover:bg-primary-dark' : 'bg-[#00799C] hover:bg-[#005F7B]'}`}
         >
           {status === 'fire' ? 'Dispatch Details' : 'View Device Alerts'}
         </button>
