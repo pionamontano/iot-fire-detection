@@ -316,6 +316,14 @@ export const ResidentHome = () => {
         p_status: status,
       });
       if (error) throw error;
+      if (status === 'approved') {
+        setDevice((prev) => prev ? {
+          ...prev,
+          location_desc: discrepancy.gps_derived_address,
+          latitude: discrepancy.latitude,
+          longitude: discrepancy.longitude,
+        } : prev);
+      }
       setDiscrepancy(null);
     } catch (e) {
       console.error(e);
