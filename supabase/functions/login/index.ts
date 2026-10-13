@@ -64,14 +64,19 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { email, password } = await req.json()
+    const { email: rawEmail, password } = await req.json()
 
-    if (!email || !password) {
+    if (!rawEmail || !password) {
       return new Response(JSON.stringify({ error: 'Email and password are required.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       })
     }
+
+    // GoTrue authenticates email case-insensitively; the lockout counter below keys on an exact-match
+    // comparison, so without this, varying the email's case (Victim@x.com, VICTIM@X.COM, ...) lets an
+    // attacker reset the failure counter on every attempt while still hitting the same real account.
+    const email = String(rawEmail).toLowerCase()
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
     const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
