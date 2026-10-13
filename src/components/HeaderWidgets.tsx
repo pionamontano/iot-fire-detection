@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Search, X, Cpu, Settings, LogOut, Flame } from 'lucide-react';
+import { Bell, Search, X, Cpu, Settings, LogOut, Flame, ArrowRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { AlertEvent, Device } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -172,9 +172,10 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
                 navigate(alertsPath);
                 setIsOpen(false);
               }}
-              className="w-full px-4 py-2.5 text-center text-xs font-bold text-[#B91C1C] bg-[#F6F3F2] border-t border-[#E5E2E1] hover:bg-[#FEE2E2] transition-colors"
+              className="group w-full px-4 py-3 flex items-center justify-center gap-1.5 text-xs font-bold text-[#B91C1C] bg-[#F6F3F2] border-t border-[#E5E2E1] hover:bg-[#FEE2E2] transition-colors"
             >
-              View All Alerts →
+              View All Alerts
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
             </button>
           )}
         </div>
