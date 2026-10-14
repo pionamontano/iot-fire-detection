@@ -15,7 +15,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
   // Enforced here (rather than per-page) so it covers every protected route
   // regardless of role, using this instance's Outlet. Only active once a
   // session + approved profile actually exist.
-  useIdleTimeout(profile?.role, Boolean(session && profile && profile.status === 'approved'));
+  useIdleTimeout(profile?.role, Boolean(session && profile && profile.status === 'approved' && profile.is_active !== false));
 
   if (loading) {
     return (
@@ -52,6 +52,28 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
     );
   }
 
+  // Deactivated by an admin (manage-user). The auth ban already blocks new
+  // sign-ins and token refreshes; this covers a session that was open when
+  // the account was deactivated.
+  if (profile.is_active === false) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FCF9F8] p-4 font-['Inter',_sans-serif]">
+        <div className="bg-white p-8 rounded-xl shadow-[0_24px_48px_rgba(0,0,0,0.08)] border border-[#E5E2E1] max-w-md w-full text-center">
+          <h2 className="text-2xl font-black text-[#231918] mb-2">Account Deactivated</h2>
+          <p className="text-[#534341] text-sm mb-6 leading-relaxed">
+            Your account has been deactivated by an administrator. Please contact your system administrator if you think this is a mistake.
+          </p>
+          <button
+            onClick={() => signOut()}
+            className="w-full py-3 bg-primary text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-sm hover:bg-primary-dark transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (profile.status !== 'approved') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#FCF9F8] p-4 font-['Inter',_sans-serif]">
@@ -69,7 +91,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
           </p>
           <button 
             onClick={() => signOut()} 
-            className="w-full py-3 bg-[#D32F2F] text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-sm hover:bg-[#B91C1C] transition-colors"
+            className="w-full py-3 bg-primary text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-sm hover:bg-primary-dark transition-colors"
           >
             Sign Out
           </button>

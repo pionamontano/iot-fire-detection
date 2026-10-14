@@ -4,6 +4,26 @@ create or replace function pg_temp.check(name text, ok boolean) returns void lan
 begin raise notice '%: %', case when ok then 'PASS' else 'FAIL' end, name; end $$;
 create or replace function pg_temp.fails_with(sql text, state text) returns boolean language plpgsql as $$
 begin execute sql; return false; exception when others then return sqlstate = state; end $$;
+-- Applies a status change the way the app does. From 6.1 on that is transition_incident() (the UI's only
+-- path; 6c revoked direct UPDATEs for authenticated), walking through "acknowledged" first like the UI does.
+-- Before 6.1 it is the legacy direct UPDATE each screen used to issue. Run as the caller (set role first).
+create or replace function pg_temp.app_transition(p_id uuid, p_to text) returns void language plpgsql as $$
+declare v_cur text;
+begin
+  if to_regprocedure('public.transition_incident(uuid,text,text)') is not null then
+    select incident_status into v_cur from alert_events where id = p_id;
+    if v_cur = 'active' and p_to <> 'acknowledged' and get_auth_role() = 'bfp_responder' then
+      perform transition_incident(p_id, 'acknowledged', null);
+    end if;
+    perform transition_incident(p_id, p_to, null);
+  elsif p_to = 'acknowledged' then
+    update alert_events set incident_status = 'acknowledged', acknowledged_by = auth.uid(), acknowledged_at = now() where id = p_id;
+  elsif p_to = 'admin_resolve' then          -- legacy Alerts.handleResolveAlert: resolved_at only
+    update alert_events set resolved_at = now() where id = p_id;
+  else
+    update alert_events set incident_status = p_to where id = p_id;
+  end if;
+end $$;
 \set resp '00000000-0000-0000-0000-0000000000c1'
 \set adm  '00000000-0000-0000-0000-0000000000a1'
 
@@ -43,7 +63,7 @@ select exists (select 1 from pg_trigger where tgname = 'alert_events_lifecycle_g
 -- W-ack: responder acknowledge (ResponderDashboard.handleAcknowledge) - authenticated, column UPDATE grant
 select alert_id as i2 from raise_alert('20000000-0000-0000-0000-000000000002', 2, 400, 80, null, null, false, null) \gset
 set role authenticated; select set_config('request.jwt.claim.sub', :'resp', false);
-update alert_events set incident_status = 'acknowledged', acknowledged_by = :'resp', acknowledged_at = now() where id = :'i2';
+select pg_temp.app_transition(:'i2', 'acknowledged');
 reset role;
 select alert_id as j2, created as c2 from raise_alert('20000000-0000-0000-0000-000000000002', 2, 410, 85, null, null, false, null) \gset
 select pg_temp.check('[responder ack] same fire keeps the same incident, acknowledgement preserved',
@@ -52,15 +72,15 @@ select pg_temp.check('[responder ack] same fire keeps the same incident, acknowl
 -- W-responding: responder status 'responding'
 select alert_id as i3 from raise_alert('20000000-0000-0000-0000-000000000003', 2, 400, 80, null, null, false, null) \gset
 set role authenticated; select set_config('request.jwt.claim.sub', :'resp', false);
-update alert_events set incident_status = 'responding' where id = :'i3';
+select pg_temp.app_transition(:'i3', 'responding');
 reset role;
 select alert_id as j3, created as c3 from raise_alert('20000000-0000-0000-0000-000000000003', 2, 410, 85, null, null, false, null) \gset
 select pg_temp.check('[responder responding] still the same open incident', :'c3' = 'f' and :'j3' = :'i3' and (select incident_status = 'responding' from alert_events where id = :'i3'));
 
--- W-resolve: responder handleUpdateStatus('resolved') writes incident_status ONLY (resolved_at stays NULL) - THE DEFECT
+-- W-resolve: responder resolves. Pre-6.1 the UI wrote incident_status ONLY (resolved_at stayed NULL) - THE DEFECT
 select alert_id as i4 from raise_alert('20000000-0000-0000-0000-000000000004', 2, 400, 80, null, null, false, null) \gset
 set role authenticated; select set_config('request.jwt.claim.sub', :'resp', false);
-update alert_events set incident_status = 'resolved' where id = :'i4';
+select pg_temp.app_transition(:'i4', 'resolved');
 reset role;
 select pg_temp.check(case when :'lifecycle' then '[6.1 guard] responder "resolve" now sets resolved_at at write time (defect fixed)' else '[DEFECT, confirmed] responder "resolve" leaves resolved_at NULL, so the row still counts as OPEN' end,
   (select (resolved_at is not null) = :'lifecycle'::boolean and incident_status = 'resolved' from alert_events where id = :'i4'));
@@ -74,15 +94,15 @@ select pg_temp.check('[responder resolve] STOPGAP: a new fire after a responder-
 -- W-false-alarm
 select alert_id as i5 from raise_alert('20000000-0000-0000-0000-000000000005', 1, 400, 20, null, null, false, null) \gset
 set role authenticated; select set_config('request.jwt.claim.sub', :'resp', false);
-update alert_events set incident_status = 'false_alarm' where id = :'i5';
+select pg_temp.app_transition(:'i5', 'false_alarm');
 reset role;
 select alert_id as j5, created as c5 from raise_alert('20000000-0000-0000-0000-000000000005', 1, 410, 20, null, null, false, null) \gset
 select pg_temp.check('[responder false alarm] a new fire creates a NEW incident', :'c5' = 't' and :'j5' <> :'i5' and (select resolved_at is not null from alert_events where id = :'i5'));
 
--- W-admin-resolve: Alerts.handleResolveAlert writes resolved_at only (status left as is)
+-- W-admin-resolve: admin resolves from the Alerts page (pre-6.1: wrote resolved_at only, status left as is)
 select alert_id as i6 from raise_alert('20000000-0000-0000-0000-000000000006', 2, 400, 80, null, null, false, null) \gset
 set role authenticated; select set_config('request.jwt.claim.sub', :'adm', false);
-update alert_events set resolved_at = now() where id = :'i6';
+select pg_temp.app_transition(:'i6', case when to_regprocedure('public.transition_incident(uuid,text,text)') is not null then 'resolved' else 'admin_resolve' end);
 reset role;
 select alert_id as j6, created as c6 from raise_alert('20000000-0000-0000-0000-000000000006', 2, 410, 85, null, null, false, null) \gset
 select pg_temp.check('[admin manual resolve] closed via resolved_at => a new fire creates a NEW incident', :'c6' = 't' and :'j6' <> :'i6');
@@ -121,7 +141,7 @@ language sql as $$
   returning a.id, (xmax = 0) $$;
 select alert_id as n1 from raise_alert('20000000-0000-0000-0000-000000000010', 2, 400, 80, null, null, false, null) \gset
 set role authenticated; select set_config('request.jwt.claim.sub', :'resp', false);
-update alert_events set incident_status = 'resolved' where id = :'n1';
+select pg_temp.app_transition(:'n1', 'resolved');
 reset role;
 select alert_id as n2, created as nc2 from raise_alert_nostopgap_test('20000000-0000-0000-0000-000000000010', 2) \gset
 select pg_temp.check(case when :'lifecycle' then '[negative control] even WITHOUT the stopgap, the 6.1 guard alone keeps a new fire from being absorbed (new incident)' else '[negative control] WITHOUT the stopgap the new fire is ABSORBED into the "resolved" incident and stays hidden (this is the hazard)' end,

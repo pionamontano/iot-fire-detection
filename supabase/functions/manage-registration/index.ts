@@ -38,11 +38,11 @@ serve(async (req: Request) => {
 
     const { data: callerProfile } = await supabaseClient
       .from('profiles')
-      .select('role, status')
+      .select('role, status, is_active')
       .eq('id', user.id)
       .single()
 
-    if (!callerProfile || callerProfile.role !== 'admin' || callerProfile.status !== 'approved') {
+    if (!callerProfile || callerProfile.role !== 'admin' || callerProfile.status !== 'approved' || callerProfile.is_active === false) {
       return new Response(JSON.stringify({ error: 'Forbidden. Approved admin access required.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 403,

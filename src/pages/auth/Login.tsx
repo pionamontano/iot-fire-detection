@@ -297,7 +297,7 @@ export const Login = () => {
               <button
                 type="submit"
                 disabled={loading || lockoutTimer > 0}
-                className="relative w-full flex items-center justify-center gap-2 py-4 bg-[#D32F2F] text-white font-bold text-sm tracking-[0.1em] uppercase leading-5 rounded-lg shadow-[0_4px_6px_-4px_rgba(211,47,47,0.2),0_10px_15px_-3px_rgba(211,47,47,0.2)] hover:bg-[#B91C1C] transition-colors disabled:opacity-50"
+                className="relative w-full flex items-center justify-center gap-2 py-4 bg-primary text-white font-bold text-sm tracking-[0.1em] uppercase leading-5 rounded-lg shadow-[0_4px_6px_-4px_rgba(211,47,47,0.2),0_10px_15px_-3px_rgba(211,47,47,0.2)] hover:bg-primary-dark transition-colors disabled:opacity-50"
               >
                 <span>{loading ? 'Authenticating...' : 'Initialize Access'}</span>
                 {!loading && (

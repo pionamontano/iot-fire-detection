@@ -2,49 +2,43 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
+import { PageHeader } from '../../components/PageHeader';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
-import type { Device, AlertEvent } from '../../lib/supabase';
+import type { AlertEvent } from '../../lib/supabase';
 import {
   Users,
   Cpu,
   Activity,
   AlertTriangle,
-  Settings,
-    BatteryWarning
+  BatteryWarning,
+  ArrowRight,
+  MapPinOff,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DashboardSkeleton } from '../../components/SkeletonLoaders';
-import { getConnectivityStatus } from '../../lib/deviceStatus';
+import { getDeviceStatus, getStatusNote, DEVICE_STATUS_ORDER } from '../../lib/deviceStatus';
+import type { DeviceStatus } from '../../lib/deviceStatus';
+import { StatusBadge, StatusCountPill } from '../../components/StatusBadge';
 import { useNowTick } from '../../hooks/useNowTick';
+import { DeviceMap, MapLegend } from '../../components/DeviceMap';
+import { MAP_READING_COLUMNS, toMapDevices, formatTemp } from '../../lib/mapDevices';
+import type { DeviceWithReadings } from '../../lib/mapDevices';
+import { alertTitle, alertActor, alertEventAt, formatEventTime } from '../../lib/alertText';
 
-// Helper to determine device status based on alerts and last_seen_at
-const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[], now: number): 'online' | 'reconnecting' | 'alert' | 'offline' => {
-  const hasAlert = activeAlerts.some(a => a.device_id === device.id);
-  if (hasAlert) return 'alert';
-  if (!device.is_active) return 'offline';
-  return getConnectivityStatus(device.last_seen_at, now);
-};
-
-// Format a number with commas
+// Plain counts — no zero-padding ("00", "002"), which read as codes.
 const formatNumber = (n: number): string => n.toLocaleString();
 
-// Activity log entry type for the snapshot
-interface ActivityLogEntry {
-  title: string;
-  description: string;
-  timestamp: string;
-  actor: string;
-}
+type RecentAlert = AlertEvent & { devices?: { label: string | null; device_code: string } | null };
+
+const ACTIVITY_LIMIT = 4;
+const DEVICE_ROWS_LIMIT = 6;
 
 export const Dashboard = () => {
-  const [devices, setDevices] = useState<Device[]>([]);
+  const [devices, setDevices] = useState<DeviceWithReadings[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<AlertEvent[]>([]);
-  // device_id -> latest on_battery (spec HW-1.5.2/SW-2.4.4 — previously
-  // this indicator existed only on Resident/Responder views, never Admin)
-  const [batteryByDevice, setBatteryByDevice] = useState<Record<string, boolean>>({});
   const [totalUsers, setTotalUsers] = useState(0);
-  const [fireEvents24h, setFireEvents24h] = useState(0);
-  const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
+  const [alerts24h, setAlerts24h] = useState(0);
+  const [recentAlerts, setRecentAlerts] = useState<RecentAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
   const navigate = useNavigate();
@@ -74,26 +68,25 @@ export const Dashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [devicesRes, alertsRes, profilesRes, fireEvents24hRes, recentAlertsRes, batteryRes] = await Promise.all([
-        supabase.from('devices').select<string, Device>(DEVICE_COLUMNS).order('created_at', { ascending: true }),
+      const [devicesRes, alertsRes, profilesRes, alerts24hRes, recentAlertsRes] = await Promise.all([
+        // Each device with its latest reading: position for the map, plus
+        // on_battery for the battery badge (spec HW-1.5.2/SW-2.4.4).
+        supabase.from('devices')
+          .select<string, DeviceWithReadings>(`${DEVICE_COLUMNS}, sensor_readings(${MAP_READING_COLUMNS})`)
+          .order('device_code', { ascending: true })
+          .order('recorded_at', { foreignTable: 'sensor_readings', ascending: false })
+          .limit(1, { foreignTable: 'sensor_readings' }),
         supabase.from('alert_events').select(`*, devices(${DEVICE_COLUMNS})`).is('resolved_at', null),
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
-        // Fire events in last 24 hours
+        // Alerts (any tier) triggered in the last 24 hours
         supabase.from('alert_events')
           .select('id', { count: 'exact', head: true })
           .gte('triggered_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
-        // Recent resolved alerts for activity snapshot
+        // Recent alerts for the activity snapshot
         supabase.from('alert_events')
           .select('*, devices(label, device_code)')
           .order('triggered_at', { ascending: false })
-          .limit(5),
-        // Latest readings across devices, to derive each device's current
-        // on_battery state (no per-device "latest reading" view exists,
-        // so the most recent batch is reduced client-side below).
-        supabase.from('sensor_readings')
-          .select('device_id, on_battery, recorded_at')
-          .order('recorded_at', { ascending: false })
-          .limit(300)
+          .limit(ACTIVITY_LIMIT),
       ]);
 
       // A failed read must be visible, not look like an empty fleet.
@@ -101,35 +94,10 @@ export const Dashboard = () => {
       setLoadError(readError ? { message: readError.message, code: readError.code } : null);
 
       if (devicesRes.data) setDevices(devicesRes.data);
-      if (batteryRes.data) {
-        const latestByDevice: Record<string, boolean> = {};
-        for (const r of batteryRes.data) {
-          if (!(r.device_id in latestByDevice)) latestByDevice[r.device_id] = r.on_battery;
-        }
-        setBatteryByDevice(latestByDevice);
-      }
       if (alertsRes.data) setActiveAlerts(alertsRes.data as unknown as AlertEvent[]);
       if (profilesRes.count !== null) setTotalUsers(profilesRes.count);
-      if (fireEvents24hRes.count !== null) setFireEvents24h(fireEvents24hRes.count);
-
-      // Build activity logs from recent alert events
-      if (recentAlertsRes.data && recentAlertsRes.data.length > 0) {
-        const logs: ActivityLogEntry[] = recentAlertsRes.data.map((alert: any) => {
-          const deviceLabel = alert.devices?.label || alert.devices?.device_code || 'Unknown Device';
-          const isResolved = !!alert.resolved_at;
-          return {
-            title: isResolved ? 'Alert Resolved' : `Tier ${alert.alert_tier} Alert Triggered`,
-            description: isResolved
-              ? `Alert on ${deviceLabel} was resolved. CO: ${alert.co_ppm}ppm, Temp: ${alert.temp_celsius}°C.`
-              : `${deviceLabel} triggered a Tier ${alert.alert_tier} alert. CO: ${alert.co_ppm}ppm, Temp: ${alert.temp_celsius}°C.`,
-            timestamp: new Date(alert.triggered_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            actor: isResolved ? 'System' : 'Automated'
-          };
-        });
-        setActivityLogs(logs);
-      } else {
-        setActivityLogs([]);
-      }
+      if (alerts24hRes.count !== null) setAlerts24h(alerts24hRes.count);
+      setRecentAlerts((recentAlertsRes.data ?? []) as unknown as RecentAlert[]);
     } catch (error) {
       console.error('Error fetching dashboard data', error);
     } finally {
@@ -141,305 +109,275 @@ export const Dashboard = () => {
     return <DashboardSkeleton />;
   }
 
+  const statusById = new Map(devices.map(d => [d.id, getDeviceStatus(d, activeAlerts, now)]));
+  const statusCounts: Record<DeviceStatus, number> = { fire: 0, warning: 0, online: 0, reconnecting: 0, offline: 0 };
+  for (const s of statusById.values()) statusCounts[s]++;
+  const isAlerting = (s: DeviceStatus | undefined) => s === 'fire' || s === 'warning';
+  // Alerting devices first so they're never cut off by the row limit; the
+  // rest keep device-code order from the query.
+  const sortedDevices = [...devices].sort(
+    (a, b) => Number(isAlerting(statusById.get(b.id))) - Number(isAlerting(statusById.get(a.id)))
+  );
+  const mapDevices = toMapDevices(devices, now);
+  const devicesWithoutLocation = mapDevices.filter(d => d.location.kind === 'unavailable');
+
   return (
-    <div className="w-full mx-auto pb-[63px]">
-      
+    <div className="w-full mx-auto pb-12">
+
       {loadError && (
-        <div className="mb-6 pl-[30px]"><LoadErrorBanner what="dashboard data" error={loadError} onRetry={fetchData} /></div>
+        <div className="mb-6"><LoadErrorBanner what="dashboard data" error={loadError} onRetry={fetchData} /></div>
       )}
 
-      {/* Top Header Area */}
-      <div className="flex flex-col gap-1 mb-10 pl-[30px]">
-        <h2 className="text-[#1C1B1B] font-extrabold text-[40px] leading-[36px] tracking-[-0.0187em]">
-          Dashboard
-        </h2>
-        <p className="text-[#5B403D]/70 font-medium text-sm leading-5 mt-1 max-w-[809px]">
-          Monitor overall system status and gain a real-time summary of users, devices, and fire alerts across the IoT network.
-        </p>
+      {/* Page header */}
+      <div className="mb-6 md:mb-8">
+        <PageHeader title="Dashboard" description="Real-time overview of users, devices, and fire alerts." />
       </div>
 
-      {/* 4 Stat Cards — all from real data */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <StatCard
-          label="Total Users"
-          value={formatNumber(totalUsers)}
-          icon={<Users className="w-5 h-5 text-[#1C1B1B]" />}
-        />
-        <StatCard
-          label="Registered Devices"
-          value={formatNumber(devices.length)}
-          icon={<Cpu className="w-5 h-5 text-[#1C1B1B]" />}
-        />
-        <UrgentStatCard
-          label="Active Alarms"
-          value={String(activeAlerts.length).padStart(2, '0')}
-          icon={<AlertTriangle className="w-[22px] h-[19px] text-[#D32F2F]" />}
-        />
-        <StatCard
-          label="Total Fire Events (24hrs)"
-          value={String(fireEvents24h).padStart(3, '0')}
-          icon={<Activity className="w-4 h-[19px] text-[#1C1B1B]" />}
-        />
+      {/* Stat cards — 2-up on phones, 4-up on desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 md:mb-8">
+        <StatCard label="Total Users" value={formatNumber(totalUsers)} icon={Users} />
+        <StatCard label="Registered Devices" value={formatNumber(devices.length)} icon={Cpu} />
+        {/* Red only when there is actually something burning — a red "0"
+            reads as an alarm at a glance. */}
+        <StatCard label="Active Alerts" value={formatNumber(activeAlerts.length)} icon={AlertTriangle} urgent={activeAlerts.length > 0} />
+        <StatCard label="Alerts (Last 24h)" value={formatNumber(alerts24h)} icon={Activity} />
       </div>
 
-      {/* Main Dashboard Layout (Grid 3 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 mb-10">
-        
-        {/* System Status Table (Col span 2) */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[#1C1B1B] font-bold text-[20px] leading-7 tracking-[-0.025em]">
-              System Status Overview
-            </h3>
-            <Link 
-              to="/admin/devices"
-              className="text-[#AF101A] font-bold text-[12px] leading-4 text-center hover:underline"
-            >
-              View All Sensors
-            </Link>
-          </div>
+      {/* Main layout: map + devices (2/3), actions + activity (1/3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
 
-          <div className="bg-[#F6F3F2] rounded-[8px] shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
-            
-            {/* Table Header */}
-            <div className="flex bg-[#EBE7E7] border-b border-[#F4F4F5]">
-              <div className="w-[165px] px-6 py-4 text-[#5B403D] font-black text-[10px] uppercase tracking-[0.1em]">
-                Device UID
-              </div>
-              <div className="flex-1 px-6 py-4 text-[#5B403D] font-black text-[10px] uppercase tracking-[0.1em]">
-                Location
-              </div>
-              <div className="w-[191px] px-6 py-4 text-[#5B403D] font-black text-[10px] uppercase tracking-[0.1em] text-right">
-                Status
-              </div>
+        <div className="lg:col-span-2 flex flex-col gap-6 lg:gap-8 min-w-0">
+
+          {/* Live Device Map preview — full view lives on the Live Map tab */}
+          <section className="flex flex-col gap-3">
+            <SectionHeader title="Live Device Map" action={<SectionLink to="/admin/map">Open full map</SectionLink>} />
+            <div className={`${CARD} overflow-hidden h-[360px] lg:h-[420px]`}>
+              <DeviceMap
+                compact
+                devices={mapDevices}
+                activeAlerts={activeAlerts}
+                now={now}
+                onViewDetails={(d) => navigate(`/admin/alerts?q=${encodeURIComponent(d.device_code)}&device=${d.id}`)}
+              />
             </div>
-
-            {/* Table Body — from real DB data */}
-            <div className="flex flex-col bg-white">
-              {devices.length === 0 ? (
-                <div className="flex items-center justify-center py-16 text-[#A1A1AA] text-sm">
-                  <div className="flex flex-col items-center gap-2">
-                    <Cpu className="w-8 h-8 text-[#E4E4E7]" />
-                    <span>No devices registered yet</span>
-                    <Link to="/admin/devices" className="text-[#AF101A] font-bold text-[12px] hover:underline mt-1">
-                      Register your first device →
-                    </Link>
-                  </div>
-                </div>
-              ) : (
-                devices.slice(0, 6).map((device) => {
-                  const status = getDeviceStatus(device, activeAlerts, now);
-                  const isAlert = status === 'alert';
-                  const onBattery = batteryByDevice[device.id];
-
-                  return (
-                    <div
-                      key={device.id}
-                      className={`flex border-b border-[#F4F4F5] hover:bg-gray-50 transition-colors ${isAlert ? 'bg-[#F4A185]/10' : ''}`}
-                    >
-                      <div className="w-[165px] px-6 py-[22px]">
-                        <span className={`text-[#1C1B1B] font-mono text-[12px] leading-4 ${isAlert ? 'font-bold' : ''}`}>
-                          {device.device_code}
-                        </span>
-                      </div>
-                      <div className="flex-1 px-6 py-5 flex items-center gap-2">
-                        <span className={`text-[#52525B] font-medium text-[14px] leading-5 ${isAlert ? 'font-bold' : ''}`}>
-                          {device.location_desc}
-                        </span>
-                        {onBattery && (
-                          <span title="Running on backup battery" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#B45309] text-[10px] font-bold uppercase tracking-wide">
-                            <BatteryWarning className="w-3 h-3" /> Battery
-                          </span>
-                        )}
-                      </div>
-                      <div className="w-[191px] px-6 py-5 flex items-center justify-end">
-                        <StatusBadge status={status} />
-                      </div>
-                    </div>
-                  );
-                })
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {/* No counts here: the Device Status pills below already count
+                  every device, and pin-only counts disagreed with them
+                  whenever a device had no location. */}
+              <MapLegend />
+              {devicesWithoutLocation.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
+                  <MapPinOff className="w-3.5 h-3.5 shrink-0 text-[#B45309]" />
+                  <span><strong className="text-text">No location for {devicesWithoutLocation.map(d => d.device_code).join(', ')}</strong> — not shown on the map.</span>
+                </span>
               )}
             </div>
-          </div>
+          </section>
+
+          {/* Device status */}
+          <section className="flex flex-col gap-3">
+            <SectionHeader
+              title="Device Status"
+              meta={devices.length > 0 && (
+                <>
+                  {/* Online and offline always shown; the rest only when present */}
+                  {DEVICE_STATUS_ORDER.filter(st => statusCounts[st] > 0 || st === 'online' || st === 'offline').map(st => (
+                    <StatusCountPill key={st} status={st} count={statusCounts[st]} />
+                  ))}
+                </>
+              )}
+              action={<SectionLink to="/admin/devices">View all devices</SectionLink>}
+            />
+
+            <div className={`${CARD} overflow-hidden`}>
+              {/* Column headers — hidden on phones, where rows stack */}
+              <div className={`hidden sm:grid ${DEVICE_GRID} bg-surface-alt border-b border-border`}>
+                <div className={TH}>Device ID</div>
+                <div className={TH}>Location</div>
+                <div className={`${TH} text-right`}>Status</div>
+              </div>
+
+              {devices.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-16 text-text-faint text-sm">
+                  <Cpu className="w-8 h-8 text-border-light" />
+                  <span>No devices registered yet</span>
+                  <Link to="/admin/devices" className="text-primary-dark font-bold text-xs hover:underline mt-1">
+                    Register your first device →
+                  </Link>
+                </div>
+              ) : (
+                <ul className="divide-y divide-border-warm">
+                  {sortedDevices.slice(0, DEVICE_ROWS_LIMIT).map((device) => {
+                    const status = statusById.get(device.id) ?? 'offline';
+                    const isAlert = isAlerting(status);
+                    const note = getStatusNote(device, status, now);
+                    const onBattery = device.sensor_readings?.[0]?.on_battery;
+
+                    return (
+                      <li key={device.id}>
+                        {/* Whole row opens the device on the Live Map, like the Live Map's feed cards. */}
+                        <Link
+                          to={`/admin/map?device=${device.id}`}
+                          title="Show on map"
+                          className={`grid grid-cols-[1fr_auto] ${DEVICE_GRID} gap-x-4 gap-y-1 px-4 sm:px-0 py-4 sm:py-0 hover:bg-surface transition-colors ${status === 'fire' ? 'bg-tier2-bg/40' : status === 'warning' ? 'bg-tier1-bg/40' : ''}`}
+                        >
+                          <div className="sm:px-6 sm:py-5 flex flex-col justify-center min-w-0">
+                            <span className={`text-text font-mono text-xs leading-4 ${isAlert ? 'font-bold' : 'font-medium'}`}>
+                              {device.device_code}
+                            </span>
+                            {device.label && <span className="text-[11px] leading-4 text-text-subtle mt-0.5 line-clamp-2" title={device.label}>{device.label}</span>}
+                          </div>
+                          <div className="col-span-2 row-start-2 sm:col-span-1 sm:row-start-auto sm:px-6 sm:py-5 flex flex-wrap items-center gap-2 min-w-0">
+                            <span className={`text-text-muted text-sm leading-5 ${isAlert ? 'font-bold' : 'font-medium'}`}>
+                              {device.location_desc}
+                            </span>
+                            {onBattery && (
+                              <span title="Mains power lost — running on backup battery" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tier1-bg text-[#B45309] text-[10px] font-bold uppercase tracking-wide">
+                                <BatteryWarning className="w-3 h-3" /> On battery
+                              </span>
+                            )}
+                          </div>
+                          <div className="row-start-1 col-start-2 sm:row-start-auto sm:col-start-auto sm:px-6 sm:py-4 flex flex-col items-end justify-center gap-1">
+                            <StatusBadge status={status} />
+                            {note && (
+                              <span className="text-[11px] text-text-subtle whitespace-nowrap">{note}</span>
+                            )}
+                          </div>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {devices.length > DEVICE_ROWS_LIMIT && (
+                <Link to="/admin/devices" className="block px-4 sm:px-6 py-3 border-t border-border-warm text-xs font-bold text-primary-dark hover:underline">
+                  + {devices.length - DEVICE_ROWS_LIMIT} more devices
+                </Link>
+              )}
+            </div>
+          </section>
         </div>
 
-        {/* Sidebar Content (Col span 1) */}
-        <div className="flex flex-col gap-6">
-          
-          {/* Quick Actions */}
-          <div className="flex flex-col gap-4">
-            <h3 className="text-[#A1A1AA] font-bold text-[14px] uppercase tracking-[0.1em]">
-              Quick Actions
-            </h3>
-            <div className="flex flex-col gap-3">
-              <button 
+        {/* Right column — sticks while the left column scrolls on desktop */}
+        <aside className="flex flex-col gap-6 lg:gap-8 lg:sticky lg:top-0 lg:self-start">
+
+          <section className="flex flex-col gap-3">
+            <SectionHeader title="Quick Actions" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+              <button
                 onClick={() => navigate('/admin/users')}
-                className="bg-[#B91C1C] rounded-[8px] p-4 flex items-center justify-between text-white hover:bg-[#AF101A] transition-colors"
+                className="h-12 px-4 rounded-lg flex items-center justify-between bg-primary text-white hover:bg-primary-dark transition-colors"
               >
-                <span className="font-semibold text-[14px] leading-5">Add User</span>
+                <span className="font-semibold text-sm">Add User</span>
                 <Users className="w-4 h-4" />
               </button>
-              <button 
+              <button
                 onClick={() => navigate('/admin/devices')}
-                className="border-2 border-[#AF101A] rounded-[8px] p-4 flex items-center justify-between text-[#3F3F46] hover:bg-[#FFF5F2] transition-colors"
+                className="h-12 px-4 rounded-lg flex items-center justify-between bg-surface-card border-2 border-primary-dark text-text hover:bg-surface-warm transition-colors"
               >
-                <span className="font-semibold text-[14px] leading-5">Register Device</span>
-                <Settings className="w-5 h-5 text-[#1C1B1B]" />
+                <span className="font-semibold text-sm">Register Device</span>
+                <Cpu className="w-4 h-4" />
               </button>
             </div>
-          </div>
+          </section>
 
-          {/* Activity Snapshot — from real DB data */}
-          <div className="flex flex-col gap-6 mt-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-[#A1A1AA] font-bold text-[14px] uppercase tracking-[0.1em]">
-                Activity Snapshot
-              </h3>
-            </div>
-
-            <div className="flex flex-col gap-4">
-              {activityLogs.length === 0 ? (
-                <div className="flex flex-col items-center py-8 text-[#A1A1AA] text-[12px]">
-                  <Activity className="w-6 h-6 text-[#E4E4E7] mb-2" />
+          {/* Recent activity — from real DB data */}
+          <section className="flex flex-col gap-3">
+            <SectionHeader
+              title="Recent Activity"
+              action={recentAlerts.length > 0 && <SectionLink to="/admin/logs">View full log</SectionLink>}
+            />
+            <div className={CARD}>
+              {recentAlerts.length === 0 ? (
+                <div className="flex flex-col items-center py-10 text-text-faint text-xs">
+                  <Activity className="w-6 h-6 text-border-light mb-2" />
                   <span>No recent activity</span>
                 </div>
               ) : (
-                activityLogs.map((log, index) => (
-                  <div key={index} className="flex gap-4">
-                    <div className="w-[3px] bg-[#E4E4E7] rounded-full shrink-0"></div>
-                    <div className="flex flex-col gap-1 py-1">
-                      <h4 className="text-[#1C1B1B] font-bold text-[12px] leading-4">{log.title}</h4>
-                      <p className="text-[#71717A] text-[11px] leading-[16.5px]">{log.description}</p>
-                      <span className="text-[#A1A1AA] font-black text-[10px] tracking-[-0.05em] uppercase mt-1">
-                        {log.timestamp} • {log.actor}
-                      </span>
-                    </div>
-                  </div>
-                ))
+                <ul className="divide-y divide-border-warm">
+                  {recentAlerts.map((alert) => {
+                    const isResolved = !!alert.resolved_at;
+                    const isFire = alert.alert_tier === 2;
+                    const code = alert.devices?.device_code ?? 'Unknown device';
+                    const label = alert.devices?.label;
+                    return (
+                      <li key={alert.id}>
+                        <Link
+                          to={alert.device_id ? `/admin/map?device=${alert.device_id}` : '/admin/logs'}
+                          title={alert.device_id ? 'Show on map' : undefined}
+                          className="flex gap-3 p-4 hover:bg-surface transition-colors"
+                        >
+                          <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${isResolved ? 'bg-text-faint' : isFire ? 'bg-tier2-border' : 'bg-tier1-border'}`}></span>
+                          <div className="flex flex-col gap-1 min-w-0">
+                            <h4 className="text-text font-bold text-[13px] leading-4">
+                              {alertTitle(alert)}
+                            </h4>
+                            <p className="text-text-muted text-xs leading-[18px]">
+                              <span className="font-mono font-semibold">{code}</span>{label ? ` · ${label}` : ''}
+                              <br />
+                              CO {alert.co_ppm} ppm · {formatTemp(alert.temp_celsius)} at trigger
+                            </p>
+                            <span className="text-text-subtle text-[11px] font-medium">
+                              {formatEventTime(alertEventAt(alert), now)} · {alertActor(alert)}
+                            </span>
+                          </div>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
-          </div>
-
-        </div>
+          </section>
+        </aside>
       </div>
-
-      {/* Visualization Section */}
-      <div className="relative rounded-[16px] bg-[#18181B] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] overflow-hidden">
-        {/* Background Heatmap Image */}
-        <div 
-          className="absolute inset-0 opacity-20 pointer-events-none"
-          style={{
-            backgroundImage: "url('/heatmap_bg.png')",
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat'
-          }}
-        ></div>
-
-        <div className="relative z-10 p-8 flex items-center justify-between">
-          <div className="flex flex-col gap-2">
-            <h3 className="text-white font-black text-[24px] leading-8 tracking-[-0.05em]">
-              Thermal Clarity View
-            </h3>
-            <p className="text-[#A1A1AA] font-normal text-[14px] leading-5 max-w-[428px]">
-              Real-time heatmap visualization of industrial campus. Dark areas indicate optimal temperatures below 24°C.
-            </p>
-          </div>
-          
-          <button 
-            onClick={() => navigate('/admin/map')}
-            className="bg-[#AF101A] hover:bg-[#8F0C14] text-white px-6 py-3 rounded-[4px] font-bold text-[12px] leading-4 tracking-[0.1em] uppercase transition-colors"
-          >
-            Enter Interactive Map
-          </button>
-        </div>
-      </div>
-
     </div>
   );
 };
 
-// Status Badge component
-const StatusBadge = ({ status }: { status: 'online' | 'reconnecting' | 'alert' | 'offline' }) => {
-  const config = {
-    online: {
-      bg: 'bg-[#00799C]/10',
-      dot: 'bg-[#10B981]',
-      text: 'text-[#00799C]',
-      label: 'Online'
-    },
-    reconnecting: {
-      bg: 'bg-[#FEF3C7]/60',
-      dot: 'bg-[#F59E0B]',
-      text: 'text-[#B45309]',
-      label: 'Reconnecting'
-    },
-    alert: {
-      bg: 'bg-[#FFDAD6]/20',
-      dot: 'bg-[#DC2626]',
-      text: 'text-[#DC2626]',
-      label: 'Alert'
-    },
-    offline: {
-      bg: 'bg-[#EBE7E7]',
-      dot: 'bg-[#71717A]',
-      text: 'text-[#71717A]',
-      label: 'Offline'
-    }
-  };
+// ─── Shared building blocks (one card / heading / link style for the page) ───
 
-  const c = config[status];
+const CARD = 'bg-surface-card border border-border rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.04)]';
+const TH = 'px-6 py-3 text-text-body font-black text-[10px] uppercase tracking-[0.1em]';
+// Phones: code + status on one line, location underneath. sm+: 3 columns.
+const DEVICE_GRID = 'sm:grid-cols-[170px_minmax(0,1fr)_auto]';
 
-  return (
-    <div className={`${c.bg} px-3 py-1 rounded-[12px] flex items-center gap-2`}>
-      <span className={`w-2 h-2 rounded-full ${c.dot}`}></span>
-      <span className={`${c.text} font-bold text-[14px] leading-5 uppercase tracking-[0.1em]`}>{c.label}</span>
+const SectionHeader = ({ title, meta, action }: { title: string; meta?: React.ReactNode; action?: React.ReactNode }) => (
+  <div className="flex items-center justify-between gap-x-4 gap-y-2 flex-wrap min-h-7">
+    <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+      <h3 className="text-text font-bold text-lg leading-7 tracking-[-0.01em]">{title}</h3>
+      {meta && <div className="flex items-center gap-1.5 flex-wrap">{meta}</div>}
     </div>
-  );
-};
-
-// Simple Stat Card
-const StatCard = ({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-}) => (
-  <div className="bg-[#F6F3F2] border-b-2 border-transparent rounded-[8px] p-6 flex flex-col gap-2">
-    <span className="text-[#5B403D] font-bold text-[10px] leading-[15px] tracking-[0.1em] uppercase">
-      {label}
-    </span>
-    <div className="flex items-end justify-between">
-      <span className="font-extrabold text-[36px] leading-[40px] tracking-[-0.05em] text-[#1C1B1B]">
-        {value}
-      </span>
-      <div className="pb-1">{icon}</div>
-    </div>
+    {action}
   </div>
 );
 
-// Urgent Stat Card (Red theme)
-const UrgentStatCard = ({
+const SectionLink = ({ to, children }: { to: string; children: React.ReactNode }) => (
+  <Link to={to} className="inline-flex items-center gap-1 text-primary-dark font-bold text-xs hover:underline whitespace-nowrap">
+    {children} <ArrowRight className="w-3.5 h-3.5" />
+  </Link>
+);
+
+const StatCard = ({
   label,
   value,
-  icon,
+  icon: Icon,
+  urgent = false,
 }: {
   label: string;
   value: string;
-  icon: React.ReactNode;
+  icon: React.ComponentType<{ className?: string }>;
+  urgent?: boolean;
 }) => (
-  <div className="bg-[#F4A185]/20 border-b-4 border-[#AF101A] rounded-[8px] p-6 flex flex-col gap-2 relative overflow-hidden">
-    <span className="text-[#AF101A] font-bold text-[10px] leading-[15px] tracking-[0.1em] uppercase relative z-10">
-      {label}
-    </span>
-    <div className="flex items-end justify-between relative z-10">
-      <span className="font-extrabold text-[36px] leading-[40px] tracking-[-0.05em] text-[#AF101A]">
-        {value}
+  <div className={`rounded-lg border shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 sm:p-5 flex flex-col gap-2 min-w-0 ${urgent ? 'bg-tier2-bg/60 border-tier2-border/40 border-b-4 border-b-primary-dark' : 'bg-surface-card border-border'}`}>
+    <div className="flex items-start justify-between gap-2">
+      <span className={`font-bold text-[10px] leading-[15px] tracking-[0.1em] uppercase ${urgent ? 'text-primary-dark' : 'text-text-body'}`}>
+        {label}
       </span>
-      <div className="pb-1">{icon}</div>
+      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${urgent ? 'text-accent' : 'text-text-subtle'}`} />
     </div>
+    <span className={`font-extrabold text-[28px] leading-8 sm:text-[36px] sm:leading-10 tracking-[-0.04em] ${urgent ? 'text-primary-dark' : 'text-text'}`}>
+      {value}
+    </span>
   </div>
 );

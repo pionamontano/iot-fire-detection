@@ -8,61 +8,61 @@ const Skeleton = ({ className = '', ...props }: React.HTMLAttributes<HTMLDivElem
 // ─── Dashboard Skeleton (Admin) ───
 // Mimics: 4 stat cards + system status table + sidebar
 export const DashboardSkeleton = () => (
-  <div className="w-full mx-auto pb-[63px] animate-fade-in">
+  <div className="w-full mx-auto pb-12 animate-fade-in">
     {/* Header */}
-    <div className="flex flex-col gap-1 mb-10 pl-[30px]">
+    <div className="flex flex-col gap-1 mb-6 md:mb-8">
       <Skeleton className="h-9 w-56 rounded-md" />
-      <Skeleton className="h-4 w-96 mt-2 rounded" />
+      <Skeleton className="h-4 w-full max-w-sm mt-2 rounded" />
     </div>
 
     {/* 4 Stat Cards */}
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 md:mb-8">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="bg-[#F6F3F2] border border-[#E5E2E1] rounded-lg px-5 py-4 flex flex-col gap-3">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-10 w-20 rounded-md" />
+        <div key={i} className="bg-white border border-[#E5E2E1] rounded-lg p-4 sm:p-5 flex flex-col gap-3">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-9 w-14 rounded-md" />
         </div>
       ))}
     </div>
 
     {/* Main Grid */}
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-      {/* Table area */}
-      <div className="lg:col-span-2">
-        <div className="flex items-center justify-between mb-6">
-          <Skeleton className="h-6 w-52" />
-          <Skeleton className="h-4 w-24" />
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+      {/* Map + table area */}
+      <div className="lg:col-span-2 flex flex-col gap-6 lg:gap-8">
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-6 w-44" />
+          <Skeleton className="w-full rounded-lg h-[280px] sm:h-[360px] lg:h-[420px]" />
         </div>
-        <div className="bg-[#F6F3F2] rounded-lg overflow-hidden">
-          <div className="bg-[#EBE7E7] px-6 py-4 flex gap-8">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-3 w-32 flex-1" />
-            <Skeleton className="h-3 w-16" />
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-6 w-40" />
+          <div className="bg-white border border-[#E5E2E1] rounded-lg overflow-hidden">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="px-4 sm:px-6 py-5 flex items-center gap-4 sm:gap-8 border-b border-[#F0EDEC]">
+                <Skeleton className="h-4 w-16 sm:w-24" />
+                <Skeleton className="h-4 w-48 flex-1" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+            ))}
           </div>
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-white px-6 py-5 flex items-center gap-8 border-b border-[#F4F4F5]">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-48 flex-1" />
-              <Skeleton className="h-6 w-20 rounded-full" />
+        </div>
+      </div>
+      {/* Right column */}
+      <div className="flex flex-col gap-3">
+        <Skeleton className="h-6 w-32" />
+        <Skeleton className="h-12 w-full rounded-lg" />
+        <Skeleton className="h-12 w-full rounded-lg" />
+        <Skeleton className="h-6 w-36 mt-5" />
+        <div className="bg-white border border-[#E5E2E1] rounded-lg">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex gap-3 p-4 border-b border-[#F0EDEC]">
+              <Skeleton className="h-2 w-2 mt-1 rounded-full" />
+              <div className="flex-1 flex flex-col gap-2">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-3 w-48" />
+              </div>
             </div>
           ))}
         </div>
-      </div>
-      {/* Sidebar */}
-      <div className="flex flex-col gap-6">
-        <Skeleton className="h-4 w-28" />
-        <Skeleton className="h-12 w-full rounded-lg" />
-        <Skeleton className="h-12 w-full rounded-lg" />
-        <Skeleton className="h-4 w-32 mt-4" />
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="flex gap-3">
-            <Skeleton className="h-10 w-10 rounded-full" />
-            <div className="flex-1 flex flex-col gap-2">
-              <Skeleton className="h-3 w-32" />
-              <Skeleton className="h-3 w-48" />
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   </div>

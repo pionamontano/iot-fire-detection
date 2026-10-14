@@ -1,0 +1,21 @@
+-- =============================================================
+-- Revoke DELETE and TRUNCATE on alert_events from anon/authenticated.
+--
+-- 20261022000002 assumed DELETE "was never granted" to authenticated,
+-- but Supabase's default privileges grant ALL on public tables to
+-- anon and authenticated, so DELETE (and TRUNCATE) were held all along.
+-- DELETE is harmless today only because no RLS policy permits it (a
+-- delete silently matches 0 rows); TRUNCATE is not subject to RLS at
+-- all. Nothing in the app deletes incidents - they are closed through
+-- transition_incident() - so the grants are dead privileges and the
+-- last write path the 6c hardening meant to remove.
+--
+-- Not affected: SELECT (all read policies), transition_incident()
+-- (SECURITY DEFINER), service_role (ingest-reading, trigger-alert,
+-- confirm-sms-status).
+--
+-- Rollback:
+--   grant delete, truncate on public.alert_events to anon, authenticated;
+-- =============================================================
+
+revoke delete, truncate on public.alert_events from anon, authenticated;

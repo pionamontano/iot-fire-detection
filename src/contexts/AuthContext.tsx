@@ -11,6 +11,10 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
+// Fallback interval for re-reading the signed-in profile when no realtime
+// event arrives (see the profile-sync effect below).
+const PROFILE_RECHECK_MS = 60_000;
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -48,6 +52,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Keep the signed-in profile current, so an admin deactivating the account
+  // (or changing its role/status) takes effect in an already-open app
+  // instead of only on the next reload. Realtime pushes the change when the
+  // profiles table is in the realtime publication; the focus check and the
+  // poll cover projects where it is not, and dropped sockets.
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    const recheck = () => refreshProfile(userId);
+
+    const channel = supabase.channel(`own_profile_${userId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, recheck)
+      .subscribe();
+    const onVisible = () => { if (document.visibilityState === 'visible') recheck(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', recheck);
+    const timer = window.setInterval(recheck, PROFILE_RECHECK_MS);
+
+    return () => {
+      supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', recheck);
+      window.clearInterval(timer);
+    };
+  }, [userId]);
+
   const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -64,6 +94,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Background re-check: unlike fetchProfile, a failed read (e.g. offline)
+  // keeps the profile we have instead of dropping to the error screen.
+  const refreshProfile = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    if (error || !data) return;
+    setProfile(prev => (prev && JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
   };
 
   const signOut = async () => {

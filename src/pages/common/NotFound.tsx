@@ -35,7 +35,7 @@ export const NotFound = () => {
 
         <button
           onClick={handleRedirect}
-          className="w-full mt-2 py-4 bg-[#D32F2F] text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-[0_4px_6px_-4px_rgba(211,47,47,0.2),0_10px_15px_-3px_rgba(211,47,47,0.2)] hover:bg-[#B91C1C] transition-colors"
+          className="w-full mt-2 py-4 bg-primary text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-[0_4px_6px_-4px_rgba(211,47,47,0.2),0_10px_15px_-3px_rgba(211,47,47,0.2)] hover:bg-primary-dark transition-colors"
         >
           Go to dashboard
         </button>

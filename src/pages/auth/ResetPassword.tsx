@@ -171,7 +171,7 @@ export const ResetPassword = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center py-3.5 px-4 bg-[#D32F2F] text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg hover:bg-[#B91C1C] focus:ring-4 focus:ring-[#FEF2F2] transition-all disabled:opacity-70 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(211,47,47,0.2)]"
+                className="w-full flex items-center justify-center py-3.5 px-4 bg-primary text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg hover:bg-primary-dark focus:ring-4 focus:ring-[#FEF2F2] transition-all disabled:opacity-70 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(211,47,47,0.2)]"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Update Password'}
               </button>

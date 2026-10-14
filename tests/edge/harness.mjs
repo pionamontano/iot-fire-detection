@@ -76,14 +76,21 @@ export class FakeDb {
 }
 
 /** Load a function's index.ts and return the handler it registers with serve(). */
-export function loadHandler(name, { db, env = {}, user = null, fetchImpl, webpush } = {}) {
+// authAdmin: optional fake of supabase.auth.admin (listUsers, updateUserById, ...).
+export function loadHandler(name, { db, env = {}, user = null, fetchImpl, webpush, authAdmin } = {}) {
   let src = fs.readFileSync(path.join(ROOT, name, 'index.ts'), 'utf8');
   src = src.replace(/^import .*$/gm, '');
-  const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  // A type-only export (e.g. `export interface`) makes the transpiler emit an
+  // `export {};` module marker, which new Function() can't parse — drop it.
+  const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+    .replace(/^export \{\};?\s*$/gm, '');
   let handler = null;
   const serve = (h) => { handler = h; };
   const createClient = () => Object.assign(db, {
-    auth: { getUser: async () => (user ? { data: { user }, error: null } : { data: { user: null }, error: { message: 'no user' } }) },
+    auth: {
+      getUser: async () => (user ? { data: { user }, error: null } : { data: { user: null }, error: { message: 'no user' } }),
+      ...(authAdmin ? { admin: authAdmin } : {}),
+    },
   });
   const Deno = { env: { get: (k) => env[k] } };
   const origFetch = globalThis.fetch;

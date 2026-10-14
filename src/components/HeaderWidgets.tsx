@@ -1,20 +1,46 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Search, X, Cpu, Settings, LogOut, Flame, ArrowRight } from 'lucide-react';
+import { Bell, Search, Cpu, Settings, LogOut, ArrowRight, Map as MapIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { AlertEvent, Device } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { formatAge } from '../lib/location';
+import { getConnectivityStatus, DEVICE_STATUS } from '../lib/deviceStatus';
+import type { DeviceStatus } from '../lib/deviceStatus';
 
-// ─── Time Ago Helper ───
-const timeAgo = (dateStr: string) => {
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return 'Just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+// ─── Shared popover frame ───
+// The notification panel and the profile menu use the same frame, header
+// and footer so they read as one set (and match the page cards). On phones
+// the panel spans the screen width under the top bar instead of hanging
+// off the left edge.
+const POPOVER =
+  'fixed left-3 right-3 top-[72px] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 ' +
+  'bg-white rounded-lg border border-border shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-[100] overflow-hidden ' +
+  'animate-in fade-in slide-in-from-top-2 duration-200';
+
+const PopoverFooterLink = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
+  <button
+    onClick={onClick}
+    className="w-full px-4 py-3 border-t border-border-warm flex items-center justify-center gap-1 text-xs font-bold text-primary-dark hover:bg-surface transition-colors"
+  >
+    {children} <ArrowRight className="w-3.5 h-3.5" />
+  </button>
+);
+
+// Close a popover on outside click or Escape.
+const useDismiss = (ref: React.RefObject<HTMLDivElement | null>, close: () => void) => {
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [ref, close]);
 };
 
 // ═══════════════════════════════════════════
@@ -31,16 +57,29 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
+  // The badge counts every unresolved alert, not just those among the 10
+  // most recent shown in the list (which undercounted during busy periods).
+  const [unresolvedCount, setUnresolvedCount] = useState(0);
+
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('alert_events')
-      .select('*, devices(device_code, label, location_desc)')
-      .order('triggered_at', { ascending: false })
-      .limit(10);
+    const [listRes, countRes] = await Promise.all([
+      supabase
+        .from('alert_events')
+        .select('*, devices(device_code, label, location_desc)')
+        .order('triggered_at', { ascending: false })
+        .limit(10),
+      supabase
+        .from('alert_events')
+        .select('id', { count: 'exact', head: true })
+        .is('resolved_at', null),
+    ]);
 
-    if (!error && data) {
-      setAlerts(data as unknown as typeof alerts);
+    if (!listRes.error && listRes.data) {
+      setAlerts(listRes.data as unknown as typeof alerts);
+    }
+    if (!countRes.error && countRes.count !== null) {
+      setUnresolvedCount(countRes.count);
     }
     setLoading(false);
   }, []);
@@ -55,30 +94,24 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
     return () => { supabase.removeChannel(channel); };
   }, [fetchAlerts]);
 
-  // Close on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const close = useCallback(() => setIsOpen(false), []);
+  useDismiss(dropdownRef, close);
+  // Red when a fire (Tier 2) is open, amber when only warnings are.
+  const headerTone = DEVICE_STATUS[alerts.some(a => !a.resolved_at && a.alert_tier === 2) ? 'fire' : 'warning'];
 
-  const unresolvedCount = alerts.filter(a => !a.resolved_at).length;
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 shrink-0 hover:bg-white/10 rounded-md transition-colors"
-        aria-label="Notifications"
+        aria-label={unresolvedCount > 0 ? `Notifications, ${unresolvedCount} active` : 'Notifications'}
+        aria-expanded={isOpen}
       >
         <Bell className="w-5 h-5 text-white" />
         {unresolvedCount > 0 && (
-          <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-red-500 rounded-full border-2 border-[#B91C1C] flex items-center justify-center">
-            <span className="text-white text-[9px] font-bold leading-none">
+          <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] px-1 bg-white rounded-full flex items-center justify-center shadow-sm">
+            <span className="text-primary text-[10px] font-bold leading-none">
               {unresolvedCount > 9 ? '9+' : unresolvedCount}
             </span>
           </span>
@@ -86,97 +119,80 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-[#E5E2E1] z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className={POPOVER} role="dialog" aria-label="Notifications">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5E2E1] bg-[#F6F3F2]">
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-[#B91C1C]" />
-              <span className="font-bold text-sm text-[#1C1B1B]">Notifications</span>
-              {unresolvedCount > 0 && (
-                <span className="bg-[#DC2626] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                  {unresolvedCount}
-                </span>
-              )}
-            </div>
-            <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-[#E5E2E1] rounded transition-colors">
-              <X className="w-3.5 h-3.5 text-[#A1A1AA]" />
-            </button>
-          </div>
-
-          {/* Alert List */}
-          <div className="max-h-[320px] overflow-y-auto">
-            {loading ? (
-              <div className="p-6 text-center">
-                <div className="w-5 h-5 border-2 border-[#E5E2E1] border-t-[#B91C1C] rounded-full animate-spin mx-auto" />
-                <p className="text-xs text-[#A1A1AA] mt-2">Loading...</p>
-              </div>
-            ) : alerts.length === 0 ? (
-              <div className="p-8 text-center">
-                <Bell className="w-8 h-8 text-[#E5E2E1] mx-auto mb-2" />
-                <p className="text-sm font-medium text-[#5B403D]">No notifications</p>
-                <p className="text-xs text-[#A1A1AA] mt-1">You're all caught up!</p>
-              </div>
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-warm">
+            <span className="font-bold text-sm text-text">Notifications</span>
+            {unresolvedCount > 0 ? (
+              <span className={`${headerTone.badgeBg} ${headerTone.badgeText} px-2 py-0.5 rounded-full text-[11px] font-bold`}>
+                {unresolvedCount} active
+              </span>
             ) : (
-              alerts.map((alert) => {
-                const deviceInfo = alert.devices as unknown as { device_code: string; label: string; location_desc: string } | undefined;
-                const resolved = !!alert.resolved_at;
-                return (
-                  <button
-                    key={alert.id}
-                    onClick={() => {
-                      navigate(alertsPath);
-                      setIsOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-3 border-b border-[#F0EDEC] last:border-0 hover:bg-[#FCF9F8] transition-colors flex items-start gap-3 ${
-                      !resolved ? 'bg-[#FFF5F2]' : 'opacity-60'
-                    }`}
-                  >
-                    <div className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                      resolved ? 'bg-[#F0EDEC]' : alert.alert_tier === 2 ? 'bg-[#FEE2E2]' : 'bg-[#FEF3C7]'
-                    }`}>
-                      <Flame className={`w-3.5 h-3.5 ${
-                        resolved ? 'text-[#A1A1AA]' : alert.alert_tier === 2 ? 'text-[#DC2626]' : 'text-[#F59E0B]'
-                      }`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-xs font-bold ${
-                          resolved ? 'text-[#A1A1AA]' : alert.alert_tier === 2 ? 'text-[#DC2626]' : 'text-[#92400E]'
-                        }`}>
-                          {alert.alert_tier === 2 ? 'CRITICAL ALERT' : 'WARNING'}
-                        </span>
-                        <span className="text-[10px] text-[#A1A1AA] whitespace-nowrap">
-                          {timeAgo(alert.triggered_at)}
-                        </span>
-                      </div>
-                      <p className={`text-xs font-medium mt-0.5 truncate ${resolved ? 'text-[#5B403D]' : 'text-[#1C1B1B]'}`}>
-                        {deviceInfo?.device_code || 'Unknown Device'}
-                      </p>
-                      <p className="text-[10px] text-[#5B403D] mt-0.5">
-                        {alert.temp_celsius}°C · {alert.co_ppm} ppm CO
-                        {resolved && (
-                          <span className="text-[#10B981] ml-1 font-bold">· Resolved</span>
-                        )}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })
+              <span className="text-[11px] font-medium text-text-subtle">No active alerts</span>
             )}
           </div>
 
-          {/* Footer */}
+          {/* Alert list — unresolved first, then most recent */}
+          <div className="max-h-[min(360px,60vh)] overflow-y-auto thin-scroll">
+            {loading && alerts.length === 0 ? (
+              <div className="p-6 text-center">
+                <div className="w-5 h-5 border-2 border-border border-t-primary rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-text-subtle mt-2">Loading…</p>
+              </div>
+            ) : alerts.length === 0 ? (
+              <div className="p-8 text-center">
+                <Bell className="w-8 h-8 text-border mx-auto mb-2" />
+                <p className="text-sm font-medium text-text">No notifications</p>
+                <p className="text-xs text-text-subtle mt-1">You're all caught up.</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border-warm">
+                {[...alerts].sort((a, b) => Number(!!a.resolved_at) - Number(!!b.resolved_at)).map((alert) => {
+                  const deviceInfo = alert.devices as unknown as { device_code: string; label: string; location_desc: string } | undefined;
+                  const resolved = !!alert.resolved_at;
+                  // Same colors as the status badges: red fire, amber warning.
+                  const st = DEVICE_STATUS[alert.alert_tier === 2 ? 'fire' : 'warning'];
+                  return (
+                    <li key={alert.id}>
+                      <button
+                        onClick={() => { navigate(alertsPath); setIsOpen(false); }}
+                        className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-surface transition-colors ${resolved ? '' : 'bg-surface-warm/60'}`}
+                      >
+                        <span
+                          className="mt-1.5 w-2 h-2 rounded-full shrink-0"
+                          style={{ background: resolved ? '#A1A1AA' : st.color }}
+                        />
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="text-[13px] font-bold text-text">
+                              {alert.alert_tier === 2 ? 'Fire alert' : 'Warning'}
+                              <span className="font-medium text-text-subtle"> · Tier {alert.alert_tier}</span>
+                            </span>
+                            <span className="text-[11px] text-text-subtle whitespace-nowrap">{formatAge(alert.triggered_at)}</span>
+                          </span>
+                          <span className="block text-xs text-text-muted mt-0.5 truncate">
+                            <span className="font-mono font-semibold">{deviceInfo?.device_code || 'Unknown device'}</span>
+                            {deviceInfo?.label ? ` · ${deviceInfo.label}` : ''}
+                          </span>
+                          <span className="flex items-center gap-2 mt-1">
+                            <span className="text-[11px] text-text-subtle">CO {alert.co_ppm} ppm · {alert.temp_celsius}°C</span>
+                            {resolved ? (
+                              <span className={`${DEVICE_STATUS.online.badgeBg} ${DEVICE_STATUS.online.badgeText} px-1.5 py-px rounded-full text-[10px] font-bold`}>Resolved</span>
+                            ) : (
+                              <span className={`${st.badgeBg} ${st.badgeText} px-1.5 py-px rounded-full text-[10px] font-bold`}>Active</span>
+                            )}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
           {alerts.length > 0 && (
-            <button
-              onClick={() => {
-                navigate(alertsPath);
-                setIsOpen(false);
-              }}
-              className="group w-full px-4 py-3 flex items-center justify-center gap-1.5 text-xs font-bold text-[#B91C1C] bg-[#F6F3F2] border-t border-[#E5E2E1] hover:bg-[#FEE2E2] transition-colors"
-            >
-              View All Alerts
-              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-            </button>
+            <PopoverFooterLink onClick={() => { navigate(alertsPath); setIsOpen(false); }}>View all alerts</PopoverFooterLink>
           )}
         </div>
       )}
@@ -189,14 +205,22 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
 // ─── Search Bar ───
 // ═══════════════════════════════════════════
 interface HeaderSearchBarProps {
-  devicesPath: string;
+  /** Page for one picked device (e.g. System Overview filtered to it). */
+  resultPath: (device: Device) => string;
+  /** Page listing every device matching the typed text. Omit if the portal has none. */
+  allResultsPath?: (query: string) => string;
+  /** Live Map focused on the device. Omit if the portal has no map page. */
+  mapPath?: (device: Device) => string;
 }
 
-export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath }) => {
+// Device search in the top bar. Enter opens the highlighted result (the
+// first by default) instead of dropping the query on an unrelated page;
+// arrow keys move the highlight, Escape closes.
+export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ resultPath, allResultsPath, mapPath }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Device[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [highlighted, setHighlighted] = useState(0);
   const searchRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -219,7 +243,6 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
       return;
     }
 
-    setLoading(true);
     const term = searchQuery.trim();
     const { data, error } = await supabase
       .from('devices_safe')
@@ -229,9 +252,9 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
 
     if (!error && data) {
       setResults(data);
+      setHighlighted(0);
       setIsOpen(true);
     }
-    setLoading(false);
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -242,65 +265,108 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
     debounceRef.current = setTimeout(() => handleSearch(value), 300);
   };
 
+  const go = (path: string) => {
+    navigate(path);
+    setIsOpen(false);
+    setQuery('');
+    setResults([]);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && query.trim()) {
-      navigate(devicesPath);
-      setIsOpen(false);
-    }
-    if (e.key === 'Escape') {
+    if (e.key === 'ArrowDown' && results.length > 0) {
+      e.preventDefault();
+      setIsOpen(true);
+      setHighlighted(h => (h + 1) % results.length);
+    } else if (e.key === 'ArrowUp' && results.length > 0) {
+      e.preventDefault();
+      setHighlighted(h => (h - 1 + results.length) % results.length);
+    } else if (e.key === 'Enter') {
+      const pick = results[highlighted];
+      if (isOpen && pick) go(resultPath(pick));
+      else if (query.trim() && allResultsPath) go(allResultsPath(query.trim()));
+    } else if (e.key === 'Escape') {
       setIsOpen(false);
     }
   };
+
+  const listId = 'header-device-search-results';
 
   return (
     <div className="hidden md:block relative" ref={searchRef}>
       <input
         type="text"
-        placeholder="Search devices..."
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-controls={listId}
+        aria-activedescendant={isOpen && results[highlighted] ? `${listId}-${results[highlighted].id}` : undefined}
+        aria-label="Search devices"
+        placeholder="Search device ID or location…"
         value={query}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
-        onFocus={() => query.trim().length >= 2 && results.length > 0 && setIsOpen(true)}
+        onFocus={() => { if (results.length > 0) setIsOpen(true); }}
         className="bg-surface-alt rounded-md pl-9 pr-4 py-[7px] text-sm text-text placeholder-text-faint w-64 focus:outline-none focus:ring-2 focus:ring-white/30"
       />
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-[10.5px] h-[10.5px] text-text-faint" />
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-faint" />
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-[#E5E2E1] z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="px-4 py-2.5 border-b border-[#E5E2E1] bg-[#F6F3F2]">
-            <span className="text-[10px] font-bold text-[#A1A1AA] uppercase tracking-[0.1em]">
-              {loading ? 'Searching...' : `${results.length} result${results.length !== 1 ? 's' : ''} found`}
-            </span>
-          </div>
-
-          {results.length === 0 && !loading ? (
+        <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-lg border border-border shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+          {results.length === 0 ? (
             <div className="p-6 text-center">
               <Cpu className="w-6 h-6 text-[#E5E2E1] mx-auto mb-2" />
               <p className="text-xs text-[#5B403D] font-medium">No devices match "{query}"</p>
             </div>
           ) : (
-            <div className="max-h-[250px] overflow-y-auto">
-              {results.map(device => (
-                <button
-                  key={device.id}
-                  onClick={() => {
-                    navigate(devicesPath);
-                    setIsOpen(false);
-                    setQuery('');
-                  }}
-                  className="w-full text-left px-4 py-3 border-b border-[#F0EDEC] last:border-0 hover:bg-[#FCF9F8] transition-colors flex items-center gap-3"
-                >
-                  <div className="w-8 h-8 bg-[#F6F3F2] rounded flex items-center justify-center shrink-0">
-                    <Cpu className="w-4 h-4 text-[#B91C1C]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-[#1C1B1B] truncate">{device.device_code}</p>
-                    <p className="text-[10px] text-[#5B403D] truncate">{device.label} · {device.location_desc}</p>
-                  </div>
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${device.is_active ? 'bg-[#10B981]' : 'bg-[#A1A1AA]'}`} />
-                </button>
-              ))}
-            </div>
+            <ul id={listId} role="listbox" className="max-h-[300px] overflow-y-auto thin-scroll">
+              {results.map((device, i) => {
+                const connectivity: DeviceStatus = device.is_active ? getConnectivityStatus(device.last_seen_at) : 'offline';
+                const st = DEVICE_STATUS[connectivity];
+                return (
+                  <li
+                    key={device.id}
+                    id={`${listId}-${device.id}`}
+                    role="option"
+                    aria-selected={i === highlighted}
+                    onMouseEnter={() => setHighlighted(i)}
+                    className={`flex items-center border-b border-[#F0EDEC] last:border-0 ${i === highlighted ? 'bg-[#FCF9F8]' : ''}`}
+                  >
+                    <button
+                      onClick={() => go(resultPath(device))}
+                      className="flex-1 min-w-0 text-left px-4 py-3 flex items-center gap-3"
+                    >
+                      <span className="w-8 h-8 bg-[#F6F3F2] rounded flex items-center justify-center shrink-0">
+                        <Cpu className="w-4 h-4 text-primary" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-xs font-bold text-[#1C1B1B] truncate">{device.device_code}</span>
+                        <span className="block text-[10px] text-[#5B403D] truncate">{device.label} · {device.location_desc}</span>
+                      </span>
+                      {/* Connectivity only: alerts aren't loaded here. Same
+                          online rule and colors as everywhere else. */}
+                      <span title={st.label} className="w-2 h-2 rounded-full shrink-0" style={{ background: st.color }} />
+                    </button>
+                    {mapPath && (
+                      <button
+                        onClick={() => go(mapPath(device))}
+                        title="Show on map"
+                        aria-label={`Show ${device.device_code} on map`}
+                        className="p-3 text-[#A1A1AA] hover:text-primary transition-colors shrink-0"
+                      >
+                        <MapIcon className="w-4 h-4" />
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {allResultsPath && results.length > 0 && (
+            <button
+              onClick={() => go(allResultsPath(query.trim()))}
+              className="w-full px-4 py-3 border-t border-border-warm flex items-center justify-center gap-1 text-xs font-bold text-primary-dark hover:bg-surface transition-colors"
+            >
+              See all devices matching "{query.trim()}" <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
       )}
@@ -314,24 +380,18 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ devicesPath })
 // ═══════════════════════════════════════════
 interface UserMenuProps {
   settingsPath: string;
+  /** Layouts with a logout confirmation pass it here so both entry points behave the same. */
+  onSignOut?: () => void;
 }
 
-export const UserMenuDropdown: React.FC<UserMenuProps> = ({ settingsPath }) => {
+export const UserMenuDropdown: React.FC<UserMenuProps> = ({ settingsPath, onSignOut }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const close = useCallback(() => setIsOpen(false), []);
+  useDismiss(menuRef, close);
 
   const handleLogout = async () => {
     await signOut();
@@ -345,48 +405,48 @@ export const UserMenuDropdown: React.FC<UserMenuProps> = ({ settingsPath }) => {
   };
 
   return (
-    <div className="relative hidden md:block" ref={menuRef}>
+    <div className="relative shrink-0" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm hover:bg-white/30 transition-colors shrink-0"
         aria-label="User menu"
+        aria-expanded={isOpen}
       >
         {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-2xl border border-[#E5E2E1] z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          {/* User Info */}
-          <div className="px-4 py-4 border-b border-[#E5E2E1] bg-[#F6F3F2]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#B91C1C] flex items-center justify-center text-white font-bold text-lg shrink-0">
-                {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-[#1C1B1B] truncate">{profile?.full_name || 'User'}</p>
-                <p className="text-[10px] text-[#5B403D] truncate">
-                  {roleLabels[profile?.role || ''] || 'User'}
-                </p>
-              </div>
-            </div>
+        <div className={POPOVER} role="menu" aria-label="Account">
+          {/* Header — same layout as the notifications header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border-warm">
+            <span className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm shrink-0">
+              {profile?.full_name?.charAt(0).toUpperCase() || 'U'}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-text truncate">{profile?.full_name || 'User'}</span>
+              <span className="block text-[11px] text-text-subtle truncate">
+                {roleLabels[profile?.role || ''] || 'User'}
+              </span>
+            </span>
           </div>
 
-          {/* Menu Items */}
-          <div className="py-1">
+          {/* Items */}
+          <div className="divide-y divide-border-warm">
             <button
+              role="menuitem"
               onClick={() => { navigate(settingsPath); setIsOpen(false); }}
-              className="w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm text-[#1C1B1B] hover:bg-[#FCF9F8] transition-colors"
+              className="w-full text-left px-4 py-3 flex items-center gap-3 text-sm font-medium text-text hover:bg-surface transition-colors"
             >
-              <Settings className="w-4 h-4 text-[#A1A1AA]" />
-              <span className="font-medium">Settings</span>
+              <Settings className="w-4 h-4 text-text-subtle" />
+              Settings
             </button>
-            <div className="border-t border-[#F0EDEC]" />
             <button
-              onClick={handleLogout}
-              className="w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm text-[#DC2626] hover:bg-[#FEE2E2] transition-colors"
+              role="menuitem"
+              onClick={() => { setIsOpen(false); if (onSignOut) onSignOut(); else handleLogout(); }}
+              className="w-full text-left px-4 py-3 flex items-center gap-3 text-sm font-medium text-primary hover:bg-surface-warm transition-colors"
             >
               <LogOut className="w-4 h-4" />
-              <span className="font-medium">Sign Out</span>
+              Log out
             </button>
           </div>
         </div>
