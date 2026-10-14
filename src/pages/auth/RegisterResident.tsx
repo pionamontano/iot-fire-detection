@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { readFunctionError } from '../../lib/functionError';
-import { User, Mail, Phone, MapPin, Cpu, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Signpost, Building2, Map as MapIcon, Cpu, Loader2 } from 'lucide-react';
 import {
   AuthLayout, AuthAlert, Field, FormSection, PasswordField, inputClass,
   AUTH_BTN_PRIMARY, PHONE_PATTERN, PHONE_ERROR, PASSWORD_MIN,
@@ -15,7 +15,11 @@ export const RegisterResident = () => {
     password: '',
     confirmPassword: '',
     contactNumber: '',
-    address: '',
+    // Philippine address parts, joined into the single profiles.address on submit.
+    addressLine: '',
+    barangay: '',
+    cityMunicipality: 'City of Malolos',
+    province: 'Bulacan',
     deviceCode: '',
   });
 
@@ -57,7 +61,10 @@ export const RegisterResident = () => {
           email: formData.email.trim(),
           password: formData.password,
           contact_number: formData.contactNumber,
-          address: formData.address.trim(),
+          address: [formData.addressLine, formData.barangay, formData.cityMunicipality, formData.province]
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .join(', '),
           device_code: formData.deviceCode.trim(),
           requested_role: 'resident',
         }
@@ -144,27 +151,71 @@ export const RegisterResident = () => {
         </FormSection>
 
         <FormSection title="Home and device">
-          <Field
-            label="Home address"
-            icon={MapPin}
-            required
-            iconTop
-            hint="Responders use this to find your home during a fire alert."
-          >
-            {({ id, describedBy }) => (
-              <textarea
-                id={id}
-                required
-                autoComplete="street-address"
-                value={formData.address}
-                onChange={(e) => update('address')(e.target.value)}
-                aria-describedby={describedBy}
-                className={inputClass(false, 'h-auto py-3 resize-none')}
-                placeholder="House no., street, barangay, city"
-                rows={2}
-              />
-            )}
-          </Field>
+          <div className="space-y-5">
+            <Field
+              label="House/Unit no., street, subdivision"
+              icon={MapPin}
+              required
+              hint="Responders use your address to find your home during a fire alert."
+            >
+              {({ id, describedBy }) => (
+                <input
+                  id={id}
+                  type="text"
+                  required
+                  autoComplete="address-line1"
+                  value={formData.addressLine}
+                  onChange={(e) => update('addressLine')(e.target.value)}
+                  aria-describedby={describedBy}
+                  className={inputClass()}
+                  placeholder="e.g. 123 Rizal St., Villa Verde Subd."
+                />
+              )}
+            </Field>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <Field label="Barangay" icon={Signpost} required>
+                {({ id }) => (
+                  <input
+                    id={id}
+                    type="text"
+                    required
+                    autoComplete="address-level3"
+                    value={formData.barangay}
+                    onChange={(e) => update('barangay')(e.target.value)}
+                    className={inputClass()}
+                    placeholder="e.g. Sto. Rosario"
+                  />
+                )}
+              </Field>
+              <Field label="City/Municipality" icon={Building2} required>
+                {({ id }) => (
+                  <input
+                    id={id}
+                    type="text"
+                    required
+                    autoComplete="address-level2"
+                    value={formData.cityMunicipality}
+                    onChange={(e) => update('cityMunicipality')(e.target.value)}
+                    className={inputClass()}
+                  />
+                )}
+              </Field>
+              <Field label="Province" icon={MapIcon} required>
+                {({ id }) => (
+                  <input
+                    id={id}
+                    type="text"
+                    required
+                    autoComplete="address-level1"
+                    value={formData.province}
+                    onChange={(e) => update('province')(e.target.value)}
+                    className={inputClass()}
+                  />
+                )}
+              </Field>
+            </div>
+          </div>
 
           <Field
             label="Device code"
