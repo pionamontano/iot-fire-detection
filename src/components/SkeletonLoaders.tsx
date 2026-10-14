@@ -358,40 +358,46 @@ export const DeviceInfoSkeleton = () => (
 
 // ─── Alert Settings Skeleton ───
 export const AlertSettingsSkeleton = () => (
-  <div className="flex flex-col gap-8 pb-12 animate-fade-in">
+  <div className="flex flex-col gap-6 pb-12 animate-fade-in">
     {/* Header */}
     <div className="flex flex-col gap-2">
-      <Skeleton className="h-3 w-32" />
-      <Skeleton className="h-8 w-44" />
-      <Skeleton className="h-4 w-72 mt-1" />
+      <Skeleton className="h-10 w-56 rounded-md" />
+      <Skeleton className="h-4 w-full max-w-md" />
     </div>
 
-    {/* Threshold Cards */}
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {[...Array(2)].map((_, i) => (
-        <div key={i} className="bg-white border border-border rounded-lg p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <Skeleton className="h-5 w-5 rounded" />
-            <Skeleton className="h-5 w-36" />
-          </div>
-          <Skeleton className="h-3 w-full mb-3" />
-          <Skeleton className="h-10 w-full rounded-md mb-4" />
-          <Skeleton className="h-2 w-48" />
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 flex flex-col gap-6">
+        {/* Alert Levels */}
+        <div className="bg-white border border-border rounded-lg p-5 sm:p-6">
+          <Skeleton className="h-5 w-32 mb-2" />
+          <Skeleton className="h-3 w-72 max-w-full mb-8" />
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="flex flex-col gap-3 mb-8">
+              <div className="flex justify-between"><Skeleton className="h-4 w-36" /><Skeleton className="h-7 w-20" /></div>
+              <Skeleton className="h-2 w-full rounded-full" />
+            </div>
+          ))}
+          <Skeleton className="h-10 w-44 rounded-lg" />
         </div>
-      ))}
-    </div>
-
-    {/* Contact */}
-    <div className="bg-white border border-border rounded-lg p-6">
-      <Skeleton className="h-5 w-44 mb-4" />
-      <Skeleton className="h-11 w-full rounded-md mb-3" />
-      <Skeleton className="h-3 w-56" />
-    </div>
-
-    {/* Buttons */}
-    <div className="flex gap-3">
-      <Skeleton className="h-11 flex-1 rounded-lg" />
-      <Skeleton className="h-11 w-24 rounded-lg" />
+        {/* Where Alerts Are Sent */}
+        <div className="bg-white border border-border rounded-lg p-5 sm:p-6">
+          <Skeleton className="h-5 w-48 mb-2" />
+          <Skeleton className="h-3 w-80 max-w-full mb-6" />
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex justify-between items-start py-4">
+              <div className="flex flex-col gap-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-56" /></div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="lg:col-span-1">
+        <div className="bg-white border border-border rounded-lg p-5 sm:p-6">
+          <Skeleton className="h-4 w-48 mb-2" />
+          <Skeleton className="h-3 w-full mb-4" />
+          <Skeleton className="h-3 w-36" />
+        </div>
+      </div>
     </div>
   </div>
 );

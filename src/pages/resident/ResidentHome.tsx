@@ -16,8 +16,10 @@ import { resolveDeviceLocation, displayAddress, isValidCoordinate } from '../../
 import { DEVICE_STATUS, getConnectivityStatus, getDeviceStatus, formatAgo } from '../../lib/deviceStatus';
 import type { DeviceStatus } from '../../lib/deviceStatus';
 import { formatEventTime } from '../../lib/alertText';
-import { getPushSubscription } from '../../lib/pushNotifications';
+import { getPushState } from '../../lib/pushNotifications';
+import type { PushState } from '../../lib/pushNotifications';
 import { LocationBadge } from '../../components/LocationBadge';
+import { AlertStatusPill } from '../../components/StatusBadge';
 import { EMERGENCY_CONTACTS, telHref } from '../../lib/emergencyContacts';
 
 // The resident's home page, in the order a resident asks: is my home OK right
@@ -72,15 +74,6 @@ const INCIDENT_STEP: Record<string, string> = {
   active: 'Waiting for a responder',
   acknowledged: 'A responder has acknowledged',
   responding: 'Responders are on the way',
-};
-
-// Status pill for an alert row: open alerts show the responder step, closed ones how they ended.
-const alertStatusPill = (a: AlertEvent): { label: string; className: string } => {
-  if (a.incident_status === 'false_alarm') return { label: 'False alarm', className: 'bg-surface-cream text-text-body' };
-  if (a.resolved_at) return { label: 'Resolved', className: 'bg-surface-cream text-text-body' };
-  if (a.incident_status === 'responding') return { label: 'Responding', className: 'bg-primary text-white' };
-  if (a.incident_status === 'acknowledged') return { label: 'Acknowledged', className: 'bg-primary text-white' };
-  return { label: 'Active', className: 'bg-primary text-white' };
 };
 
 // The one panel that answers "is my home OK?". Colors follow the shared
@@ -219,22 +212,6 @@ const StatusRow = ({ icon: Icon, label, detail, status, tone }: {
   </li>
 );
 
-type PushState = 'checking' | 'on' | 'off' | 'unavailable';
-
-// Push is per browser. navigator.serviceWorker.ready never settles when no
-// worker is registered, so give up after a few seconds instead of hanging.
-const checkPush = async (): Promise<PushState> => {
-  if (!('serviceWorker' in navigator && 'PushManager' in window)) return 'unavailable';
-  const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 4000));
-  try {
-    const sub = await Promise.race([getPushSubscription(), timeout]);
-    if (sub === 'timeout') return 'unavailable';
-    return sub ? 'on' : 'off';
-  } catch {
-    return 'unavailable';
-  }
-};
-
 type Metric = 'temp' | 'co';
 
 // Bar chart of the last readings for one metric, with the alert threshold as
@@ -328,7 +305,7 @@ export const ResidentHome = () => {
   const [recentAlerts, setRecentAlerts] = useState<AlertEvent[]>([]);
   const [openAlerts, setOpenAlerts] = useState<AlertEvent[]>([]);
   const [alertsInWindow, setAlertsInWindow] = useState(0);
-  const [pushState, setPushState] = useState<PushState>('checking');
+  const [pushState, setPushState] = useState<PushState | 'checking'>('checking');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
@@ -376,7 +353,7 @@ export const ResidentHome = () => {
   }, []);
 
   useEffect(() => {
-    checkPush().then(setPushState);
+    getPushState().then(setPushState);
   }, []);
 
   useEffect(() => {
@@ -808,7 +785,6 @@ export const ResidentHome = () => {
                       No alerts yet. Your device hasn't raised any.
                     </TableEmpty>
                   ) : recentAlerts.map(alert => {
-                    const pill = alertStatusPill(alert);
                     return (
                       <tr key={alert.id} className={TR}>
                         <td className={TD}>
@@ -821,9 +797,7 @@ export const ResidentHome = () => {
                             </span>
                           </div>
                         </td>
-                        <td className={TD}>
-                          <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase whitespace-nowrap ${pill.className}`}>{pill.label}</span>
-                        </td>
+                        <td className={TD}><AlertStatusPill alert={alert} /></td>
                         <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>{formatEventTime(alert.triggered_at, now)}</td>
                         <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.temp_celsius?.toFixed(1)}°C</td>
                         <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.co_ppm?.toFixed(0)} ppm</td>

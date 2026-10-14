@@ -167,22 +167,26 @@ Your home screen answers "is my home OK?" first, then shows the details:
 
 ### 6.3 Alert History
 
-Every alert and warning your device has raised, newest first. Each row shows the **tier** (*Tier 1 Warning* or *Tier 2 Alert*), whether it is **Active** or **Resolved**, when it was **triggered**, the **temperature** and **CO** readings at that moment, which **notifications** went out (*SMS* to you, *BFP* for the fire station, *TG* for Telegram), and when it was **resolved**.
+Every alert and warning your device has raised, newest first. Each row shows the **tier** (*Tier 1 Warning* or *Tier 2 Alert*), its status (*Active*, *Acknowledged* or *Responding* while open; *Resolved* or *False alarm* once closed), when it was **triggered**, the **temperature** and **CO** readings at that moment, which **notifications** went out (*SMS* to you, *BFP* for the fire station, *TG* for Telegram), and when it was **resolved**.
 
 To narrow the list, pick a **From** and **To** date (the last 30 days by default), a **Tier**, or one of **All / Active / Resolved** (each shows how many alerts it has). **Active alerts always show at the top, whatever dates you pick**, until they are resolved; the dates only limit the resolved ones. If an active alert is older than your From date, a red note under the filters says so. Ten alerts show per page; use the arrows at the bottom of the table to see more. Press **Refresh** to load new alerts. **View all alerts** in the notification bell also opens this page.
 
 ### 6.4 Alert Settings
 
-Here you control **when** the device alerts and **how** you are notified.
+Here you control **when** the device alerts and **where** alerts are sent.
 
-- **Temperature Threshold** (°C): the temperature at which the heat sensor counts as "over limit".
-- **CO Threshold** (ppm): the carbon monoxide level at which the gas sensor counts as "over limit". CO readings are approximate: the MQ-7 gas sensor estimates ppm from its datasheet curve rather than measuring it exactly, so treat the number as an alert level, not a precise measurement.
-- **Primary SMS Recipient**: the mobile number that receives Tier 2 SMS alerts (`09XXXXXXXXX`).
-- **Web Push Alerts**: press **Enable Push Notifications** and allow notifications in your browser to get alerts on that device. Press **Disable Push Notifications** to stop them.
-- **Telegram Alerts**: press **Link Telegram Account** and follow the prompt to link your Telegram. *(Currently, Telegram fire alerts are sent to the shared BFP station chat; personal Telegram alerts are not yet delivered by the system.)*
-- **Current Configuration Summary** shows what is active. A banner says **Unsaved Changes** until you press save, then **All Settings Synced**.
+**Alert Levels** (saved together with **Save alert levels**; **Undo changes** puts the saved values back):
+- **Temperature** (°C): the temperature at which the heat sensor counts as "over limit".
+- **Carbon Monoxide (CO)** (ppm): the CO level at which the gas sensor counts as "over limit". CO readings are approximate: the MQ-7 gas sensor estimates ppm from its datasheet curve rather than measuring it exactly, so treat the number as an alert level, not a precise measurement.
 
-**Choosing thresholds.** Use the **Need threshold advice?** guide in the app. Typical suggestions:
+One reading over its level raises a **warning**; both together raise a **fire alert**.
+
+**Where Alerts Are Sent** (each one applies on its own). You receive **fire alerts (Tier 2)** on each channel turned on here; warnings (Tier 1) show on your Dashboard.
+- **SMS**: the mobile number (`09XXXXXXXXX`) your device texts. It is sent by the device itself over the mobile network, so it works even without internet. Press **Save number**.
+- **Push notifications**: press **Turn on** and allow notifications to get alerts in that browser, even when AgapSense isn't open. Turn it on in each browser you use. *Unavailable* means the browser doesn't support it or notifications are blocked.
+- **Telegram**: press **Link Telegram** and follow the prompt. Fire alerts are then also sent to your Telegram through the AgapSense bot.
+
+**Choosing levels.** Use **Suggested levels by room** in the app. Typical suggestions:
 
 | Room | Temperature | Gas (PPM) | Notes |
 |---|---|---|---|
@@ -198,18 +202,22 @@ The device picks up new settings automatically within about **10 minutes**.
 
 ### 6.5 Device Information
 
-Shows your device's details: name, **Location** (use the pencil icon, or **Set pin** / **Move pin** under the map, to change the address and map pin), temperature and CO thresholds, **Last Seen**, **Recent Sensor Readings** (table with time and values), a **map** with the status of your install pin (*not set*, *waiting for confirmation* or *confirmed*), and device specs. Any change you make to the address or pin goes back to an administrator to confirm. If you see *"No device registered to your account"*, your device is not linked yet — contact your administrator.
+Shows your device: its **status** (Online, Reconnecting, Offline, or Disabled if an administrator switched it off), **last report**, **alert levels** (with a link to change them), **firmware** version, registration date, and whether a **BFP SMS** number has been set by an administrator. **Recent Readings** lists the latest readings with time, temperature, CO, GPS fix, power and sensor state; values at or over an alert level are red.
+
+**Install Location** shows the address on file, a map, where the position comes from, and the status of your install pin (*not set*, *waiting for confirmation* or *confirmed by an administrator*). Use **Set address and pin** / **Edit address or move pin** to change it; any change goes back to an administrator to confirm. If no device is linked yet, the page sends you to the Dashboard to link one with its device code.
 
 ### 6.6 Account
 
-Update your **Full Name** and **Contact Number**. The page also shows your role, assigned unit and registration date. Use **Logout** from the menu when you are done, especially on shared devices.
+Update your **Full name**. Your **mobile number** is shown here and changed in **Alert Settings** (it is where fire alert SMS go); your **email** is used to sign in and is changed by an administrator. The page also shows your role, linked device and member-since date.
+
+**Need Help?** → **Contact administrator** sends a request. Residents choose **Device Link or Change**, **Password Reset**, **Account Access / Permissions** or **Other**. **My Requests** lists what you sent, whether it is still waiting, and the administrator's reply. Use **Logout** from the menu when you are done, especially on shared devices.
 
 ### 6.7 What you will receive in a fire (resident)
 
 | Event | You receive |
 |---|---|
 | Tier 1 warning | Nothing is sent to you by SMS. Check your Dashboard; the device's yellow LED lights |
-| Tier 2 fire alert | Red LED and buzzer at the device, **SMS to your mobile number** with evacuation instructions and a map link, and a **push notification** if enabled |
+| Tier 2 fire alert | Red LED and buzzer at the device, **SMS to your mobile number** with evacuation instructions and a map link, a **push notification** if enabled, and a **Telegram** message if linked |
 
 **If you hear the alarm or receive the SMS: leave immediately, close doors behind you, call 911, and do not return until BFP says it is safe.**
 
@@ -326,7 +334,7 @@ Some figures on the app (for example "System Uptime", responder "connectivity %"
 
 **Who can see my data?** Residents see only their own device. Responders and administrators see devices across the system.
 
-**How do I change my phone number?** Resident: **Account** or **Alert Settings**. Responder: **Settings → Personal Profile**.
+**How do I change my phone number?** Resident: **Alert Settings → Where Alerts Are Sent → SMS**. Responder: **Settings → Personal Profile**.
 
 **Is the setup Wi-Fi 5 GHz?** No. The device supports **2.4 GHz** only.
 

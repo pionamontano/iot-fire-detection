@@ -128,3 +128,22 @@ export const getPushSubscription = async () => {
   const registration = await navigator.serviceWorker.ready;
   return await registration.pushManager.getSubscription();
 };
+
+export type PushState = 'on' | 'off' | 'unavailable';
+
+/**
+ * Whether this browser is subscribed to push. navigator.serviceWorker.ready never
+ * settles when no worker is registered, so give up after a few seconds instead of
+ * leaving a "Checking..." label forever.
+ */
+export const getPushState = async (timeoutMs = 4000): Promise<PushState> => {
+  if (!('serviceWorker' in navigator && 'PushManager' in window)) return 'unavailable';
+  const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), timeoutMs));
+  try {
+    const sub = await Promise.race([getPushSubscription(), timeout]);
+    if (sub === 'timeout') return 'unavailable';
+    return sub ? 'on' : 'off';
+  } catch {
+    return 'unavailable';
+  }
+};

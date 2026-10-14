@@ -78,6 +78,7 @@ export const ResidentLayout = () => {
                 <NavLink
                   key={item.name}
                   to={item.path}
+                  onClick={() => setIsSidebarOpen(false)}
                   className={`
                     flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium
                     ${isActive 
@@ -100,7 +101,7 @@ export const ResidentLayout = () => {
               className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${isActive ? 'bg-tier2-bg text-primary font-bold' : 'text-text-body hover:bg-surface-alt font-medium'}`}
             >
               <Settings size={18} />
-              Settings
+              Account
             </NavLink>
           </div>
         </aside>

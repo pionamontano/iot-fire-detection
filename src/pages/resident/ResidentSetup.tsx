@@ -104,7 +104,7 @@ export const ResidentSetup = () => {
                 Set up your alert contact
               </h2>
               <p className="text-text-body text-sm leading-5">
-                Bantay Apoy sends SMS alerts directly to your phone during a fire event. Enter the mobile number you want to receive these alerts on.
+                During a fire alert, your AgapSense device texts this number directly. Enter the mobile number you want those alerts on.
               </p>
             </>
           ) : (
@@ -122,10 +122,10 @@ export const ResidentSetup = () => {
         <div className="bg-white p-8 rounded-xl shadow-[0_24px_48px_rgba(0,0,0,0.08)] border border-border">
           {success ? (
             <div className="flex flex-col items-center justify-center gap-4 py-8">
-              <div className="w-16 h-16 bg-teal-light/10 rounded-full flex items-center justify-center">
-                <CheckCircle2 className="w-8 h-8 text-teal-light" />
+              <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-success-dark" />
               </div>
-              <p className="text-teal-light font-bold text-center">
+              <p className="text-success-dark font-bold text-center">
                 Setup saved. Taking you to your dashboard...
               </p>
             </div>
@@ -143,7 +143,7 @@ export const ResidentSetup = () => {
                 onClick={finish}
                 className="text-text-body text-xs font-bold uppercase tracking-[0.1em] hover:underline"
               >
-                Skip for now — set it later in Device Info
+                Skip for now — set it later in Device Information
               </button>
             </div>
           ) : (

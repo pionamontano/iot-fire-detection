@@ -27,3 +27,13 @@ test('formatEventTime: Today / Yesterday / date prefix', () => {
   assert.match(formatEventTime(new Date(2026, 9, 11, 22, 0).toISOString(), now), /^Yesterday, /);
   assert.doesNotMatch(formatEventTime(new Date(2026, 9, 3, 10, 0).toISOString(), now), /^(Today|Yesterday)/);
 });
+
+test('alertStatus: open alerts show the responder step, closed ones how they ended', async () => {
+  const { alertStatus } = await import('../src/lib/alertText.ts');
+  assert.deepEqual(alertStatus({ resolved_at: null, incident_status: 'active' }), { label: 'Active', open: true });
+  assert.deepEqual(alertStatus({ resolved_at: null }), { label: 'Active', open: true });
+  assert.deepEqual(alertStatus({ resolved_at: null, incident_status: 'acknowledged' }), { label: 'Acknowledged', open: true });
+  assert.deepEqual(alertStatus({ resolved_at: null, incident_status: 'responding' }), { label: 'Responding', open: true });
+  assert.deepEqual(alertStatus({ resolved_at: '2026-10-12T00:00:00Z', incident_status: 'resolved' }), { label: 'Resolved', open: false });
+  assert.deepEqual(alertStatus({ resolved_at: '2026-10-12T00:00:00Z', incident_status: 'false_alarm' }), { label: 'False alarm', open: false });
+});

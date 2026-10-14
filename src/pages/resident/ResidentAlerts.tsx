@@ -6,6 +6,8 @@ import { Filter, FileText, Flame, RefreshCw, ThermometerSun } from 'lucide-react
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
 import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { usePagedRows } from '../../hooks/usePagedRows';
+import { AlertStatusPill } from '../../components/StatusBadge';
+import { formatEventTime } from '../../lib/alertText';
 import { PageHeader } from '../../components/PageHeader';
 import { BTN_SECONDARY } from '../../components/ui';
 
@@ -233,12 +235,8 @@ export const ResidentAlerts = () => {
                     </div>
                     <span className="text-[9px] text-text-faint font-mono ml-6">{alert.id.substring(0, 8)}</span>
                   </td>
-                  <td className={TD}>
-                    <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${alert.resolved_at ? 'bg-surface-cream text-text-body' : 'bg-primary text-white'}`}>
-                      {alert.resolved_at ? 'Resolved' : 'Active'}
-                    </span>
-                  </td>
-                  <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>{new Date(alert.triggered_at).toLocaleString()}</td>
+                  <td className={TD}><AlertStatusPill alert={alert} /></td>
+                  <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>{formatEventTime(alert.triggered_at)}</td>
                   <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.temp_celsius?.toFixed(1)}°C</td>
                   <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.co_ppm?.toFixed(0)} ppm</td>
                   <td className={TD}>
@@ -250,7 +248,7 @@ export const ResidentAlerts = () => {
                     </div>
                   </td>
                   <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>
-                    {alert.resolved_at ? new Date(alert.resolved_at).toLocaleString() : '—'}
+                    {alert.resolved_at ? formatEventTime(alert.resolved_at) : '—'}
                   </td>
                 </tr>
               ))}

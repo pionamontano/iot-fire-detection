@@ -42,3 +42,18 @@ export const formatEventTime = (iso: string, now: number = Date.now()): string =
   if (dayDiff === 1) return `Yesterday, ${time}`;
   return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
 };
+
+/**
+ * One status word for an alert row, the same on the Dashboard and Alert History:
+ * open alerts show how far responders have got, closed ones how they ended.
+ */
+export const alertStatus = (alert: {
+  resolved_at?: string | null;
+  incident_status?: string | null;
+}): { label: string; open: boolean } => {
+  if (alert.incident_status === 'false_alarm') return { label: 'False alarm', open: false };
+  if (alert.resolved_at) return { label: 'Resolved', open: false };
+  if (alert.incident_status === 'responding') return { label: 'Responding', open: true };
+  if (alert.incident_status === 'acknowledged') return { label: 'Acknowledged', open: true };
+  return { label: 'Active', open: true };
+};

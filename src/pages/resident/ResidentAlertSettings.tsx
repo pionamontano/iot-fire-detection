@@ -2,56 +2,144 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Device } from '../../lib/supabase';
-import { Thermometer, Wind, MessageSquare, CheckCircle2, HelpCircle, AlertTriangle, Save, Send, X } from 'lucide-react';
+import { Thermometer, Wind, HelpCircle, AlertTriangle, Save, Send, X, Phone, Bell, BellOff, ArrowRight } from 'lucide-react';
 import { AlertSettingsSkeleton } from '../../components/SkeletonLoaders';
 import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll } from '../../components/Table';
-import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushState, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
+import type { PushState } from '../../lib/pushNotifications';
 import { startTelegramLink } from '../../lib/telegramLink';
-import { Bell, BellOff } from 'lucide-react';
-import { displayAddress } from '../../lib/location';
 import { PageHeader } from '../../components/PageHeader';
+import { BTN_PRIMARY, BTN_SECONDARY, PILL_OK, PILL_WARN, PILL_OFF } from '../../components/ui';
+import { PHONE_PATTERN, PHONE_ERROR, normalizePhone } from '../../lib/phone';
+import { NoDeviceLinked } from '../../components/NoDeviceLinked';
 
+// Two independent parts: the alert levels (saved together with one Save) and
+// where alerts are sent (SMS number, push and Telegram, each applied on its own).
+// Residents receive fire alerts (Tier 2); warnings (Tier 1) only show in the app.
+
+const CARD = 'bg-white border border-border rounded-lg p-5 sm:p-6';
+const CARD_TITLE = 'text-lg font-bold tracking-[-0.01em] text-text';
+
+// One alert level: label, value, slider, scale and any warning, with a real <label>.
+const LevelSlider = ({ id, icon: Icon, label, value, original, unit, min, max, step, onChange, warning, children }: {
+  id: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  original: number;
+  unit: string;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+  warning: string | null;
+  children?: React.ReactNode;
+}) => (
+  <div className="flex flex-col gap-3">
+    <div className="flex justify-between items-end gap-3">
+      <label htmlFor={id} className="inline-flex items-center gap-2 text-sm font-bold text-text">
+        <Icon className="w-4 h-4 text-text-body" /> {label}
+      </label>
+      <span className={`text-[28px] leading-8 font-extrabold tracking-[-0.03em] tabular-nums ${value !== original ? 'text-[#B45309]' : 'text-text'}`}>
+        {value} <span className="text-sm font-bold text-text-body">{unit}</span>
+      </span>
+    </div>
+    <input
+      id={id}
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="w-full h-2 bg-surface-cream rounded-lg appearance-none cursor-pointer accent-primary"
+    />
+    <div className="flex justify-between text-[11px] font-semibold text-text-faint tabular-nums">
+      <span>{min} {unit}</span>
+      {value !== original && <span className="text-[#B45309]">Saved: {original} {unit}</span>}
+      <span>{max} {unit}</span>
+    </div>
+    {warning && (
+      <p className="flex items-center gap-2 text-xs font-semibold text-[#B45309]">
+        <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {warning}
+      </p>
+    )}
+    {children}
+  </div>
+);
+
+// A row in "Where alerts are sent": what it is, whether it's on, and its control.
+const ChannelRow = ({ icon: Icon, title, detail, status, tone, children }: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  detail: string;
+  status: string;
+  tone: 'ok' | 'warn' | 'none';
+  children?: React.ReactNode;
+}) => (
+  <li className="py-5 first:pt-0 last:pb-0 flex flex-col gap-3">
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex gap-3 min-w-0">
+        <Icon className="w-4 h-4 mt-0.5 text-text-body shrink-0" />
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-text">{title}</p>
+          <p className="text-xs text-text-subtle mt-0.5">{detail}</p>
+        </div>
+      </div>
+      <span className={`${tone === 'ok' ? PILL_OK : tone === 'warn' ? PILL_WARN : PILL_OFF} shrink-0`}>{status}</span>
+    </div>
+    {children && <div className="pl-7">{children}</div>}
+  </li>
+);
 
 export const ResidentAlertSettings = () => {
   const { profile } = useAuth();
   const [device, setDevice] = useState<Device | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [hasChanges, setHasChanges] = useState(false);
-  const [contactError, setContactError] = useState('');
 
-  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
-  const [pushLoading, setPushLoading] = useState(true);
-
-
-  // Form State
+  // Alert levels
   const [tempThreshold, setTempThreshold] = useState(55);
   const [coThreshold, setCoThreshold] = useState(300);
-  const [contactNumber, setContactNumber] = useState('');
-  
-  // Original values (to track changes)
   const [origTemp, setOrigTemp] = useState(55);
   const [origCo, setOrigCo] = useState(300);
+  const [savingLevels, setSavingLevels] = useState(false);
+  const [levelsMsg, setLevelsMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // SMS number (profiles.contact_number: the number trigger-alert returns as owner_contact)
+  const [contactNumber, setContactNumber] = useState('');
   const [origContact, setOrigContact] = useState('');
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactMsg, setContactMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Push and Telegram
+  const [pushState, setPushState] = useState<PushState | 'checking'>('checking');
+  const [pushBusy, setPushBusy] = useState(false);
+  const [channelError, setChannelError] = useState('');
 
   const [isAdviceModalOpen, setIsAdviceModalOpen] = useState(false);
 
+  // Keyed on the device id, not the whole profile: the profile refreshes in the
+  // background (AuthContext), and reloading here would wipe unsaved slider changes.
+  const deviceId = profile?.device_id;
+  const profileLoaded = !!profile;
   useEffect(() => {
-    if (profile?.device_id) {
-      fetchDevice(profile.device_id);
-      getPushSubscription().then(sub => {
-        setIsPushSubscribed(!!sub);
-        setPushLoading(false);
-      });
-
-    } else if (profile) {
+    if (deviceId) {
+      fetchDevice(deviceId);
+      getPushState().then(setPushState);
+    } else if (profileLoaded) {
       setLoading(false);
     }
-  }, [profile]);
+  }, [deviceId, profileLoaded]);
 
-  // Track changes
+  // The SMS number is profiles.contact_number (the number trigger-alert returns as
+  // owner_contact) - not devices.bfp_contact, the fire station's number for the
+  // technical BFP SMS. This page once wrote bfp_contact by mistake.
+  const savedNumber = profile?.contact_number || '';
+  useEffect(() => {
+    setContactNumber(savedNumber);
+    setOrigContact(savedNumber);
+  }, [savedNumber]);
+
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setIsAdviceModalOpen(false);
@@ -61,50 +149,6 @@ export const ResidentAlertSettings = () => {
     }
     return () => window.removeEventListener('keydown', handleEsc);
   }, [isAdviceModalOpen]);
-
-  useEffect(() => {
-    setHasChanges(
-      tempThreshold !== origTemp || 
-      coThreshold !== origCo || 
-      contactNumber !== origContact
-    );
-  }, [tempThreshold, coThreshold, contactNumber, origTemp, origCo, origContact]);
-
-
-
-  const handleTogglePush = async () => {
-    setPushLoading(true);
-    try {
-      if (isPushSubscribed) {
-        await unsubscribeUserFromPush();
-        setIsPushSubscribed(false);
-      } else {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-          await subscribeUserToPush();
-          setIsPushSubscribed(true);
-        } else {
-          setErrorMsg('Notification permission denied by browser.');
-          setTimeout(() => setErrorMsg(''), 5000);
-        }
-      }
-    } catch (e: any) {
-      console.error(e);
-      setErrorMsg(describePushError(e, await isBraveBrowser()));
-      setTimeout(() => setErrorMsg(''), 5000);
-    } finally {
-      setPushLoading(false);
-    }
-  };
-
-const handleConnectTelegram = async () => {
-    if (!profile) return;
-    const message = await startTelegramLink();
-    if (message) {
-      setErrorMsg(message);
-      setTimeout(() => setErrorMsg(''), 5000);
-    }
-  };
 
   const fetchDevice = async (deviceId: string) => {
     try {
@@ -117,16 +161,6 @@ const handleConnectTelegram = async () => {
         setOrigCo(data.co_threshold || 300);
       }
       if (error) console.error(error);
-      // The number that actually receives the resident's own evacuation
-      // SMS is profiles.contact_number (see trigger-alert's owner_contact
-      // lookup) - not devices.bfp_contact, which is the fire station's
-      // own contact number used for the technical BFP dispatch SMS. This
-      // page used to read/write bfp_contact by mistake, which meant
-      // "saving your SMS recipient" here would have overwritten the
-      // number the fire department gets alerted on for this device.
-      const contact = profile?.contact_number || '';
-      setContactNumber(contact);
-      setOrigContact(contact);
     } catch (e) {
       console.error(e);
     } finally {
@@ -134,360 +168,241 @@ const handleConnectTelegram = async () => {
     }
   };
 
-  const handleSave = async () => {
-    if (!device || !profile) return;
+  const levelsChanged = tempThreshold !== origTemp || coThreshold !== origCo;
 
-    // Validate contact number format if provided
-    const phoneRegex = /^(09\d{9})$/;
-    if (contactNumber && !phoneRegex.test(contactNumber)) {
-      setContactError('Enter a valid Philippine mobile number (e.g. 09171234567).');
-      return;
-    }
-    setContactError('');
-    setSaving(true);
-    setSuccessMsg('');
-    setErrorMsg('');
-    try {
-      // Thresholds go through a narrow RPC (residents have no direct
-      // UPDATE grant on devices - see 20260917080000_resident_alert_
-      // threshold_rpc.sql) that only ever touches temp_threshold/
-      // co_threshold on the caller's own device.
-      const { error: thresholdError } = await supabase.rpc('update_own_device_alert_settings', {
-        p_temp_threshold: tempThreshold,
-        p_co_threshold: coThreshold,
-      });
-      if (thresholdError) throw thresholdError;
-
-      // The resident's own contact number lives on their profile, not
-      // on the device - already covered by the existing "Users can
-      // update own profile" RLS policy.
-      if (contactNumber !== origContact) {
-        const { error: contactUpdateError } = await supabase
-          .from('profiles')
-          .update({ contact_number: contactNumber || null })
-          .eq('id', profile.id);
-        if (contactUpdateError) throw contactUpdateError;
-      }
-
-      // Update originals so hasChanges resets
+  const handleSaveLevels = async () => {
+    setSavingLevels(true);
+    setLevelsMsg(null);
+    // Thresholds go through a narrow RPC (residents have no direct
+    // UPDATE grant on devices - see 20260917080000_resident_alert_
+    // threshold_rpc.sql) that only ever touches temp_threshold/
+    // co_threshold on the caller's own device.
+    const { error } = await supabase.rpc('update_own_device_alert_settings', {
+      p_temp_threshold: tempThreshold,
+      p_co_threshold: coThreshold,
+    });
+    if (error) {
+      console.error(error);
+      setLevelsMsg({ ok: false, text: `Couldn't save: ${error.message}` });
+    } else {
       setOrigTemp(tempThreshold);
       setOrigCo(coThreshold);
-      setOrigContact(contactNumber);
-      setSuccessMsg('Settings saved successfully!');
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (e: any) {
+      setLevelsMsg({ ok: true, text: 'Saved. The device picks up new levels within 10 minutes.' });
+    }
+    setSavingLevels(false);
+  };
+
+  const handleSaveContact = async () => {
+    if (!profile) return;
+    const normalized = contactNumber.trim() ? normalizePhone(contactNumber) : '';
+    if (normalized && !PHONE_PATTERN.test(normalized)) {
+      setContactMsg({ ok: false, text: PHONE_ERROR });
+      return;
+    }
+    setSavingContact(true);
+    setContactMsg(null);
+    // The resident's own contact number lives on their profile, not on the
+    // device - covered by the existing "Users can update own profile" RLS policy.
+    const { error } = await supabase.from('profiles').update({ contact_number: normalized || null }).eq('id', profile.id);
+    if (error) {
+      console.error(error);
+      setContactMsg({ ok: false, text: `Couldn't save: ${error.message}` });
+    } else {
+      setContactNumber(normalized);
+      setOrigContact(normalized);
+      setContactMsg({ ok: true, text: normalized ? 'Saved.' : 'Removed. You will get no SMS alerts.' });
+    }
+    setSavingContact(false);
+  };
+
+  const handleTogglePush = async () => {
+    setPushBusy(true);
+    setChannelError('');
+    try {
+      if (pushState === 'on') {
+        await unsubscribeUserFromPush();
+        setPushState('off');
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          await subscribeUserToPush();
+          setPushState('on');
+        } else {
+          setChannelError('Notifications are blocked for this site in your browser settings.');
+        }
+      }
+    } catch (e: unknown) {
       console.error(e);
-      setErrorMsg('Failed to save: ' + (e.message || 'Unknown error'));
-      setTimeout(() => setErrorMsg(''), 5000);
+      setChannelError(describePushError(e, await isBraveBrowser()));
     } finally {
-      setSaving(false);
+      setPushBusy(false);
     }
   };
 
-  const handleReset = () => {
-    setTempThreshold(origTemp);
-    setCoThreshold(origCo);
-    setContactNumber(origContact);
+  const handleConnectTelegram = async () => {
+    if (!profile) return;
+    setChannelError('');
+    const message = await startTelegramLink();
+    if (message) setChannelError(message);
   };
 
   if (loading) return <AlertSettingsSkeleton />;
-  if (!device) return <div className="p-8 font-bold text-primary">No device registered to your account.</div>;
+  if (!device) return <NoDeviceLinked />;
 
   // Threshold safety warnings
-  const tempWarning = tempThreshold < 40 ? 'Very low — may cause frequent false alarms' : tempThreshold > 80 ? 'Dangerously high — fire may go undetected' : null;
+  const tempWarning = tempThreshold < 40 ? 'Very low — may cause frequent false alarms' : tempThreshold > 80 ? 'Very high — a fire may go undetected' : null;
   const coWarning = coThreshold < 100 ? 'Very sensitive — expect frequent alerts' : coThreshold > 800 ? 'Very high — a fire may go undetected' : null;
 
+  const savedContact = !!origContact;
+
   return (
-    <div className="flex flex-col gap-8 pb-12">
+    <div className="flex flex-col gap-6 pb-12">
       <PageHeader
         title="Alert Settings"
         description="Choose the temperature and carbon monoxide (CO) levels that trigger an alert, and where alerts are sent."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Settings Form (2/3) */}
-        <div className="lg:col-span-2 bg-surface border border-border rounded-lg p-8">
-          
-          <div className="flex flex-col gap-10">
-            {/* Temp Threshold */}
-            <div className="flex flex-col gap-4">
-              <div className="flex justify-between items-end">
-                <span className="text-[10px] font-bold tracking-widest uppercase text-text-body">Temperature</span>
-                <span className={`text-3xl font-black tracking-tighter ${tempThreshold !== origTemp ? 'text-amber-light' : 'text-primary'}`}>{tempThreshold}°C</span>
-              </div>
-              <div>
-                <span className="text-sm font-bold text-text block mb-4">Temperature Threshold</span>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  value={tempThreshold} 
-                  onChange={(e) => setTempThreshold(Number(e.target.value))}
-                  className="w-full h-2 bg-surface-cream rounded-lg appearance-none cursor-pointer accent-primary"
-                />
-                <div className="flex justify-between text-[10px] font-bold text-text-faint uppercase mt-2">
-                  <span>0°C</span>
-                  <span>100°C</span>
-                </div>
-                {tempWarning && (
-                  <div className="flex items-center gap-2 mt-3 text-amber-light">
-                    <AlertTriangle size={14} />
-                    <span className="text-[10px] font-bold">{tempWarning}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+        <div className="lg:col-span-2 flex flex-col gap-6 min-w-0">
 
-            {/* CO Threshold */}
-            <div className="flex flex-col gap-4">
-              <div className="flex justify-between items-end">
-                <span className="text-[10px] font-bold tracking-widest uppercase text-text-body">Carbon Monoxide (CO)</span>
-                <span className={`text-3xl font-black tracking-tighter ${coThreshold !== origCo ? 'text-amber-light' : 'text-primary'}`}>{coThreshold} ppm</span>
-              </div>
-              <div>
-                <span className="text-sm font-bold text-text block mb-4">CO Threshold</span>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="1000" 
-                  step="10"
-                  value={coThreshold} 
-                  onChange={(e) => setCoThreshold(Number(e.target.value))}
-                  className="w-full h-2 bg-surface-cream rounded-lg appearance-none cursor-pointer accent-primary"
-                />
-                <div className="flex justify-between text-[10px] font-bold text-text-faint uppercase mt-2">
-                  <span>0 ppm</span>
-                  <span>1000 ppm</span>
-                </div>
-                {coWarning && (
-                  <div className="flex items-center gap-2 mt-3 text-amber-light">
-                    <AlertTriangle size={14} />
-                    <span className="text-[10px] font-bold">{coWarning}</span>
-                  </div>
-                )}
+          {/* Alert levels */}
+          <section className={CARD}>
+            <h2 className={CARD_TITLE}>Alert Levels</h2>
+            <p className="text-xs text-text-subtle mt-0.5">
+              One reading over its level raises a warning; both together raise a fire alert.
+            </p>
+            <div className="flex flex-col gap-8 mt-6">
+              <LevelSlider
+                id="temp-threshold" icon={Thermometer} label="Temperature"
+                value={tempThreshold} original={origTemp} unit="°C" min={0} max={100}
+                onChange={setTempThreshold} warning={tempWarning}
+              />
+              <LevelSlider
+                id="co-threshold" icon={Wind} label="Carbon Monoxide (CO)"
+                value={coThreshold} original={origCo} unit="ppm" min={0} max={1000} step={10}
+                onChange={setCoThreshold} warning={coWarning}
+              >
                 {/* The MQ-7 reports a resistance change that the firmware converts to ppm
                     with the datasheet curve and an uncalibrated baseline, so values are estimates. */}
-                <p className="text-[11px] text-text-subtle leading-relaxed mt-3">
+                <p className="text-xs text-text-subtle leading-relaxed">
                   CO readings are approximate. The gas sensor estimates ppm from its datasheet curve, so use this as an alert level rather than an exact measurement.
                 </p>
-              </div>
+              </LevelSlider>
             </div>
 
-            {/* SMS Recipient */}
-            <div className="flex flex-col gap-4 pt-6 border-t border-border">
-              <span className="text-[10px] font-bold tracking-widest uppercase text-text-body">PRIMARY SMS RECIPIENT</span>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <MessageSquare size={18} className="text-text-faint" />
-                </div>
-                <input
-                  type="tel"
-                  maxLength={11}
-                  placeholder="09XXXXXXXXX"
-                  value={contactNumber}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '');
-                    setContactNumber(val);
-                    if (contactError) setContactError('');
-                  }}
-                  className={`w-full pl-12 pr-4 py-4 bg-white border rounded-lg text-sm font-medium focus:outline-none focus:ring-1 transition-colors shadow-sm ${contactError ? 'border-primary focus:border-primary focus:ring-primary' : 'border-border focus:border-primary focus:ring-primary'}`}
-                />
-              </div>
-              <p className="text-[10px] text-text-subtle leading-relaxed">
-                Philippine number only — e.g. 09171234567. Tier 2 fire alerts are sent to this number by SMS.
-              </p>
-              {contactError && <span className="text-primary text-[11px] font-bold mt-1 block">{contactError}</span>}
-            </div>
-
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={handleSave}
-                disabled={saving || !hasChanges}
-                className="flex-1 py-4 bg-gradient-to-b from-primary to-primary text-white text-sm font-bold rounded-lg shadow-sm hover:from-accent hover:to-primary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-              >
-                <Save size={16} />
-                {saving ? 'SAVING...' : hasChanges ? 'SAVE CHANGES' : 'NO CHANGES'}
+            <div className="mt-8 pt-5 border-t border-border-warm flex flex-col sm:flex-row sm:items-center gap-3">
+              <button type="button" onClick={handleSaveLevels} disabled={savingLevels || !levelsChanged} className={BTN_PRIMARY}>
+                <Save className="w-4 h-4" />
+                {savingLevels ? 'Saving...' : 'Save alert levels'}
               </button>
-              {hasChanges && (
-                <button
-                  onClick={handleReset}
-                  className="px-6 py-4 bg-surface-cream text-text-body text-sm font-bold rounded-lg hover:bg-border transition-all"
-                >
-                  RESET
+              {levelsChanged && (
+                <button type="button" onClick={() => { setTempThreshold(origTemp); setCoThreshold(origCo); setLevelsMsg(null); }} className={BTN_SECONDARY}>
+                  Undo changes
                 </button>
               )}
+              {levelsMsg ? (
+                <p role="status" className={`text-xs font-semibold ${levelsMsg.ok ? 'text-success-dark' : 'text-primary'}`}>{levelsMsg.text}</p>
+              ) : levelsChanged ? (
+                <p className="text-xs font-semibold text-[#B45309]">Unsaved changes</p>
+              ) : null}
             </div>
-            {successMsg && (
-              <div className="flex items-center gap-2 justify-center text-sm font-bold text-success">
-                <CheckCircle2 size={16} />
-                {successMsg}
-              </div>
-            )}
+          </section>
 
-
-          {/* Web Push Linking */}
-          <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm mb-6">
-            <div className="bg-surface-alt px-4 py-3 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-text-subtle" />
-                <h3 className="font-bold text-[13px] tracking-wide text-text uppercase">WEB PUSH ALERTS</h3>
-              </div>
-              {isPushSubscribed ? (
-                <div className="flex items-center gap-1.5 text-xs font-bold text-success bg-success/10 px-2.5 py-1 rounded-full">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  ENABLED
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-light bg-amber-light/10 px-2.5 py-1 rounded-full">
-                  <BellOff className="w-3.5 h-3.5" />
-                  DISABLED
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 sm:p-5">
-              <p className="text-[13px] text-text-body leading-relaxed mb-4">
-                Receive notifications directly in your browser even when you are not actively looking at the dashboard.
-              </p>
-
-              <button
-                type="button"
-                onClick={handleTogglePush}
-                disabled={pushLoading}
-                className="w-full sm:w-auto px-5 py-2.5 border border-border bg-surface-card hover:bg-surface text-text-body text-[13px] font-bold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+          {/* Where alerts are sent */}
+          <section className={CARD}>
+            <h2 className={CARD_TITLE}>Where Alerts Are Sent</h2>
+            <p className="text-xs text-text-subtle mt-0.5">
+              You receive fire alerts (Tier 2) on each channel turned on here. Warnings (Tier 1) show on your dashboard.
+            </p>
+            <ul className="mt-6 flex flex-col divide-y divide-border-warm">
+              <ChannelRow
+                icon={Phone} title="SMS"
+                detail="Sent by the device itself over the mobile network, so it works even without internet."
+                status={savedContact ? 'On' : 'Not set'} tone={savedContact ? 'ok' : 'warn'}
               >
-                {isPushSubscribed ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
-                {pushLoading ? 'Processing...' : (isPushSubscribed ? 'Disable Push Notifications' : 'Enable Push Notifications')}
-              </button>
-            </div>
-          </div>
-
-          {/* Telegram Linking */}
-          <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-            <div className="bg-surface-alt px-4 py-3 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Send className="w-4 h-4 text-text-subtle" />
-                <h3 className="font-bold text-[13px] tracking-wide text-text uppercase">TELEGRAM ALERTS</h3>
-              </div>
-              {profile?.telegram_chat_id ? (
-                <div className="flex items-center gap-1.5 text-xs font-bold text-success bg-success/10 px-2.5 py-1 rounded-full">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  LINKED
+                <label htmlFor="sms-number" className="sr-only">Mobile number for SMS alerts</label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    id="sms-number"
+                    type="tel"
+                    inputMode="tel"
+                    placeholder="09XXXXXXXXX"
+                    value={contactNumber}
+                    onChange={(e) => { setContactNumber(e.target.value); setContactMsg(null); }}
+                    aria-invalid={contactMsg ? !contactMsg.ok : false}
+                    className={`h-10 w-full sm:max-w-xs px-3 border rounded-lg bg-surface-card text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary ${contactMsg && !contactMsg.ok ? 'border-primary' : 'border-border'}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveContact}
+                    disabled={savingContact || normalizePhone(contactNumber) === origContact}
+                    className={BTN_SECONDARY}
+                  >
+                    {savingContact ? 'Saving...' : 'Save number'}
+                  </button>
                 </div>
-              ) : (
-                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-light bg-amber-light/10 px-2.5 py-1 rounded-full">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  NOT LINKED
-                </div>
-              )}
-            </div>
+                {contactMsg && (
+                  <p role={contactMsg.ok ? 'status' : 'alert'} className={`text-xs font-semibold mt-2 ${contactMsg.ok ? 'text-success-dark' : 'text-primary'}`}>{contactMsg.text}</p>
+                )}
+              </ChannelRow>
 
-            <div className="p-4 sm:p-5">
-              <p className="text-[13px] text-text-body leading-relaxed mb-4">
-                Receive instant fire alerts directly to your Telegram app. This is the fastest and most reliable way to get notified during an emergency.
-              </p>
-
-              <button
-                type="button"
-                onClick={handleConnectTelegram}
-                className="w-full sm:w-auto px-5 py-2.5 border border-border bg-surface-card hover:bg-surface text-text-body text-[13px] font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+              <ChannelRow
+                icon={pushState === 'on' ? Bell : BellOff} title="Push notifications"
+                detail="Shown by this browser, even when AgapSense isn't open. Turn it on in each browser you use."
+                status={pushState === 'checking' ? 'Checking' : pushState === 'on' ? 'On' : pushState === 'off' ? 'Off' : 'Unavailable'}
+                tone={pushState === 'on' ? 'ok' : pushState === 'off' ? 'warn' : 'none'}
               >
-                <Send className="w-4 h-4" />
-                {profile?.telegram_chat_id ? 'Reconnect Telegram' : 'Link Telegram Account'}
-              </button>
-            </div>
-          </div>
+                {pushState === 'unavailable' ? (
+                  <p className="text-xs text-text-subtle">This browser doesn't support push notifications, or they're blocked here.</p>
+                ) : (
+                  <button type="button" onClick={handleTogglePush} disabled={pushBusy || pushState === 'checking'} className={BTN_SECONDARY}>
+                    {pushState === 'on' ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+                    {pushBusy ? 'Working...' : pushState === 'on' ? 'Turn off' : 'Turn on'}
+                  </button>
+                )}
+              </ChannelRow>
 
-
-            {errorMsg && (
-              <div className="flex items-center gap-2 justify-center text-sm font-bold text-primary">
-                <AlertTriangle size={16} />
-                {errorMsg}
-              </div>
+              <ChannelRow
+                icon={Send} title="Telegram"
+                detail="Fire alerts sent to your Telegram app through the AgapSense bot."
+                status={profile?.telegram_chat_id ? 'Linked' : 'Not linked'}
+                tone={profile?.telegram_chat_id ? 'ok' : 'warn'}
+              >
+                <button type="button" onClick={handleConnectTelegram} className={BTN_SECONDARY}>
+                  <Send className="w-4 h-4" />
+                  {profile?.telegram_chat_id ? 'Link again' : 'Link Telegram'}
+                </button>
+              </ChannelRow>
+            </ul>
+            {channelError && (
+              <p role="alert" className="mt-4 flex items-center gap-2 text-xs font-semibold text-primary">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {channelError}
+              </p>
             )}
-          </div>
+          </section>
         </div>
 
-        {/* Right Sidebar (1/3) */}
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          
-          {/* Summary Card */}
-          <div className="bg-surface-cream rounded-lg p-6 border-l-4 border-l-primary shadow-inner">
-            <h3 className="text-[10px] font-bold tracking-widest uppercase text-primary mb-6">Current Configuration Summary</h3>
-            
-            <div className="flex flex-col gap-4 mb-6">
-              <div className="flex items-center justify-between bg-white p-3 rounded shadow-sm">
-                <div className="flex items-center gap-3">
-                  <Thermometer size={16} className="text-primary" />
-                  <span className="text-xs font-bold text-text">Temperature Threshold</span>
-                </div>
-                <span className={`text-xs font-black ${tempThreshold !== origTemp ? 'text-amber-light' : 'text-text'}`}>{tempThreshold}°C</span>
-              </div>
-              <div className="flex items-center justify-between bg-white p-3 rounded shadow-sm">
-                <div className="flex items-center gap-3">
-                  <Wind size={16} className="text-primary" />
-                  <span className="text-xs font-bold text-text">CO Threshold</span>
-                </div>
-                <span className={`text-xs font-black ${coThreshold !== origCo ? 'text-amber-light' : 'text-text'}`}>{coThreshold} ppm</span>
-              </div>
-              <div className="flex items-center justify-between bg-white p-3 rounded shadow-sm">
-                <div className="flex items-center gap-3">
-                  <MessageSquare size={16} className="text-primary" />
-                  <span className="text-xs font-bold text-text">Relay Target</span>
-                </div>
-                <span className="text-xs font-black text-text">{contactNumber || 'NOT SET'}</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 pt-4 border-t border-border">
-              {hasChanges ? (
-                <div className="flex items-center gap-2 text-amber-light">
-                  <AlertTriangle size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Unsaved Changes</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-teal-light">
-                  <CheckCircle2 size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">All Settings Synced</span>
-                </div>
-              )}
-              <p className="text-[10px] text-text-body leading-relaxed">
-                Device: <strong>{device.device_code}</strong> — {displayAddress(device.location_desc)}
-              </p>
-            </div>
-          </div>
-
-
-          {/* Advice Card */}
-          <div
-            className="bg-surface border border-border rounded-lg p-5 flex flex-col gap-3 shadow-sm cursor-pointer hover:bg-surface-alt transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
-            onClick={() => setIsAdviceModalOpen(true)}
-            role="button"
-            tabIndex={0}
-            aria-haspopup="dialog"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setIsAdviceModalOpen(true);
-              }
-            }}
-          >
-            <div className="flex gap-4">
-              <HelpCircle size={20} className="text-primary shrink-0" />
+        {/* Side column */}
+        <div className="lg:col-span-1 flex flex-col gap-6 min-w-0">
+          <section className={CARD}>
+            <div className="flex gap-3">
+              <HelpCircle className="w-5 h-5 text-primary shrink-0" />
               <div>
-                <h4 className="text-xs font-bold text-text mb-1">Need threshold advice?</h4>
-                <p className="text-[10px] text-text-subtle leading-relaxed">
-                  Standard residential safety profiles typically use a 50°C trigger. For industrial kitchens, consider 65°C to avoid false positives.
+                <h2 className="text-sm font-bold text-text">Not sure which levels to use?</h2>
+                <p className="text-xs text-text-subtle leading-relaxed mt-1">
+                  Kitchens and garages usually need higher levels than bedrooms to avoid false alarms.
                 </p>
               </div>
             </div>
-            <div className="flex justify-end w-full">
-              <span className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1 group-hover:underline">
-                View Room Guidelines &rarr;
-              </span>
-            </div>
-          </div>
-
+            <button
+              type="button"
+              onClick={() => setIsAdviceModalOpen(true)}
+              aria-haspopup="dialog"
+              className="mt-4 inline-flex items-center gap-1 text-primary-dark font-bold text-xs hover:underline"
+            >
+              Suggested levels by room <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </section>
         </div>
       </div>
 
