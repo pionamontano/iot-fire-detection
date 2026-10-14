@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { AuthLayout, AuthAlert, PasswordField, AUTH_BTN_PRIMARY } from '../../components/AuthLayout';
+import { AuthLayout, AuthAlert, PasswordField, AUTH_BTN_PRIMARY, PASSWORD_MIN } from '../../components/AuthLayout';
 
 export const ResetPassword = () => {
   const navigate = useNavigate();
@@ -49,8 +49,8 @@ export const ResetPassword = () => {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    if (password.length < PASSWORD_MIN) {
+      setError(`Password must be at least ${PASSWORD_MIN} characters long.`);
       return;
     }
     if (password !== confirmPassword) {
@@ -101,15 +101,15 @@ export const ResetPassword = () => {
             value={password}
             onChange={setPassword}
             autoComplete="new-password"
-            minLength={8}
-            hint="At least 8 characters."
+            minLength={PASSWORD_MIN}
+            hint={`At least ${PASSWORD_MIN} characters.`}
           />
           <PasswordField
             label="Confirm new password"
             value={confirmPassword}
             onChange={setConfirmPassword}
             autoComplete="new-password"
-            minLength={8}
+            minLength={PASSWORD_MIN}
           />
 
           <button type="submit" disabled={loading} className={`${AUTH_BTN_PRIMARY} mt-2`}>

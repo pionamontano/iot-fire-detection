@@ -100,13 +100,19 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
   const [aboutOpen, setAboutOpen] = useState(false);
   const closeAbout = useCallback(() => setAboutOpen(false), []);
 
+  useEffect(() => {
+    const previous = document.title;
+    document.title = `${title} · AgapSense`;
+    return () => { document.title = previous; };
+  }, [title]);
+
   return (
     <div className="min-h-dvh bg-surface font-['Inter',_sans-serif] lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
       {/* Brand panel in the app's header red: a short band on phones/tablets, a full-height column on desktop. */}
       <aside className="relative overflow-hidden bg-gradient-to-br from-primary via-[#A51818] to-[#7F1212] text-white lg:sticky lg:top-0 lg:h-dvh">
         <SignalRings />
 
-        <div className="relative z-10 flex h-full flex-col lg:overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10 xl:px-16">
+        <div className="relative z-10 flex h-full flex-col lg:overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10 lg:mx-auto lg:w-full lg:max-w-[36rem]">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
               <Flame size={16} />
@@ -124,7 +130,7 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
               IoT smoke and heat monitoring that alerts residents and BFP responders the moment a fire starts.
             </p>
 
-            <ul className="hidden lg:[@media(min-height:860px)]:flex flex-col gap-5 mt-10 max-w-sm">
+            <ul className="hidden lg:[@media(min-height:860px)]:flex flex-col gap-5 mt-10">
               {FEATURES.map(({ icon: Icon, title: t, text }) => (
                 <li key={t} className="flex gap-4">
                   <span className="w-10 h-10 shrink-0 rounded-lg bg-white/15 ring-1 ring-white/20 flex items-center justify-center">
@@ -139,7 +145,7 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
             </ul>
           </div>
 
-          <div className="hidden lg:block max-w-sm">
+          <div className="hidden lg:block">
             <CapstoneCard onOpen={() => setAboutOpen(true)} />
           </div>
         </div>
@@ -242,15 +248,24 @@ type PasswordFieldProps = {
   hint?: React.ReactNode;
   error?: string | null;
   aside?: React.ReactNode;
+  inputRef?: React.Ref<HTMLInputElement>;
 };
 
-export const PasswordField = ({ label, value, onChange, autoComplete, minLength, placeholder, hint, error, aside }: PasswordFieldProps) => {
+export const PasswordField = ({ label, value, onChange, autoComplete, minLength, placeholder, hint, error, aside, inputRef }: PasswordFieldProps) => {
   const [visible, setVisible] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
+  const checkCapsLock = (e: React.KeyboardEvent | React.MouseEvent) => setCapsLock(e.getModifierState('CapsLock'));
+  const capsHint = (
+    <span role="status" className="inline-flex items-center gap-1.5 font-semibold text-tier1-text">
+      <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Caps Lock is on
+    </span>
+  );
   return (
-    <Field label={label} icon={Lock} required hint={hint} error={error} aside={aside}>
+    <Field label={label} icon={Lock} required hint={capsLock ? capsHint : hint} error={error} aside={aside}>
       {({ id, describedBy }) => (
         <>
           <input
+            ref={inputRef}
             id={id}
             type={visible ? 'text' : 'password'}
             required
@@ -258,6 +273,10 @@ export const PasswordField = ({ label, value, onChange, autoComplete, minLength,
             autoComplete={autoComplete}
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onKeyDown={checkCapsLock}
+            onKeyUp={checkCapsLock}
+            onMouseDown={checkCapsLock}
+            onBlur={() => setCapsLock(false)}
             aria-invalid={!!error || undefined}
             aria-describedby={describedBy}
             className={inputClass(!!error, 'pr-12')}

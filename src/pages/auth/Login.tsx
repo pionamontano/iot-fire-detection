@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import { House, Loader2, LogIn, Mail, ShieldAlert, Siren } from 'lucide-react';
@@ -16,6 +16,7 @@ export const Login = () => {
   const [loading, setLoading] = useState(false);
   const [locked, setLocked] = useState(false);
   const [lockoutTimer, setLockoutTimer] = useState(0);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -72,6 +73,9 @@ export const Login = () => {
         setLockoutTimer(body.retry_after_seconds || 0);
       }
       setLoading(false);
+      // Keep the email and let them retype the password straight away.
+      passwordRef.current?.focus();
+      passwordRef.current?.select();
       return;
     }
 
@@ -135,6 +139,7 @@ export const Login = () => {
           value={password}
           onChange={setPassword}
           autoComplete="current-password"
+          inputRef={passwordRef}
           minLength={6}
           placeholder="Enter your password"
           aside={
