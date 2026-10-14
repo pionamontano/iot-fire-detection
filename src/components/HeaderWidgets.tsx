@@ -319,7 +319,7 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ resultPath, al
           ) : (
             <ul id={listId} role="listbox" className="max-h-[300px] overflow-y-auto thin-scroll">
               {results.map((device, i) => {
-                const connectivity: DeviceStatus = device.is_active ? getConnectivityStatus(device.last_seen_at) : 'offline';
+                const connectivity: DeviceStatus = device.is_active ? getConnectivityStatus(device.last_seen_at) : 'disabled';
                 const st = DEVICE_STATUS[connectivity];
                 return (
                   <li

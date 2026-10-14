@@ -89,6 +89,10 @@ export const Devices = () => {
   // Editing an already-registered device's thresholds + BFP contact
   // (spec HW-1.1.5 / SW-2.5.5) — previously only settable at creation.
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
+  // Disable needs the device code typed back; enable is one click (it is safe).
+  const [disableConfirmOpen, setDisableConfirmOpen] = useState(false);
+  const [disableTyped, setDisableTyped] = useState('');
+  const [togglingActive, setTogglingActive] = useState(false);
   const [editForm, setEditForm] = useState({
     label: '',
     location_desc: '',
@@ -259,6 +263,27 @@ export const Devices = () => {
     });
     setNewApiKey(null);
     setKeyCopied(false);
+    setDisableConfirmOpen(false);
+    setDisableTyped('');
+  };
+
+  // Disabling makes the backend reject this device's readings and fire
+  // alerts (ingest-reading, trigger-alert and get-device-config all check
+  // is_active). Only is_active changes: last_seen_at is left alone, so a
+  // re-enabled device shows its real status until it actually reports.
+  const setDeviceActive = async (active: boolean) => {
+    if (!editingDevice) return;
+    setTogglingActive(true);
+    const { error } = await supabase.from('devices').update({ is_active: active }).eq('id', editingDevice.id);
+    setTogglingActive(false);
+    if (error) {
+      alert(`Failed to ${active ? 'enable' : 'disable'} device: ` + error.message);
+      return;
+    }
+    setEditingDevice({ ...editingDevice, is_active: active });
+    setDisableConfirmOpen(false);
+    setDisableTyped('');
+    fetchDevices();
   };
 
   const handleRegenerateKey = async () => {
@@ -1073,6 +1098,78 @@ export const Devices = () => {
                     </button>
                   )}
                 </FormField>
+              </div>
+
+              {/* Enable / disable: kept apart from the other settings and behind a typed confirmation. */}
+              <div className="border-t border-[#E5E2E1] pt-6">
+                {editingDevice.is_active ? (
+                  <div className="border border-[#FECACA] rounded-lg p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-[#1C1B1B]">Disable device</p>
+                      <p className="text-xs text-[#5B403D] mt-1">
+                        Stops accepting this device's readings and fire alerts. While disabled, a fire at this location will <span className="font-bold">not</span> alert the resident or BFP. Use it only for a unit that has been removed, lost, or is sending bad data.
+                      </p>
+                    </div>
+                    {!disableConfirmOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => setDisableConfirmOpen(true)}
+                        className="px-4 py-2 rounded border border-[#DC2626] text-[#DC2626] text-sm font-bold hover:bg-[#FEF2F2] transition-colors w-fit"
+                      >
+                        Disable device…
+                      </button>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <label htmlFor="disable-confirm" className="text-xs font-bold text-[#1C1B1B]">
+                          Type <span className="font-mono">{editingDevice.device_code}</span> to confirm
+                        </label>
+                        <input
+                          id="disable-confirm"
+                          type="text"
+                          autoComplete="off"
+                          autoFocus
+                          value={disableTyped}
+                          onChange={e => setDisableTyped(e.target.value)}
+                          className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#DC2626]/30 focus:border-[#DC2626]"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setDisableConfirmOpen(false); setDisableTyped(''); }}
+                            className="px-4 py-2 rounded text-sm font-bold text-[#5B403D] hover:bg-[#F6F3F2] transition-colors"
+                          >
+                            Keep enabled
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeviceActive(false)}
+                            disabled={togglingActive || disableTyped.trim().toUpperCase() !== editingDevice.device_code.toUpperCase()}
+                            className="px-4 py-2 rounded bg-[#DC2626] text-white text-sm font-bold hover:bg-[#B91C1C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {togglingActive ? 'Disabling…' : `Disable ${editingDevice.device_code}`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-[#F4F4F5] border border-[#D4D4D8] rounded-lg p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-[#1C1B1B]">This device is disabled</p>
+                      <p className="text-xs text-[#5B403D] mt-1">
+                        Its readings and fire alerts are being ignored. Enable it to start accepting them again; it will show its real status once it next reports.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeviceActive(true)}
+                      disabled={togglingActive}
+                      className="px-4 py-2 rounded bg-[#047857] text-white text-sm font-bold hover:bg-[#065F46] transition-colors disabled:opacity-60 w-fit"
+                    >
+                      {togglingActive ? 'Enabling…' : 'Enable device'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

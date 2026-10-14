@@ -111,7 +111,7 @@ export const Dashboard = () => {
   }
 
   const statusById = new Map(devices.map(d => [d.id, getDeviceStatus(d, activeAlerts, now)]));
-  const statusCounts: Record<DeviceStatus, number> = { fire: 0, warning: 0, online: 0, reconnecting: 0, offline: 0 };
+  const statusCounts: Record<DeviceStatus, number> = { fire: 0, warning: 0, online: 0, reconnecting: 0, offline: 0, disabled: 0 };
   for (const s of statusById.values()) statusCounts[s]++;
   const isAlerting = (s: DeviceStatus | undefined) => s === 'fire' || s === 'warning';
   // Alerting devices first so they're never cut off by the row limit; the

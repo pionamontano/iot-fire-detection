@@ -54,4 +54,5 @@ export const MAP_POPUP_HEADER: Record<DeviceStatus, { text: string; bg: string }
   online: { text: 'Online', bg: 'bg-[#047857]' },
   reconnecting: { text: 'Reconnecting', bg: 'bg-[#1D4ED8]' },
   offline: { text: 'Offline', bg: 'bg-[#52525B]' },
+  disabled: { text: 'Disabled', bg: 'bg-[#27272A]' },
 };

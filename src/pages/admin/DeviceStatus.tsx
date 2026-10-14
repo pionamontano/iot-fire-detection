@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   List,
   Pencil,
-  Power,
   ShieldCheck,
   BatteryWarning,
   Search,
@@ -153,22 +152,6 @@ export const DeviceStatusPage = () => {
 
   const activeAlertCount = devices.filter(d => d.status === 'fire' || d.status === 'warning').length;
   const onlineCount = devices.filter(d => d.status === 'online').length;
-
-  const handleTogglePower = async (device: DeviceWithStatus) => {
-    try {
-      const updates: Record<string, unknown> = { is_active: !device.is_active };
-      // When activating, set last_seen_at so status becomes 'Online' instead of staying 'Offline'
-      if (!device.is_active) {
-        updates.last_seen_at = new Date().toISOString();
-      }
-      const { error } = await supabase.from('devices').update(updates).eq('id', device.id);
-      if (error) throw error;
-      fetchData();
-    } catch (err) {
-      console.error('Error toggling power:', err);
-      window.alert('Failed to update device power state: ' + (err as Error).message);
-    }
-  };
 
   // Manual resolve fallback (spec SW-2.1.6) — e.g. for a device that went
   // offline mid-alert and can no longer auto-resolve via a safe reading.
@@ -352,8 +335,7 @@ export const DeviceStatusPage = () => {
                       <td className={TD}>
                         <div className="flex items-center gap-3 text-[#A1A1AA]">
                           <Link to={`/admin/map?device=${device.id}`} className="hover:text-[#1C1B1B] transition-colors" title="Show on map"><MapIcon className="w-4 h-4" /></Link>
-                          <Link to={`/admin/devices?edit=${device.id}`} className="hover:text-[#AF101A] transition-colors" title="Edit device (name, thresholds, location, firmware)"><Pencil className="w-4 h-4" /></Link>
-                          <button onClick={() => handleTogglePower(device)} className={`transition-colors ${device.is_active ? 'hover:text-red-500' : 'text-red-400 hover:text-green-500'}`} title={device.is_active ? 'Disable device' : 'Enable device'}><Power className="w-4 h-4" /></button>
+                          <Link to={`/admin/devices?edit=${device.id}`} className="hover:text-[#AF101A] transition-colors" title="Edit device (name, thresholds, location, firmware, enable/disable)"><Pencil className="w-4 h-4" /></Link>
                           {device.activeAlert && (
                             <button onClick={() => handleResolveAlert(device)} className="hover:text-[#10B981] transition-colors" title="Manually Resolve Alert"><ShieldCheck className="w-4 h-4" /></button>
                           )}

@@ -45,6 +45,7 @@ const iconCache:Record<DeviceStatus, L.DivIcon> = {
   online: createIcon('online'),
   reconnecting: createIcon('reconnecting'),
   offline: createIcon('offline'),
+  disabled: createIcon('disabled'),
 };
 
 // Optional per-status counts make the legend answer "how many are offline?"

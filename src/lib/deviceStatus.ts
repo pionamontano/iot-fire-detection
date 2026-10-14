@@ -26,12 +26,13 @@ export const getConnectivityStatus = (
 // Device Status, responder map). Tier 2 = dual-sensor confirmed fire;
 // Tier 1 = single-sensor warning (spec SW-2.3.1). Connectivity follows the
 // 2 / 15 minute thresholds above (spec SW-2.4.3 / FR-ALERT-005). A device an
-// admin switched off is Offline, with a "Disabled by admin" note rather than
-// a status of its own. Each color means one thing: red fire, amber warning,
-// green online, blue connection trouble, grey not reporting.
-export type DeviceStatus = 'fire' | 'warning' | 'online' | 'reconnecting' | 'offline';
+// admin switched off is Disabled: the backend rejects its readings and alerts,
+// so it must never look like an ordinary offline unit. Each color means one
+// thing: red fire, amber warning, green online, blue connection trouble, grey
+// not reporting, near-black switched off by an admin.
+export type DeviceStatus = 'fire' | 'warning' | 'online' | 'reconnecting' | 'offline' | 'disabled';
 
-export const DEVICE_STATUS_ORDER: readonly DeviceStatus[] = ['fire', 'warning', 'online', 'reconnecting', 'offline'];
+export const DEVICE_STATUS_ORDER: readonly DeviceStatus[] = ['fire', 'warning', 'online', 'reconnecting', 'offline', 'disabled'];
 
 export const DEVICE_STATUS: Record<DeviceStatus, {
   label: string;
@@ -41,6 +42,8 @@ export const DEVICE_STATUS: Record<DeviceStatus, {
   color: string;
   badgeBg: string;
   badgeText: string;
+  /** Dot color inside the badge, when `color` would vanish on `badgeBg`. */
+  badgeDot?: string;
 }> = {
   fire: {
     label: 'Fire', longLabel: 'Fire (Tier 2)', color: '#DC2626',
@@ -64,8 +67,13 @@ export const DEVICE_STATUS: Record<DeviceStatus, {
   },
   offline: {
     label: 'Offline', longLabel: 'Offline', color: '#71717A',
-    description: 'No report for over 15 minutes, never connected, or disabled by an admin.',
+    description: 'No report for over 15 minutes, or never connected.',
     badgeBg: 'bg-[#EBE7E7]', badgeText: 'text-[#52525B]',
+  },
+  disabled: {
+    label: 'Disabled', longLabel: 'Disabled', color: '#27272A',
+    description: 'Switched off by an admin. Its readings and fire alerts are ignored until it is enabled again.',
+    badgeBg: 'bg-[#27272A]', badgeText: 'text-white', badgeDot: '#A1A1AA',
   },
 };
 
@@ -77,7 +85,7 @@ export const getDeviceStatus = (
   const deviceAlerts = activeAlerts.filter(a => a.device_id === device.id && !a.resolved_at);
   if (deviceAlerts.some(a => a.alert_tier === 2)) return 'fire';
   if (deviceAlerts.length > 0) return 'warning';
-  if (!device.is_active) return 'offline';
+  if (!device.is_active) return 'disabled';
   return getConnectivityStatus(device.last_seen_at, now);
 };
 
@@ -87,8 +95,7 @@ export const getStatusNote = (
   status: DeviceStatus,
   now: number = Date.now()
 ): string | null => {
-  if (status !== 'reconnecting' && status !== 'offline') return null;
-  if (!device.is_active) return 'Disabled by admin';
+  if (status !== 'reconnecting' && status !== 'offline' && status !== 'disabled') return null;
   return formatLastSeen(device.last_seen_at, now);
 };
 

@@ -22,7 +22,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
 // ─── Map Marker Icons ─── (colors from the shared status model)
-const PIN_SIZE: Record<DeviceStatus, number> = { fire: 16, warning: 14, online: 10, reconnecting: 12, offline: 12 };
+const PIN_SIZE: Record<DeviceStatus, number> = { fire: 16, warning: 14, online: 10, reconnecting: 12, offline: 12, disabled: 12 };
 const createCustomIcon = (status: DeviceStatus) => {
   const color = DEVICE_STATUS[status].color;
   const size = PIN_SIZE[status];
@@ -267,7 +267,7 @@ export const ResponderDashboard = () => {
   // Counts
   const activeAlarmCount = liveDevices.filter(d => d.status === 'fire').length;
   const preAlertsCount = liveDevices.filter(d => d.status === 'warning').length;
-  const devicesOnline = liveDevices.filter(d => d.status !== 'offline').length;
+  const devicesOnline = liveDevices.filter(d => d.status !== 'offline' && d.status !== 'disabled').length;
   const totalDevices = devices.length;
   const coveragePercent = totalDevices > 0 ? (devicesOnline / totalDevices) * 100 : 0;
   const coverageColor =
