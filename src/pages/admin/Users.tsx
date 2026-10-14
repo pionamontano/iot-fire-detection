@@ -208,7 +208,7 @@ const DevicePicker = ({ name, value, onChange, devices, noneLabel }: {
         {devices.length === 0 ? (
           <p className="text-xs text-amber mt-2 flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
-            No unassigned devices available. Register one under Device Registration.
+            No unassigned devices available. Register one under Devices.
           </p>
         ) : shown.length === 0 && (
           <p className="text-xs text-text-warm mt-2">No devices match “{query}”.</p>

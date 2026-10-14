@@ -53,8 +53,7 @@ export const Alerts = () => {
   // this indicator existed only on Resident/Responder views, never Admin)
   const [batteryByDevice, setBatteryByDevice] = useState<Record<string, boolean>>({});
   // device_id -> assigned resident's full_name. The "Owner Name" column
-  // used to show devices.label (an admin-set free-text field, editable via
-  // "Rename Device" below) which can drift from the actual resident account
+  // used to show devices.label (an admin-set free-text field, editable in Devices → Edit device) which can drift from the actual resident account
   // on the device — this is the name the resident portal actually shows.
   const [residentNameByDevice, setResidentNameByDevice] = useState<Record<string, string>>({});
 
@@ -81,8 +80,6 @@ export const Alerts = () => {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [editingDevice, setEditingDevice] = useState<DeviceWithStatus | null>(null);
-  const [editLabelValue, setEditLabelValue] = useState('');
   const itemsPerPage = 5;
 
   const fetchData = useCallback(async () => {
@@ -176,27 +173,6 @@ export const Alerts = () => {
     } catch (err) {
       console.error('Error toggling power:', err);
       window.alert('Failed to update device power state: ' + (err as Error).message);
-    }
-  };
-
-  const handleEditLabel = (device: DeviceWithStatus) => {
-    setEditingDevice(device);
-    setEditLabelValue(device.label);
-  };
-
-  const saveEditLabel = async () => {
-    if (editingDevice && editLabelValue.trim() !== '') {
-      try {
-        const { error } = await supabase.from('devices').update({ label: editLabelValue.trim() }).eq('id', editingDevice.id);
-        if (error) throw error;
-        fetchData();
-        setEditingDevice(null);
-      } catch (err) {
-        console.error('Error updating label:', err);
-        window.alert('Failed to update device label: ' + (err as Error).message);
-      }
-    } else {
-      setEditingDevice(null);
     }
   };
 
@@ -338,7 +314,7 @@ export const Alerts = () => {
                     </div>
                   )}
                 </div>
-                <Link to="/admin/devices" className="flex items-center gap-2 px-3 py-1.5 bg-primary rounded text-white text-xs font-bold transition-colors hover:bg-primary-dark">
+                <Link to="/admin/devices?register=1" className="flex items-center gap-2 px-3 py-1.5 bg-primary rounded text-white text-xs font-bold transition-colors hover:bg-primary-dark">
                   <Plus className="w-3.5 h-3.5" />
                   Register New
                 </Link>
@@ -421,7 +397,7 @@ export const Alerts = () => {
                           <td className="px-5 py-4 align-top">
                             <div className="flex items-center gap-3 text-[#A1A1AA]">
                               <Link to={`/admin/map?device=${device.id}`} className="hover:text-[#1C1B1B] transition-colors" title="Show on map"><MapIcon className="w-4 h-4" /></Link>
-                              <button onClick={() => handleEditLabel(device)} className="hover:text-[#1C1B1B] transition-colors" title="Rename Device"><Pencil className="w-4 h-4" /></button>
+                              <Link to={`/admin/devices?edit=${device.id}`} className="hover:text-[#1C1B1B] transition-colors" title="Edit device (name, thresholds, location, firmware)"><Pencil className="w-4 h-4" /></Link>
                               <button onClick={() => handleTogglePower(device)} className={`transition-colors ${device.is_active ? 'hover:text-red-500' : 'text-red-400 hover:text-green-500'}`} title="Toggle Active Status"><Power className="w-4 h-4" /></button>
                               {device.activeAlert && (
                                 <button onClick={() => handleResolveAlert(device)} className="hover:text-[#10B981] transition-colors" title="Manually Resolve Alert"><ShieldCheck className="w-4 h-4" /></button>
@@ -501,37 +477,6 @@ export const Alerts = () => {
 
       </div>
 
-      {/* Edit Label Modal */}
-      {editingDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditingDevice(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[#1C1B1B] font-extrabold text-xl mb-2">Edit Device Label</h3>
-            <p className="text-[#5B403D] text-sm mb-4">Update the display name for <span className="font-bold">{editingDevice.device_code}</span></p>
-            <input
-              type="text"
-              value={editLabelValue}
-              onChange={(e) => setEditLabelValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && saveEditLabel()}
-              className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]/30 focus:border-[#DC2626] mb-6"
-              autoFocus
-            />
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setEditingDevice(null)}
-                className="px-4 py-2 text-sm font-bold text-[#5B403D] hover:bg-[#F6F3F2] rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveEditLabel}
-                className="px-4 py-2 text-sm font-bold text-white bg-primary hover:bg-primary-dark rounded transition-colors"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

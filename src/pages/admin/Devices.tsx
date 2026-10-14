@@ -1,14 +1,18 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
-import type { Device, FirmwareRelease } from '../../lib/supabase';
+import type { Device, FirmwareRelease, AlertEvent } from '../../lib/supabase';
 import { isValidCoordinate, displayAddress } from '../../lib/location';
-import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket, MapPin, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { CardListSkeleton } from '../../components/SkeletonLoaders';
+import { Cpu, ChevronRight, ChevronLeft, ChevronDown, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket, MapPin, ShieldCheck, CheckCircle2, Plus, Search, Filter, Map as MapIcon } from 'lucide-react';
+import { TableBodySkeleton } from '../../components/SkeletonLoaders';
+import { StatusBadge } from '../../components/StatusBadge';
+import { getDeviceStatus, getStatusNote } from '../../lib/deviceStatus';
+import { useNowTick } from '../../hooks/useNowTick';
 import { PinMap } from '../../components/PinMap';
 
 // Fleet-wide firmware push. Safe because device ID / API key are stored per node (NVS) rather than compiled
@@ -38,6 +42,17 @@ const LocationStateBadge = ({ state }: { state: LocationState }) => {
   );
 };
 
+type DeviceFilter = 'all' | 'pin_unverified' | 'pin_not_set' | 'firmware_outdated' | 'unassigned' | 'disabled';
+const FILTER_OPTIONS: { value: DeviceFilter; label: string }[] = [
+  { value: 'all', label: 'All devices' },
+  { value: 'pin_unverified', label: 'Pin unverified' },
+  { value: 'pin_not_set', label: 'No pin yet' },
+  { value: 'firmware_outdated', label: 'Firmware outdated' },
+  { value: 'unassigned', label: 'No resident linked' },
+  { value: 'disabled', label: 'Disabled' },
+];
+const PAGE_SIZE = 10;
+
 const timeAgo = (dateStr: string) => {
   const seconds = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 1000);
   if (seconds < 60) return `${seconds}s ago`;
@@ -56,6 +71,20 @@ export const Devices = () => {
   const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
   // device_id -> latest on_battery (spec HW-1.5.2/SW-2.4.4)
   const [batteryByDevice, setBatteryByDevice] = useState<Record<string, boolean>>({});
+  // Unresolved incidents, for the shared Fire / Warning / Online / Reconnecting / Offline status.
+  const [activeAlerts, setActiveAlerts] = useState<Pick<AlertEvent, 'device_id' | 'alert_tier' | 'resolved_at'>[]>([]);
+  // device_id -> linked resident's name (one resident per device).
+  const [residentNameByDevice, setResidentNameByDevice] = useState<Record<string, string>>({});
+  const now = useNowTick();
+
+  // Table controls. ?edit=<id> opens that device's Edit window and ?register=1 the Register window,
+  // so System Overview and other pages can link straight to them.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<DeviceFilter>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   // Editing an already-registered device's thresholds + BFP contact
   // (spec HW-1.1.5 / SW-2.5.5) — previously only settable at creation.
@@ -99,9 +128,9 @@ export const Devices = () => {
   const [registered, setRegistered] = useState<{ device_code: string; api_key: string } | null>(null);
   const [copiedField, setCopiedField] = useState<'code' | 'key' | null>(null);
 
+  // No loading flag here: realtime refreshes must not blank the table (initial state is loading).
   const fetchDevices = useCallback(async () => {
-    setLoading(true);
-    const [devicesRes, batteryRes] = await Promise.all([
+    const [devicesRes, batteryRes, alertsRes, residentsRes] = await Promise.all([
       supabase.from('devices').select<string, Device>(DEVICE_COLUMNS).order('created_at', { ascending: false }),
       // Latest readings across devices, to derive each device's current
       // on_battery state (no per-device "latest reading" view exists, so
@@ -110,10 +139,21 @@ export const Devices = () => {
         .select('device_id, on_battery, recorded_at')
         .order('recorded_at', { ascending: false })
         .limit(300),
+      supabase.from('alert_events').select('device_id, alert_tier, resolved_at').is('resolved_at', null),
+      supabase.from('profiles')
+        .select('device_id, full_name')
+        .eq('role', 'resident')
+        .not('device_id', 'is', null),
     ]);
 
     // A failed read must be visible, not look like an empty fleet.
     setLoadError(devicesRes.error ? { message: devicesRes.error.message, code: devicesRes.error.code } : null);
+    if (alertsRes.data) setActiveAlerts(alertsRes.data as typeof activeAlerts);
+    if (residentsRes.data) {
+      const names: Record<string, string> = {};
+      for (const r of residentsRes.data as { device_id: string; full_name: string }[]) names[r.device_id] = r.full_name;
+      setResidentNameByDevice(names);
+    }
     if (!devicesRes.error && devicesRes.data) {
       setDevices(devicesRes.data);
     }
@@ -140,6 +180,14 @@ export const Devices = () => {
   useEffect(() => {
     fetchDevices();
     fetchLatestRelease();
+
+    // Keep status, pins and owners current (a resident moving a pin, an alert, a new link).
+    const channel = supabase.channel('devices_page')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, fetchDevices)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alert_events' }, fetchDevices)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchDevices)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [fetchDevices, fetchLatestRelease]);
 
   const publishRelease = async (e: React.FormEvent) => {
@@ -346,246 +394,259 @@ export const Devices = () => {
   // older firmware predating this field, or never seen online) is unknown,
   // not assumed current.
   const activeDevices = devices.filter(d => d.is_active);
-  // All of them, not just the five most recent: a resident can move an old device's pin at any time.
+  const isOutdated = (d: Device) =>
+    !!latestRelease && d.is_active && !!d.firmware_version_reported && d.firmware_version_reported !== latestRelease.version;
+  const outdatedDevices = activeDevices.filter(isOutdated);
+  // All of them, not just one page: a resident can move an old device's pin at any time.
   const awaitingConfirmation = devices.filter(d => locationState(d) === 'unverified');
-  const outdatedDevices = latestRelease
-    ? activeDevices.filter(d => d.firmware_version_reported && d.firmware_version_reported !== latestRelease.version)
-    : [];
+
+  // Deep links: ?edit=<device id> and ?register=1 (used by System Overview).
+  const editParam = searchParams.get('edit');
+  const registerParam = searchParams.get('register');
+  useEffect(() => {
+    if (!editParam && !registerParam) return;
+    if (editParam) {
+      if (loading) return;
+      const d = devices.find(x => x.id === editParam);
+      if (d) openEditDevice(d);
+    }
+    if (registerParam) setRegisterOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('edit');
+    next.delete('register');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editParam, registerParam, loading, devices]);
+
+  const q = search.trim().toLowerCase();
+  const filteredDevices = useMemo(() => devices.filter(d => {
+    if (filter === 'pin_unverified' && locationState(d) !== 'unverified') return false;
+    if (filter === 'pin_not_set' && locationState(d) !== 'not_set') return false;
+    if (filter === 'firmware_outdated' && !isOutdated(d)) return false;
+    if (filter === 'unassigned' && residentNameByDevice[d.id]) return false;
+    if (filter === 'disabled' && d.is_active) return false;
+    return !q || [d.device_code, d.label, d.location_desc, residentNameByDevice[d.id]].some(v => v?.toLowerCase().includes(q));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [devices, filter, q, residentNameByDevice, latestRelease]);
+  const totalPages = Math.max(1, Math.ceil(filteredDevices.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageDevices = filteredDevices.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const changeFilter = (f: DeviceFilter) => { setFilter(f); setFilterOpen(false); setPage(1); };
+
+  const closeRegister = () => { setRegisterOpen(false); setRegistered(null); setRegisterError(null); };
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       {loadError && (
         <LoadErrorBanner what="devices" error={loadError} onRetry={fetchDevices} />
       )}
-      {/* Page Header */}
       <PageHeader
-        title="Device Registration"
-        description="Register AgapSense units and confirm the install locations residents set. Confirmed pins matter: they are where responders are sent when a device has no GPS fix."
+        title="Devices"
+        description="Register AgapSense units, change their settings, and confirm the install locations residents set."
+        actions={
+          <button
+            type="button"
+            onClick={() => setRegisterOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded text-white font-bold text-xs tracking-[0.025em] uppercase"
+            style={{ background: 'linear-gradient(90deg, #AF101A 0%, #D32F2F 100%)' }}
+          >
+            <Plus className="w-4 h-4" />
+            Register Device
+          </button>
+        }
       />
 
-      {/* Main Grid: 12-col → 7-col Left + 5-col Right */}
-      <div className="grid grid-cols-12 gap-8">
-        {/* ─── LEFT PANEL: Registration Form ─── */}
-        <div className="col-span-12 lg:col-span-7 flex flex-col gap-6">
-          {registered ? (
-            <div className="bg-[#F6F3F2] rounded-lg p-8 flex flex-col gap-6">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="w-6 h-6 text-[#047857] shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="text-[#1C1B1B] font-bold text-lg">{registered.device_code} registered</h3>
-                  <p className="text-[#5B403D] text-sm mt-1">
-                    Enter the device code and API key in the device's Wi-Fi setup portal. Give the device code to the
-                    resident: they enter it when they create their account.
-                  </p>
-                </div>
-              </div>
+      {/* Pins residents have set or moved that no admin has checked yet. */}
+      {awaitingConfirmation.length > 0 && filter !== 'pin_unverified' && (
+        <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg px-5 py-4 flex flex-wrap items-center gap-3">
+          <MapPin className="w-5 h-5 text-[#B45309] shrink-0" />
+          <p className="flex-1 min-w-[200px] text-sm text-[#1C1B1B]">
+            <span className="font-bold">{awaitingConfirmation.length} install {awaitingConfirmation.length === 1 ? 'location' : 'locations'} waiting for confirmation.</span>{' '}
+            <span className="text-[#5B403D]">Until you confirm them, alerts label these pins as unverified.</span>
+          </p>
+          <button
+            type="button"
+            onClick={() => changeFilter('pin_unverified')}
+            className="px-3 py-1.5 rounded border border-[#FDE68A] bg-white text-[#B45309] text-xs font-bold uppercase tracking-wide hover:bg-[#FEF3C7]"
+          >
+            Review
+          </button>
+        </div>
+      )}
 
-              <CopyField label="Device Code" value={registered.device_code} copied={copiedField === 'code'} onCopy={() => copyRegistered('code')} />
-              <CopyField label="API Key" value={registered.api_key} copied={copiedField === 'key'} onCopy={() => copyRegistered('key')} />
-
-              <div className="flex items-start gap-1.5 text-[#B45309]">
-                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                <span className="text-xs font-bold">
-                  Copy the API key now. It won't be shown again; if it's lost, regenerate it from Edit device.
-                </span>
-              </div>
-
+      {/* ─── Device table ─── */}
+      <div className="bg-white border border-[#E5E2E1] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-[#E5E2E1]">
+          <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.02em]">
+            All Devices <span className="text-[#A1A1AA] font-medium">({devices.length})</span>
+          </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A1AA]" />
+              <input
+                type="search"
+                value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Search code, name, owner, address…"
+                aria-label="Search devices"
+                className="w-60 pl-8 pr-3 py-1.5 border border-[#E5E2E1] rounded text-xs text-[#1C1B1B] placeholder:text-[#A1A1AA] focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => setRegistered(null)}
-                className="w-full py-3 rounded border border-[#D6D1D0] text-[#5B403D] font-bold text-sm tracking-[0.025em] uppercase hover:bg-white transition-colors"
+                onClick={() => setFilterOpen(o => !o)}
+                aria-expanded={filterOpen}
+                className="flex items-center gap-2 px-3 py-1.5 border border-[#E5E2E1] rounded text-[#1C1B1B] text-xs font-bold hover:bg-gray-50"
               >
-                Register another device
+                <Filter className="w-3.5 h-3.5" />
+                {FILTER_OPTIONS.find(o => o.value === filter)?.label}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
               </button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="bg-[#F6F3F2] rounded-lg p-8 flex flex-col gap-6">
-              <FormField label="Device Name (optional)" htmlFor="new-device-label">
-                <input
-                  id="new-device-label"
-                  type="text"
-                  maxLength={100}
-                  placeholder="e.g. Unit 6 — Barangay Hall"
-                  value={newLabel}
-                  onChange={e => setNewLabel(e.target.value)}
-                  className="form-input-field"
-                />
-                <span className="text-[11px] text-[#5B403D]">
-                  Shown on the dashboard and map. Leave blank to use the device code.
-                </span>
-              </FormField>
-
-              <ul className="text-xs text-[#5B403D] leading-5 flex flex-col gap-1.5 border-t border-[#E5E2E1] pt-5">
-                <li><span className="font-bold text-[#1C1B1B]">Device code and API key</span> are generated for you and shown once after registering.</li>
-                <li><span className="font-bold text-[#1C1B1B]">Alert thresholds</span> start at 60 °C and 200 ppm CO. Change them later in Edit device.</li>
-                <li><span className="font-bold text-[#1C1B1B]">Address and map pin</span> are set by the resident once their account is linked. You confirm them before they count as verified.</li>
-              </ul>
-
-              {registerError && (
-                <div className="flex items-start gap-1.5 text-[#B91C1C]">
-                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                  <span className="text-xs font-bold">Failed to register device: {registerError}</span>
-                </div>
+              {filterOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setFilterOpen(false)} />
+                  <div className="absolute right-0 mt-1 w-48 bg-white border border-[#E5E2E1] rounded-lg shadow-lg z-50 py-1">
+                    {FILTER_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => changeFilter(opt.value)}
+                        className={`w-full text-left px-4 py-2 text-xs transition-colors ${filter === opt.value ? 'bg-[#FEE2E2] text-primary font-bold' : 'text-[#1C1B1B] font-medium hover:bg-[#F6F3F2]'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-4 rounded text-white font-bold text-base tracking-[0.025em] uppercase flex items-center justify-center gap-2 transition-all disabled:opacity-60"
-                style={{ background: 'linear-gradient(90deg, #AF101A 0%, #D32F2F 100%)' }}
-              >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
-                {submitting ? 'Registering...' : 'Register Device'}
-              </button>
-            </form>
-          )}
-
-          {/* Sensor warm-up (firmware sensors.cpp: alerts held until the MQ-7's first heat + measure cycle). */}
-          <div
-            className="rounded-lg p-6 flex gap-4"
-            style={{
-              background: 'rgba(0, 121, 156, 0.1)',
-              borderLeft: '4px solid #00799C',
-            }}
-          >
-            <div className="shrink-0 mt-0.5">
-              <Info className="w-5 h-5 text-[#005F7B]" />
-            </div>
-            <div>
-              <h4 className="text-[#005F7B] font-bold text-sm tracking-[0.05em] uppercase">
-                Sensor Warm-up
-              </h4>
-              <p className="text-[#5B403D] text-xs leading-[19.5px] mt-1">
-                Each time the device powers on, its CO sensor needs one heat-and-measure cycle (about 2.5 minutes)
-                before its readings count. Alerts are held until then.
-              </p>
             </div>
           </div>
         </div>
 
-        {/* ─── RIGHT PANEL: Recently Registered ─── */}
-        <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
-          {/* Pins residents have set or moved that no admin has checked yet. */}
-          {awaitingConfirmation.length > 0 && (
-            <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg p-6 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.1em] uppercase">
-                  Locations to Confirm
-                </h3>
-                <span className="bg-[rgba(245,158,11,0.15)] text-[#B45309] font-bold text-[9.6px] uppercase px-2 py-1 rounded-sm">
-                  {awaitingConfirmation.length} Waiting
-                </span>
-              </div>
-              <p className="text-[#5B403D] text-xs -mt-2">
-                Residents set these pins. Until you confirm them, alerts label them as unverified.
-              </p>
-              <div className="flex flex-col gap-2">
-                {awaitingConfirmation.map(device => (
-                  <button
-                    key={device.id}
-                    type="button"
-                    onClick={() => openEditDevice(device)}
-                    className="bg-white rounded flex items-center gap-3 p-3 text-left hover:shadow-sm transition-shadow group"
-                  >
-                    <MapPin className="w-4 h-4 text-[#B45309] shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <span className="block font-bold text-xs text-[#1C1B1B]">{device.device_code}</span>
-                      <span className="block text-[#5B403D] text-[11px] truncate">{displayAddress(device.location_desc)}</span>
-                    </div>
-                    <span className="text-[#AF101A] font-bold text-[10px] uppercase tracking-wide shrink-0 group-hover:underline">Review</span>
-                  </button>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[#F6F3F2] border-b border-[#E5E2E1]">
+                {['Device', 'Resident', 'Install Location', 'Status', 'Firmware', 'Registered', ''].map((h, i) => (
+                  <th key={i} className="text-left px-5 py-3 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap">{h}</th>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {/* Recently Registered Card */}
-          <div className="bg-[#EBE7E7] rounded-lg p-6 flex flex-col gap-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.1em] uppercase">
-                Recently Registered
-              </h3>
-              {devices.length > 5 && (
-                <span className="text-[#5B403D] font-bold text-[9.6px] uppercase">
-                  Latest 5 of {devices.length}
-                </span>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-4">
+              </tr>
+            </thead>
+            <tbody>
               {loading ? (
-                <div className="py-8">
-                  <CardListSkeleton count={4} />
-                </div>
-              ) : devices.length === 0 ? (
-                <div className="bg-white rounded py-8 px-4 text-center">
-                  <Cpu className="w-10 h-10 mx-auto mb-3 text-[#E5E2E1]" />
-                  <p className="text-[#5B403D] font-medium text-sm">No devices registered yet.</p>
-                  <p className="text-[#5B403D] text-xs mt-1">Use the form to register your first device.</p>
-                </div>
-              ) : (
-                devices.slice(0, 5).map(device => (
-                  <div
+                <TableBodySkeleton cols={7} rows={5} />
+              ) : pageDevices.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-14">
+                    <Cpu className="w-10 h-10 mx-auto mb-3 text-[#E5E2E1]" />
+                    <p className="font-medium text-sm text-[#5B403D]">
+                      {devices.length === 0
+                        ? 'No devices registered yet. Use Register Device to add the first one.'
+                        : 'No devices match this search or filter.'}
+                    </p>
+                  </td>
+                </tr>
+              ) : pageDevices.map(device => {
+                const status = getDeviceStatus(device, activeAlerts, now);
+                const note = getStatusNote(device, status, now);
+                const resident = residentNameByDevice[device.id];
+                return (
+                  <tr
                     key={device.id}
                     onClick={() => openEditDevice(device)}
-                    className="bg-white rounded flex items-center gap-4 p-4 group hover:shadow-sm transition-shadow cursor-pointer"
+                    className="border-b border-[#E5E2E1] last:border-0 hover:bg-[#FCF9F8] transition-colors cursor-pointer"
                   >
-                    {/* Icon */}
-                    <div className="w-12 h-12 bg-[#EBE7E7] rounded-sm flex items-center justify-center shrink-0">
-                      <Cpu className="w-5 h-5 text-[#AF101A]" />
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-end justify-between gap-2">
-                        <span className="font-bold text-xs text-[#1C1B1B] truncate">
-                          {device.device_code}
-                          {device.label && device.label !== device.device_code && (
-                            <span className="font-medium text-[#5B403D]"> · {device.label}</span>
-                          )}
-                        </span>
-                        <span className="text-[#5B403D] font-medium text-[9.6px] whitespace-nowrap shrink-0">
-                          {timeAgo(device.created_at)}
-                        </span>
+                    <td className="px-5 py-4 align-top">
+                      <span className="block font-mono font-semibold text-xs text-[#1C1B1B] whitespace-nowrap">{device.device_code}</span>
+                      {device.label && device.label !== device.device_code && (
+                        <span className="block text-[11px] text-[#5B403D] max-w-[180px] leading-tight mt-0.5">{device.label}</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4 align-top">
+                      {resident
+                        ? <span className="text-xs font-bold text-[#1C1B1B] whitespace-nowrap">{resident}</span>
+                        : <span className="text-xs text-[#A1A1AA]">Not linked</span>}
+                    </td>
+                    <td className="px-5 py-4 align-top">
+                      <span className="block text-xs text-[#5B403D] max-w-[220px] leading-tight">{displayAddress(device.location_desc)}</span>
+                      <div className="mt-1">
+                        {locationState(device) === 'verified'
+                          ? <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-[#047857]"><ShieldCheck className="w-3 h-3" /> Confirmed</span>
+                          : <LocationStateBadge state={locationState(device)} />}
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-[#5B403D] text-[11px] leading-[16.5px] truncate">
-                          {displayAddress(device.location_desc)}
-                        </p>
-                        <LocationStateBadge state={locationState(device)} />
+                    </td>
+                    <td className="px-5 py-4 align-top">
+                      <div className="flex flex-col gap-1 items-start">
+                        <StatusBadge status={status} />
+                        {note && <span className="text-[10px] text-[#71717A] whitespace-nowrap">{note}</span>}
                         {batteryByDevice[device.id] && (
-                          <span title="Running on backup battery" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] text-[9px] font-bold uppercase tracking-wide shrink-0">
+                          <span title="Running on backup battery" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] text-[9px] font-bold uppercase tracking-wide">
                             <BatteryWarning className="w-3 h-3" /> Battery
                           </span>
                         )}
-                        {device.local_ip && (
-                          <span title="Device local IP" className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#E0F2FE] text-[#0369A1] text-[9px] font-mono tracking-wide shrink-0 ml-auto">
-                            {device.local_ip}
-                          </span>
-                        )}
                       </div>
-                    </div>
+                    </td>
+                    <td className="px-5 py-4 align-top whitespace-nowrap">
+                      <span className="block font-mono text-xs text-[#1C1B1B]">{device.firmware_version_reported ? `v${device.firmware_version_reported}` : '—'}</span>
+                      {isOutdated(device) ? (
+                        <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-[rgba(245,158,11,0.15)] text-[#B45309] text-[9px] font-bold uppercase tracking-wide">Outdated</span>
+                      ) : device.firmware_version && device.firmware_version !== device.firmware_version_reported ? (
+                        <span className="block text-[10px] text-[#71717A] mt-0.5">Target v{device.firmware_version}</span>
+                      ) : null}
+                    </td>
+                    <td className="px-5 py-4 align-top whitespace-nowrap">
+                      <span className="text-xs text-[#5B403D]" title={new Date(device.created_at).toLocaleString()}>{timeAgo(device.created_at)}</span>
+                    </td>
+                    <td className="px-5 py-4 align-top">
+                      <div className="flex items-center gap-3 text-[#A1A1AA]">
+                        <Link
+                          to={`/admin/map?device=${device.id}`}
+                          onClick={e => e.stopPropagation()}
+                          title="Show on map"
+                          className="hover:text-[#1C1B1B] transition-colors"
+                        >
+                          <MapIcon className="w-4 h-4" />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); openEditDevice(device); }}
+                          title="Edit device"
+                          className="hover:text-[#AF101A] transition-colors"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
-                    {/* Edit (the whole row opens it too) */}
-                    <button
-                      onClick={e => { e.stopPropagation(); openEditDevice(device); }}
-                      title="Edit device"
-                      className="text-[#A1A1AA] hover:text-[#AF101A] transition-colors shrink-0"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Chevron */}
-                    <ChevronRight className="w-3 h-3 text-[#E5E2E1] shrink-0 group-hover:text-[#AF101A] transition-colors" />
-                  </div>
-                ))
-              )}
+        {filteredDevices.length > PAGE_SIZE && (
+          <div className="p-4 border-t border-[#E5E2E1] flex items-center justify-between text-xs">
+            <span className="text-[#A1A1AA] font-medium">
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(filteredDevices.length, currentPage * PAGE_SIZE)} of {filteredDevices.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 1} aria-label="Previous page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="font-bold text-[#1C1B1B]">{currentPage} / {totalPages}</span>
+              <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage === totalPages} aria-label="Next page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
+        )}
+      </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Firmware Releases Card — fleet-wide "latest" independent of any
               one device's target (see firmware_releases migration). */}
-          <div className="bg-[#EBE7E7] rounded-lg p-6 flex flex-col gap-5">
+          <div className="lg:col-span-7 bg-[#EBE7E7] rounded-lg p-6 flex flex-col gap-5">
             <div className="flex items-center justify-between">
               <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.1em] uppercase">
                 Firmware Releases
@@ -684,9 +745,116 @@ export const Devices = () => {
               </button>
             </form>
           </div>
-
-        </div>
+          {/* Sensor warm-up (firmware sensors.cpp: alerts held until the MQ-7's first heat + measure cycle). */}
+          <div
+            className="lg:col-span-5 self-start rounded-lg p-6 flex gap-4"
+            style={{
+              background: 'rgba(0, 121, 156, 0.1)',
+              borderLeft: '4px solid #00799C',
+            }}
+          >
+            <div className="shrink-0 mt-0.5">
+              <Info className="w-5 h-5 text-[#005F7B]" />
+            </div>
+            <div>
+              <h4 className="text-[#005F7B] font-bold text-sm tracking-[0.05em] uppercase">
+                Sensor Warm-up
+              </h4>
+              <p className="text-[#5B403D] text-xs leading-[19.5px] mt-1">
+                Each time the device powers on, its CO sensor needs one heat-and-measure cycle (about 2.5 minutes)
+                before its readings count. Alerts are held until then.
+              </p>
+            </div>
+          </div>
       </div>
+
+      {/* Register Device window (portalled, same reason as the edit window below) */}
+      {registerOpen && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={closeRegister}>
+          <div className="bg-[#F6F3F2] rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-8 pt-6">
+              <h3 className="text-[#1C1B1B] font-extrabold text-xl">Register Device</h3>
+              <button type="button" onClick={closeRegister} aria-label="Close" className="text-[#A1A1AA] hover:text-[#1C1B1B] transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          {registered ? (
+            <div className="bg-[#F6F3F2] rounded-lg p-8 flex flex-col gap-6">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-6 h-6 text-[#047857] shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-[#1C1B1B] font-bold text-lg">{registered.device_code} registered</h3>
+                  <p className="text-[#5B403D] text-sm mt-1">
+                    Enter the device code and API key in the device's Wi-Fi setup portal. Give the device code to the
+                    resident: they enter it when they create their account.
+                  </p>
+                </div>
+              </div>
+
+              <CopyField label="Device Code" value={registered.device_code} copied={copiedField === 'code'} onCopy={() => copyRegistered('code')} />
+              <CopyField label="API Key" value={registered.api_key} copied={copiedField === 'key'} onCopy={() => copyRegistered('key')} />
+
+              <div className="flex items-start gap-1.5 text-[#B45309]">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                <span className="text-xs font-bold">
+                  Copy the API key now. It won't be shown again; if it's lost, regenerate it from Edit device.
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setRegistered(null)}
+                className="w-full py-3 rounded border border-[#D6D1D0] text-[#5B403D] font-bold text-sm tracking-[0.025em] uppercase hover:bg-white transition-colors"
+              >
+                Register another device
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="bg-[#F6F3F2] rounded-lg p-8 flex flex-col gap-6">
+              <FormField label="Device Name (optional)" htmlFor="new-device-label">
+                <input
+                  id="new-device-label"
+                  type="text"
+                  maxLength={100}
+                  placeholder="e.g. Unit 6 — Barangay Hall"
+                  value={newLabel}
+                  onChange={e => setNewLabel(e.target.value)}
+                  className="form-input-field"
+                />
+                <span className="text-[11px] text-[#5B403D]">
+                  Shown on the dashboard and map. Leave blank to use the device code.
+                </span>
+              </FormField>
+
+              <ul className="text-xs text-[#5B403D] leading-5 flex flex-col gap-1.5 border-t border-[#E5E2E1] pt-5">
+                <li><span className="font-bold text-[#1C1B1B]">Device code and API key</span> are generated for you and shown once after registering.</li>
+                <li><span className="font-bold text-[#1C1B1B]">Alert thresholds</span> start at 60 °C and 200 ppm CO. Change them later in Edit device.</li>
+                <li><span className="font-bold text-[#1C1B1B]">Address and map pin</span> are set by the resident once their account is linked. You confirm them before they count as verified.</li>
+              </ul>
+
+              {registerError && (
+                <div className="flex items-start gap-1.5 text-[#B91C1C]">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  <span className="text-xs font-bold">Failed to register device: {registerError}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-4 rounded text-white font-bold text-base tracking-[0.025em] uppercase flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                style={{ background: 'linear-gradient(90deg, #AF101A 0%, #D32F2F 100%)' }}
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
+                {submitting ? 'Registering...' : 'Register Device'}
+              </button>
+            </form>
+          )}
+
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {/* Edit Device Modal — name, thresholds, BFP contact, location, firmware, API key */}
       {/* Portalled to <body>: inside the page's scroll container it would sit under the app header. */}
