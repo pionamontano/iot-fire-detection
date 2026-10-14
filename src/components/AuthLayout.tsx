@@ -107,9 +107,11 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
   }, [title]);
 
   return (
-    <div className="min-h-dvh bg-surface font-['Inter',_sans-serif] lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+    // Desktop: the page never scrolls; only the form column does, so a long
+    // form's scrollbar can't narrow the brand panel compared to short pages.
+    <div className="min-h-dvh bg-surface font-['Inter',_sans-serif] lg:grid lg:h-dvh lg:overflow-hidden lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
       {/* Brand panel in the app's header red: a short band on phones/tablets, a full-height column on desktop. */}
-      <aside className="relative overflow-hidden bg-gradient-to-br from-primary via-[#A51818] to-[#7F1212] text-white lg:sticky lg:top-0 lg:h-dvh">
+      <aside className="relative overflow-hidden bg-gradient-to-br from-primary via-[#A51818] to-[#7F1212] text-white lg:h-dvh">
         <SignalRings />
 
         <div className="relative z-10 flex h-full flex-col lg:overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10 lg:mx-auto lg:w-full lg:max-w-[36rem]">
@@ -151,8 +153,10 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
         </div>
       </aside>
 
-      <main className="flex justify-center px-4 py-8 sm:px-8 sm:py-12 lg:items-center lg:min-h-dvh">
-        <div className={`w-full ${wide ? 'max-w-xl' : 'max-w-md'}`}>
+      {/* Stable gutter keeps the form in place whether or not it overflows;
+          my-auto (not items-center) centres it without clipping a tall form. */}
+      <main className="flex flex-col px-4 py-8 sm:px-8 sm:py-12 lg:h-dvh lg:overflow-y-auto lg:[scrollbar-gutter:stable]">
+        <div className={`w-full mx-auto lg:my-auto ${wide ? 'max-w-xl' : 'max-w-md'}`}>
           {backToLogin && <BackToLogin className="mb-6" />}
           <div className="mb-8">
             <h2 className="text-2xl sm:text-[28px] font-extrabold tracking-[-0.025em] text-[#231918]">{title}</h2>
