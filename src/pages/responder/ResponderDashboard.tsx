@@ -32,6 +32,8 @@ import {
   Volume2,
   VolumeX,
   ShieldCheck,
+  PhoneCall,
+  UserX,
 } from 'lucide-react';
 
 // The responder map has no Tier 1 warnings: BFP is dispatched on fires only (see lib/dispatch.ts).
@@ -42,6 +44,66 @@ const ACTION_SPEC: Record<IncidentTarget, { label: string; busyLabel: string; cl
   responding: { label: 'Unit dispatched', busyLabel: 'Updating…', cls: 'bg-primary hover:bg-primary-dark text-white col-span-2' },
   resolved: { label: 'Resolved', busyLabel: 'Closing…', cls: 'bg-success-dark hover:bg-[#065F46] text-white' },
   false_alarm: { label: 'False alarm', busyLabel: 'Closing…', cls: 'border border-border bg-surface-card text-text-body hover:bg-surface' },
+};
+
+// "0917 123 4567" for display; the tel: link uses the bare digits.
+const formatMobile = (n: string) => (/^09\d{9}$/.test(n) ? `${n.slice(0, 4)} ${n.slice(4, 7)} ${n.slice(7)}` : n);
+
+type ContactState =
+  | { kind: 'loading' }
+  | { kind: 'ok'; residents: { full_name: string; contact_number: string | null }[] }
+  | { kind: 'error'; message: string };
+
+// The household to call about an open fire. Responders cannot read profiles directly; the
+// get_incident_resident_contact RPC (20261104000000) returns the linked resident only while the fire is open.
+const ResidentContact = ({ alertId }: { alertId: string }) => {
+  const [state, setState] = useState<ContactState>({ kind: 'loading' });
+  useEffect(() => {
+    let cancelled = false;
+    supabase.rpc('get_incident_resident_contact', { p_alert_id: alertId }).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) {
+        setState({
+          kind: 'error',
+          message: error.code === 'PGRST202'
+            ? 'Resident contact is unavailable until the database update is applied.'
+            : "Couldn't load the resident's number.",
+        });
+      } else {
+        setState({ kind: 'ok', residents: (data ?? []) as { full_name: string; contact_number: string | null }[] });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [alertId]);
+
+  if (state.kind === 'loading') return <div className="h-10 rounded-lg skeleton-pulse" aria-label="Loading resident contact" />;
+  if (state.kind === 'error') return <p className="text-[11px] font-medium text-text-subtle">{state.message}</p>;
+  if (state.residents.length === 0) {
+    return (
+      <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-subtle">
+        <UserX className="w-3.5 h-3.5" /> No resident account linked to this device.
+      </p>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {state.residents.map((r, i) => (
+        <li key={i} className="flex items-center justify-between gap-3 rounded-lg border border-border-warm bg-surface px-3 py-2">
+          <span className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-text-body">Resident</span>
+            <span className="block text-sm font-bold text-text truncate">{r.full_name || 'Name not set'}</span>
+          </span>
+          {r.contact_number ? (
+            <a href={`tel:${r.contact_number.replace(/[^\d+]/g, '')}`} className={`${BTN_SECONDARY} !h-9 !text-xs shrink-0`} aria-label={`Call ${r.full_name || 'resident'} at ${r.contact_number}`}>
+              <PhoneCall className="w-3.5 h-3.5" /> {formatMobile(r.contact_number)}
+            </a>
+          ) : (
+            <span className="text-xs text-text-subtle shrink-0">No number on file</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
 };
 
 export const ResponderDashboard = () => {
@@ -330,6 +392,8 @@ export const ResponderDashboard = () => {
                           <dd className="font-extrabold text-sm text-tier2-text">{alert.co_ppm} ppm</dd>
                         </div>
                       </dl>
+
+                      <ResidentContact alertId={alert.id} />
 
                       <div className="grid grid-cols-2 gap-2">
                         {availableTransitions(alert.incident_status, 'bfp_responder').map(to => {

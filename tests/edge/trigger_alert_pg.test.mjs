@@ -53,8 +53,9 @@ test('REAL SQL: escalation 1 -> 2 keeps one incident, notifies once per tier', {
   const one = await t.send(TIER1); const two = await t.send(TIER2); await t.send(TIER2); await t.send(TIER1);
   assert.equal(one.json.alert_event_id, two.json.alert_event_id);
   assert.equal(await t.pg.q(`select alert_tier from alert_events where id='${one.json.alert_event_id}'`), '2');
-  assert.equal(t.calls.telegram.length, 2);
-  assert.equal(await t.pg.q(`select string_agg(tier::text, ',' order by tier) from alert_notifications where channel='telegram_station' and alert_event_id='${one.json.alert_event_id}'`), '1,2');
+  assert.equal(t.calls.telegram.length, 1, 'the station chat gets the Tier 2 fire only');
+  assert.equal(await t.pg.q(`select string_agg(tier::text, ',' order by tier) from alert_notifications where channel='telegram_station' and alert_event_id='${one.json.alert_event_id}'`), '2');
+  assert.equal(await t.pg.q(`select string_agg(tier::text, ',' order by tier) from alert_notifications where channel='push' and recipient_key='admin-ok' and alert_event_id='${one.json.alert_event_id}'`), '1,2', 'admins are notified once per tier');
 });
 
 test('REAL SQL: failed Telegram is retried by the next request, up to 3 attempts, 403 never', { skip }, async () => {

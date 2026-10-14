@@ -200,10 +200,12 @@ async function dispatchNotifications(p: {
 }): Promise<void> {
   const { admin, alertId, tier, device, locationString, tgText } = p;
 
+  // The shared station chat (TELEGRAM_CHAT_ID) is the fire station's, so it gets fires (Tier 2) only, like the
+  // BFP responders. Tier 1 warnings reach admins through push and their own linked Telegram (below).
   const telegram = (async () => {
     const token = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
     const chatId = Deno.env.get('TELEGRAM_CHAT_ID') || '';
-    if (!token || !chatId) return;
+    if (tier < 2 || !token || !chatId) return;
     if (!(await claim(admin, alertId, tier, 'telegram_station', 'station'))) return;
     const r = await sendTelegram(token, chatId, tgText);
     await complete(admin, alertId, tier, 'telegram_station', 'station', r.ok ? 'sent' : 'failed', r.status, r.ref ?? null, r.error ?? null, r.retryable);

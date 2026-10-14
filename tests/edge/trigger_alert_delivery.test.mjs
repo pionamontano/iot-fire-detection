@@ -2,7 +2,10 @@
 // backend + provider stubs (nothing is sent anywhere).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { setup, TIER1, TIER2, device } from './delivery_helpers.mjs';
+import { setup, TIER1, TIER2, device, profiles } from './delivery_helpers.mjs';
+
+// An admin who linked their own Telegram: the only Telegram recipient of a Tier 1 warning.
+const withAdminChat = profiles.map((p) => (p.id === 'admin-ok' ? { ...p, telegram_chat_id: 'chat-admin' } : p));
 
 const ELIGIBLE_T2 = ['admin-ok', 'res-ok', 'resp-ok'];
 const ELIGIBLE_T1 = ['admin-ok'];   // Tier 1 warnings go to admins only; BFP responders join at Tier 2
@@ -48,8 +51,8 @@ test('ESCALATION tier 1 -> 2 is a NEW notification (same incident), responders a
   const one = await t.send(TIER1); const two = await t.send(TIER2);
   assert.equal(one.json.alert_event_id, two.json.alert_event_id);
   assert.equal(one.json.tier, 1); assert.equal(two.json.tier, 2);
-  assert.equal(t.calls.telegram.length, 2);
-  assert.match(t.calls.telegram[0].text, /^WARNING — Tier 1/); assert.match(t.calls.telegram[1].text, /^FIRE ALERT — Tier 2/);
+  assert.equal(t.calls.telegram.length, 1, 'the station chat gets the Tier 2 fire only');
+  assert.match(t.calls.telegram[0].text, /^FIRE ALERT — Tier 2/);
   assert.deepEqual(sorted(t.calls.push[0].userIds), ELIGIBLE_T1);
   assert.deepEqual(sorted(t.calls.push[1].userIds), ELIGIBLE_T2);
 });
@@ -160,11 +163,11 @@ test('INCIDENT CANNOT BE RECORDED: still attempts the station notifications, the
 });
 
 test('...and a device retrying during the outage does not spam: unrecorded notifications are de-duplicated in memory', async () => {
-  const t = setup({ backendSetup: (b) => { b.failRaise = { code: 'XX000', message: 'db down' }; } });
+  const t = setup({ tables: { profiles: withAdminChat }, backendSetup: (b) => { b.failRaise = { code: 'XX000', message: 'db down' }; } });
   await t.send(); await t.send(); await t.send();
-  assert.equal(t.calls.telegram.length, 1);
-  await t.send(TIER1);   // a different tier is a different event
-  assert.equal(t.calls.telegram.length, 2);
+  assert.equal(t.calls.telegram.length, 2, 'station + admin chat, once');
+  await t.send(TIER1);   // a different tier is a different event (admin chat only: the station chat is Tier 2 only)
+  assert.equal(t.calls.telegram.length, 3);
 });
 
 test('LEGACY fallback while the 5.1 migrations are not applied: records the incident the old way, flags it, still dedupes', async () => {
@@ -223,7 +226,7 @@ test('response keeps every field the firmware parses; extra fields are additive;
 test('notification TEXT is unchanged', async () => {
   const t = setup(); await t.send(TIER2);
   assert.match(t.calls.telegram[0].text, /^FIRE ALERT — Tier 2\n\nDevice: T-001\nLocation: Registered Loc\nTime: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d\n\nSensor readings:\n- CO: 500 ppm \(threshold: 200 ppm\)\n- Temp: 90°C \(threshold: 60°C\)\n\nGPS: Unavailable\n\nSMS alerts have been dispatched\.$/);
-  const t1 = setup(); await t1.send(TIER1);
+  const t1 = setup({ tables: { profiles: withAdminChat } }); await t1.send(TIER1);
   assert.match(t1.calls.telegram[0].text, /^WARNING — Tier 1\n\nDevice: T-001\n.*\n\nElevated reading detected:\n- CO: 500 ppm \(threshold: 200 ppm\)\n- Temp: 20°C \(threshold: 60°C\)\n\nMonitor the area\. No SMS dispatched at this level\.$/s);
   assert.equal(t.calls.push[0].title, 'FIRE ALERT - Tier 2');
   assert.equal(t.calls.push[0].body, 'Device: T-001\nLocation: Registered Loc');

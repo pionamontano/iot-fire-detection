@@ -42,7 +42,7 @@ The device takes readings continuously and reports to the system about every **3
 
 | Level | Trigger | What happens |
 |---|---|---|
-| **Tier 1 — Warning** | **One** sensor (CO *or* temperature) is above its limit | Yellow LED. Alert on the BFP dashboard, Telegram station chat and push notifications to responders. **No SMS.** |
+| **Tier 1 — Warning** | **One** sensor (CO *or* temperature) is above its limit | Yellow LED. Push and Telegram to administrators, who check the site. **No SMS**, and BFP is not notified. |
 | **Tier 2 — Fire Alert** | **Both** sensors are above their limits | Red LED **and buzzer**. Alert to BFP and push notification to the resident. **SMS to the resident and to the BFP station.** |
 
 To avoid false alarms, the device needs **3 readings in a row** above the limit before it raises an alert, and **2 safe readings in a row** before it clears one. A single brief spike will not set it off.
@@ -231,19 +231,17 @@ Your menu has: **Dashboard**, **Alert Logs**, **Settings**, **Logout**.
 
 ### 7.1 Dashboard
 
-- **Summary cards**: **Active Alarms**, **Pre-Alerts / Warning**, **Monitored Coverage**, **Alerts Today**.
-- **Live map** of every device. Pin colours:
+You see **fire alerts (Tier 2) only**. Single-sensor warnings (Tier 1) go to the administrators, who check the site first.
 
-  | Colour | Meaning |
-  |---|---|
-  | **Green** | Normal |
-  | **Red** | Fire alert |
-  | **Amber** | Warning / fault |
-  | **Grey** | Offline |
-
-  Devices with no usable coordinates are not drawn on the map. A pin may show the position as live GPS, *last-known*, or *registered address*. A *last-known* position is **not** a live GPS fix. Treat the address as an estimate.
-- **Live Alert Feed**: each active alert with the device, location, **Peak Temp** and **CO Level**. Unacknowledged fire alerts play an **audible alarm** in the browser. Keep the page open and your volume on, and allow the browser to play sound.
-- Tap an alert to see its location and navigation link.
+- **Summary cards**: **Active Fires**, **Not Acknowledged**, **Devices Reporting** (online or reconnecting, out of enabled devices) and **Fire Alerts Today**. A card turns red only when there is something to act on.
+- **Alarm sound on / muted** (top right): the browser siren plays while any fire is unacknowledged. Keep the page open, your volume on, and allow the browser to play sound.
+- **Active Fire Alerts** (first on phones), oldest first. Each card shows:
+  - the device, the resident's registered **address** and the area named by GPS;
+  - how long it has been open, the **temperature** and **smoke/CO** readings;
+  - the **resident** linked to the device and a button to **call** them (shown only while the fire is open);
+  - the next action (**Acknowledge**, **Unit dispatched**, **Resolved**, **False alarm**);
+  - **Directions** and **Show on map**. The line under them says where directions lead: *live GPS at alert*, *last-known GPS position*, or the *registered pin* (confirmed by an admin or not yet confirmed). Anything other than live GPS or a confirmed pin is approximate: check the address on arrival.
+- **Device Map**: every device with a known position. Red = fire, green = online, blue = reconnecting, grey = offline, black = disabled by an admin. Devices with no usable position are listed under the map.
 
 ### 7.2 Handling an incident
 
@@ -266,26 +264,26 @@ Rules to remember:
 
 ### 7.3 Alert Logs
 
-A searchable table of past incidents: **Timestamp, Device Name, Location, Telemetry Status, Actions**.
+Every fire alert (Tier 2): when it started, the device, the address, the readings, how long it took to acknowledge, and its status.
 
-- Filter by **Date Range** (last 24 hours, 7 days, 30 days, all time), **Device Node** and **Status**.
-- Click the **eye icon** (*View details*) for the **Alert Detail** window: device, location, status, trigger time, temperature, CO level, and acknowledged/resolved times.
-- Use **Export Incident History** to download a record for reporting.
+- Summary cards: **Open**, **Resolved**, **False Alarms** (tap one to filter) and **Avg. Time to Acknowledge**.
+- Filter by status, **date range** (24 hours, 7 days, 30 days, all time) and **device**. Searching a device in the top bar opens its whole history.
+- Tap a row for the details: location and directions, acknowledgement and closing times, who closed it, notes, and whether the device confirmed the BFP SMS.
+- **Export CSV** downloads the alerts currently shown.
 
 ### 7.4 Settings
 
-- **Personal Profile**: your name and contact number (`09XXXXXXXXX`).
-- **Telegram Alerts**: link your Telegram account.
-- **Browser Push Notifications**: enable to get alerts on this device even when the tab is in the background.
-- **Station Information**: station name, address and contact number.
-- **Account Details**: role, user ID and join date. Use **Need Admin Help?** to send a support request.
+- **Personal Details**: your name and mobile number (`09XXXXXXXXX`). Your sign-in email is shown read-only.
+- **Fire Alert Notifications**: link your **Telegram** account and turn on **browser notifications** for each phone or computer you use. Both are for Tier 2 fires only.
+- **Station Information**: station name, address, hotline (mobile or landline with area code) and email. Shared by every responder account.
+- **Account**: role and member-since date. Use **Need Help?** to send a request to an administrator.
 
 ### 7.5 What responders receive
 
 | Event | Responders receive |
 |---|---|
-| Tier 1 | Telegram message to the station chat and web-push notification |
-| Tier 2 | Telegram message and push notification, plus an **SMS to the station number** assigned to that device with the device ID, time, readings, GPS coordinates, address and a Google Maps link |
+| Tier 1 | Nothing. Warnings go to administrators only. |
+| Tier 2 | Telegram message to the station chat and to your linked Telegram, push notification, plus an **SMS to the station number** assigned to that device with the device ID, time, readings, GPS coordinates, address and a Google Maps link |
 
 Messages include a navigation link of the form `maps.google.com/?q=<latitude>,<longitude>`. If the message says the position is *"estimated — last known"*, GPS had no fresh fix; confirm the address with the resident or the dispatcher.
 
