@@ -18,6 +18,7 @@ import type { DeviceStatus } from '../../lib/deviceStatus';
 import { formatEventTime } from '../../lib/alertText';
 import { getPushSubscription } from '../../lib/pushNotifications';
 import { LocationBadge } from '../../components/LocationBadge';
+import { EMERGENCY_HOTLINE, LOCAL_FIRE_STATION, telHref } from '../../lib/emergencyContacts';
 
 // The resident's home page, in the order a resident asks: is my home OK right
 // now (status panel), what is the device measuring (readings), will I be told
@@ -563,7 +564,12 @@ export const ResidentHome = () => {
               Temperature and carbon monoxide are both over their alert levels
               ({openFire!.temp_celsius?.toFixed(1)} °C, {openFire!.co_ppm?.toFixed(0)} ppm, {formatEventTime(openFire!.triggered_at, now)}).
             </p>
-            <p className="font-bold text-tier2-text">If you see fire or smoke, get everyone out and call 911.</p>
+            <p className="font-bold text-tier2-text">
+              If you see fire or smoke, get everyone out and call{' '}
+              <a href={telHref(EMERGENCY_HOTLINE.phone)} className="underline underline-offset-2">{EMERGENCY_HOTLINE.phone}</a>
+              {' '}or the {LOCAL_FIRE_STATION.name} at{' '}
+              <a href={telHref(LOCAL_FIRE_STATION.phone)} className="underline underline-offset-2 whitespace-nowrap">{LOCAL_FIRE_STATION.phone}</a>.
+            </p>
             {responderLine}
             {offlineDuringAlert}
           </StatusHero>
@@ -836,6 +842,28 @@ export const ResidentHome = () => {
 
         {/* Side column (1/3) */}
         <div className="lg:col-span-1 flex flex-col gap-6 min-w-0">
+
+          {/* Emergency contacts: always visible, not only during an alert */}
+          <section className={CARD}>
+            <SectionHeader title="Emergency Contacts" meta="Tap a number to call" />
+            <ul className="mt-5 flex flex-col divide-y divide-border-warm">
+              {[EMERGENCY_HOTLINE, LOCAL_FIRE_STATION].map(c => (
+                <li key={c.phone} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <span className="block text-sm font-bold text-text">{c.name}</span>
+                    {c.detail && <span className="block text-[11px] text-text-subtle">{c.detail}</span>}
+                  </div>
+                  <a
+                    href={telHref(c.phone)}
+                    aria-label={`Call ${c.name}, ${c.phone}`}
+                    className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-tier2-bg text-primary font-bold text-sm tabular-nums whitespace-nowrap hover:bg-tier2-bg/70 transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5" /> {c.phone}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
 
           {/* Notifications: will the resident actually be told? */}
           <section className={CARD}>

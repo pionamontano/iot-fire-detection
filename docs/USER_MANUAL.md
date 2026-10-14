@@ -148,7 +148,7 @@ The first time you sign in, you must complete a short setup:
 Your home screen answers "is my home OK?" first, then shows the details:
 
 - **Status panel** (top): one of
-  - **Fire alert** (red) — temperature and CO are both over their alert levels. It shows the readings, whether **BFP was notified by SMS**, and how far responders have got (*Waiting for a responder*, *A responder has acknowledged*, *Responders are on the way*). If you see fire or smoke, get everyone out and call **911**.
+  - **Fire alert** (red) — temperature and CO are both over their alert levels. It shows the readings, whether **BFP was notified by SMS**, and how far responders have got (*Waiting for a responder*, *A responder has acknowledged*, *Responders are on the way*). If you see fire or smoke, get everyone out and call **911** or the **Malolos City Fire Station** at **0995 186 0370**.
   - **Warning** (amber) — one reading is over its alert level. Check the room for heat, smoke or a gas source.
   - **All clear** (green) — the device is reporting and readings are within your alert levels.
   - **Reconnecting** (blue) — last report 2 to 15 minutes ago; this usually recovers on its own.
@@ -158,6 +158,7 @@ Your home screen answers "is my home OK?" first, then shows the details:
   Along the bottom: **Last report**, the number of alerts in the **last 7 days** (and how many are still open), and your **device** code.
 - **Readings** — temperature and carbon monoxide (CO) against their alert levels. Press either one to see its last 24 readings in the chart below; the dashed red line is the alert level and bars at or above it are red. Point at (or tab to) a bar to see its value and time. If the device is offline the values are greyed out and dated. *"Warming up"* shows while the CO sensor calibrates.
 - **Recent Alerts** — the five newest alerts with their status (*Active*, *Acknowledged*, *Responding*, *Resolved* or *False alarm*); **View all** opens Alert History.
+- **Emergency Contacts** — **911** and the **Malolos City Fire Station** (0995 186 0370), always shown. On a phone, tap a number to call it.
 - **Notifications** — whether an **SMS** number is set (for fire alerts), **Telegram** is linked, and **push notifications** are on in this browser. **Alert settings** is where you change them.
 - **Device Health** — **Sensors**, **GPS** and **Power** (**Mains** or **On battery**). *On battery* means the building has lost mains power and the device is running on its backup. These show *No data* while the device is offline.
 - **Install Location** — the address on file and where the position comes from. **View on map** opens Device Information.
