@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { X, Send, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { supportCategoriesFor } from '../lib/supportRequests';
 
 interface AdminSupportModalProps {
   isOpen: boolean;
@@ -11,16 +12,10 @@ interface AdminSupportModalProps {
   onSubmitted?: () => void;
 }
 
-const CATEGORIES = [
-  "Role Change",
-  "Password Reset",
-  "Station Assignment",
-  "Account Access / Permissions",
-  "Other"
-];
 
 export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, onClose, profile, userEmail, onSubmitted }) => {
-  const [category, setCategory] = useState(CATEGORIES[0]);
+  const categories = supportCategoriesFor(profile?.role);
+  const [category, setCategory] = useState(categories[0]);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -79,7 +74,7 @@ export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, on
 
   const handleClose = () => {
     // Reset state and close
-    setCategory(CATEGORIES[0]);
+    setCategory(categories[0]);
     setMessage('');
     setErrorMsg('');
     setSuccessMsg('');
@@ -156,7 +151,7 @@ export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, on
                     disabled={loading}
                     className="w-full px-4 py-3 bg-surface-alt border border-border rounded-md text-sm text-text focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all outline-none"
                   >
-                    {CATEGORIES.map(cat => (
+                    {categories.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>

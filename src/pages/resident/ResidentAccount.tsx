@@ -1,36 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Cpu, Settings, Mail } from 'lucide-react';
+import { Save, User, Phone, Shield, Calendar, Cpu, Mail } from 'lucide-react';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
 import { AdminSupportModal } from '../../components/AdminSupportModal';
 import { MySupportRequests } from '../../components/MySupportRequests';
+import { PageHeader } from '../../components/PageHeader';
+import { BTN_PRIMARY, FIELD, LABEL } from '../../components/ui';
+import { getRoleLabel } from '../../lib/supportRequests';
 
 export const ResidentAccount = () => {
   const { profile, user } = useAuth();
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [supportRefresh, setSupportRefresh] = useState(0);
   const [fullName, setFullName] = useState('');
-  const [contactNumber, setContactNumber] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [hasChanges, setHasChanges] = useState(false);
-  const [deviceCode, setDeviceCode] = useState('');
-
   const [origName, setOrigName] = useState('');
-  const [origContact, setOrigContact] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [deviceCode, setDeviceCode] = useState('');
 
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name || '');
-      setContactNumber(profile.contact_number || '');
       setOrigName(profile.full_name || '');
-      setOrigContact(profile.contact_number || '');
-      
-      if (profile.device_id) {
-        fetchDevice(profile.device_id);
-      }
+      if (profile.device_id) fetchDevice(profile.device_id);
     }
   }, [profile]);
 
@@ -39,169 +33,135 @@ export const ResidentAccount = () => {
     if (data) setDeviceCode(data.device_code);
   };
 
-  useEffect(() => {
-    setHasChanges(fullName !== origName || contactNumber !== origContact);
-  }, [fullName, contactNumber, origName, origContact]);
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, '').slice(0, 11);
-    setContactNumber(value);
-  };
+  const nameChanged = fullName.trim() !== origName;
 
   const handleSave = async () => {
     if (!profile) return;
-
-    if (contactNumber && !/^09\d{9}$/.test(contactNumber)) {
-      setErrorMsg("Contact number must be 11 digits starting with 09");
-      setTimeout(() => setErrorMsg(''), 5000);
+    if (!fullName.trim()) {
+      setMsg({ ok: false, text: 'Name cannot be empty.' });
       return;
     }
-
     setSaving(true);
-    setSuccessMsg('');
-    setErrorMsg('');
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: fullName.trim(),
-          contact_number: contactNumber.trim() || null,
-        })
-        .eq('id', profile.id);
-
-      if (error) throw error;
-
+    setMsg(null);
+    const { error } = await supabase.from('profiles').update({ full_name: fullName.trim() }).eq('id', profile.id);
+    if (error) {
+      console.error(error);
+      setMsg({ ok: false, text: `Couldn't save: ${error.message}` });
+    } else {
       setOrigName(fullName.trim());
-      setOrigContact(contactNumber.trim());
-      setSuccessMsg('Account details saved successfully!');
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (e: any) {
-      console.error(e);
-      setErrorMsg('Failed to save: ' + (e.message || 'Unknown error'));
-      setTimeout(() => setErrorMsg(''), 5000);
-    } finally {
-      setSaving(false);
+      setMsg({ ok: true, text: 'Saved.' });
     }
+    setSaving(false);
   };
 
   if (!profile) return <ProfileSkeleton />;
 
   return (
-    <div className="flex flex-col gap-8 pb-12">
-      {/* Header */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-[#DC2626]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.1em]">User Profile</span>
-        </div>
-        <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Account Settings</h1>
-        <p className="text-sm text-[#52525B] mt-1">Manage your personal information and contact details.</p>
-      </div>
+    <div className="flex flex-col gap-6 pb-12">
+      <PageHeader title="Account Settings" description="Your personal details, and help from an administrator." />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Profile Form */}
-        <div className="lg:col-span-2 bg-white border border-[#E4E4E7] rounded-lg p-8">
-          <h2 className="text-lg font-black tracking-tight text-[#18181B] mb-6">Personal Details</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* Profile */}
+        <section className="lg:col-span-2 bg-white border border-border rounded-lg p-5 sm:p-6 min-w-0">
+          <h2 className="text-lg font-bold tracking-[-0.01em] text-text">Personal Details</h2>
 
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6 mt-6">
             <div>
-              <label className="block text-xs font-bold text-[#52525B] mb-1.5 uppercase tracking-[0.1em]">Full Name</label>
+              <label htmlFor="full-name" className={LABEL}>Full name</label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA]" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
                 <input
+                  id="full-name"
                   type="text"
                   value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-[#FCF9F8] border border-[#E4E4E7] rounded-md text-sm text-[#18181B] focus:border-[#B91C1C] focus:ring-1 focus:ring-[#B91C1C]/30 transition-all"
+                  onChange={e => { setFullName(e.target.value); setMsg(null); }}
+                  className={`${FIELD} pl-10`}
                 />
               </div>
+            </div>
+
+            {/* One place to edit the SMS number: Alert Settings, next to the other alert channels. */}
+            <div>
+              <span className={LABEL}>Mobile number</span>
+              <div className="flex items-center justify-between gap-3 h-10 px-3 border border-border rounded-lg bg-surface-alt">
+                <span className="inline-flex items-center gap-2 text-sm text-text min-w-0">
+                  <Phone className="w-4 h-4 text-text-faint shrink-0" />
+                  <span className="truncate">{profile.contact_number || 'Not set'}</span>
+                </span>
+                <Link to="/home/settings" className="text-primary-dark font-bold text-xs hover:underline shrink-0">Change</Link>
+              </div>
+              <p className="text-xs text-text-subtle mt-2">Fire alert SMS go to this number. Change it in Alert Settings.</p>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#52525B] mb-1.5 uppercase tracking-[0.1em]">Contact Number</label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA]" />
-                <input
-                  type="tel"
-                  value={contactNumber}
-                  onChange={handlePhoneChange}
-                  maxLength={11}
-                  placeholder="09XXXXXXXXX"
-                  className="w-full pl-10 pr-4 py-3 bg-[#FCF9F8] border border-[#E4E4E7] rounded-md text-sm text-[#18181B] placeholder-[#A1A1AA] focus:border-[#B91C1C] focus:ring-1 focus:ring-[#B91C1C]/30 transition-all"
-                />
+              <span className={LABEL}>Email</span>
+              <div className="flex items-center gap-2 h-10 px-3 border border-border rounded-lg bg-surface-alt text-sm text-text">
+                <Mail className="w-4 h-4 text-text-faint shrink-0" />
+                <span className="truncate">{user?.email || 'Not available'}</span>
               </div>
-              <p className="text-[10px] text-[#A1A1AA] mt-2">This number will be used for SMS notifications if configured by your administrator.</p>
+              <p className="text-xs text-text-subtle mt-2">Used to sign in. Ask an administrator to change it.</p>
             </div>
 
-            <div className="flex gap-3 mt-2 border-t border-[#E4E4E7] pt-6">
-              <button
-                onClick={handleSave}
-                disabled={saving || !hasChanges}
-                className="flex-1 py-3 bg-gradient-to-b from-[#18181B] to-black text-white text-sm font-bold rounded-lg hover:from-black hover:to-black transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-              >
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-t border-border-warm pt-5">
+              <button type="button" onClick={handleSave} disabled={saving || !nameChanged} className={BTN_PRIMARY}>
                 <Save className="w-4 h-4" />
-                {saving ? 'SAVING...' : hasChanges ? 'SAVE CHANGES' : 'NO CHANGES'}
+                {saving ? 'Saving...' : 'Save changes'}
               </button>
-            </div>
-
-            {successMsg && (
-              <div className="flex items-center gap-2 justify-center text-sm font-bold text-[#00799C]">
-                <CheckCircle2 className="w-4 h-4" /> {successMsg}
-              </div>
-            )}
-            {errorMsg && (
-              <div className="flex items-center gap-2 justify-center text-sm font-bold text-[#DC2626]">
-                <AlertTriangle className="w-4 h-4" /> {errorMsg}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Account Info Sidebar */}
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          <div className="bg-[#FCF9F8] border border-[#E4E4E7] rounded-lg p-6">
-            <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-[#52525B] mb-4">Account Overview</h3>
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-3">
-                <Shield className="w-4 h-4 text-[#B91C1C]" />
-                <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Role</span>
-                  <span className="text-sm font-bold text-[#18181B]">Resident / Owner</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Cpu className="w-4 h-4 text-[#B91C1C]" />
-                <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Assigned Unit</span>
-                  <span className="text-sm font-bold text-[#18181B]">{deviceCode || 'None'}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Calendar className="w-4 h-4 text-[#B91C1C]" />
-                <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Registered On</span>
-                  <span className="text-sm font-bold text-[#18181B]">{new Date(profile.created_at).toLocaleDateString()}</span>
-                </div>
-              </div>
+              {msg && (
+                <p role={msg.ok ? 'status' : 'alert'} className={`text-xs font-semibold ${msg.ok ? 'text-success-dark' : 'text-primary'}`}>{msg.text}</p>
+              )}
             </div>
           </div>
+        </section>
 
-          <div className="bg-[#DC2626] rounded-lg p-6 text-white">
-            <Settings className="w-6 h-6 mb-3 text-white/80" />
-            <h3 className="font-bold text-lg mb-1">Need Admin Help?</h3>
-            <p className="text-xs text-white/80 leading-relaxed mb-4">
-              Contact your system administrator to change your role, reset your password, or manage account access.
+        {/* Side column */}
+        <div className="lg:col-span-1 flex flex-col gap-6 min-w-0">
+          <section className="bg-white border border-border rounded-lg p-5 sm:p-6">
+            <h2 className="text-lg font-bold tracking-[-0.01em] text-text">Account</h2>
+            <dl className="flex flex-col gap-4 mt-5">
+              <div className="flex items-center gap-3">
+                <Shield className="w-4 h-4 text-text-body shrink-0" />
+                <div>
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-body">Role</dt>
+                  <dd className="text-sm font-bold text-text">{getRoleLabel(profile.role)}</dd>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Cpu className="w-4 h-4 text-text-body shrink-0" />
+                <div>
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-body">Device</dt>
+                  <dd className="text-sm font-bold text-text">
+                    {deviceCode ? <Link to="/home/devices" className="hover:underline">{deviceCode}</Link> : 'None linked'}
+                  </dd>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Calendar className="w-4 h-4 text-text-body shrink-0" />
+                <div>
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-body">Member since</dt>
+                  <dd className="text-sm font-bold text-text">{new Date(profile.created_at).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })}</dd>
+                </div>
+              </div>
+            </dl>
+          </section>
+
+          <section className="bg-white border border-border rounded-lg p-5 sm:p-6">
+            <h2 className="text-lg font-bold tracking-[-0.01em] text-text">Need Help?</h2>
+            <p className="text-xs text-text-subtle leading-relaxed mt-1">
+              Ask an administrator to link or change your device, reset your password, or fix account access.
             </p>
-            <button
-              onClick={() => setIsSupportModalOpen(true)}
-              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2.5 bg-white text-[#DC2626] text-xs font-bold rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
-            >
+            <button type="button" onClick={() => setIsSupportModalOpen(true)} className={`${BTN_PRIMARY} w-full mt-4`}>
               <Mail className="w-4 h-4" />
-              Contact Administrator
+              Contact administrator
             </button>
-          </div>
+          </section>
 
-          <MySupportRequests userId={profile.id} refreshKey={supportRefresh} />
+          <MySupportRequests
+            userId={profile.id}
+            refreshKey={supportRefresh}
+            cardClassName="bg-white border border-border rounded-lg p-5 sm:p-6"
+            titleClassName="text-lg font-bold tracking-[-0.01em] text-text"
+          />
         </div>
       </div>
 

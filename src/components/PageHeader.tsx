@@ -1,6 +1,6 @@
 import React from 'react';
 
-// One page-title block for every admin page, so titles, descriptions and
+// One page-title block for every admin and resident page, so titles, descriptions and
 // header actions line up and scale the same way at every breakpoint.
 export const PageHeader = ({
   title,

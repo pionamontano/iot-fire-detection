@@ -104,10 +104,15 @@ export const formatLastSeen = (
   now: number = Date.now()
 ): string => {
   if (!lastSeenAt) return 'Never seen';
-  const minutes = Math.max(0, Math.round((now - new Date(lastSeenAt).getTime()) / 60000));
-  if (minutes < 1) return 'Last seen just now';
-  if (minutes < 60) return `Last seen ${minutes} min ago`;
+  return `Last seen ${formatAgo(lastSeenAt, now)}`;
+};
+
+/** "just now" / "12 min ago" / "14 h ago" / "3 d ago", for a value already labelled "Last seen". */
+export const formatAgo = (iso: string, now: number = Date.now()): string => {
+  const minutes = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `Last seen ${hours} h ago`;
-  return `Last seen ${Math.round(hours / 24)} d ago`;
+  if (hours < 48) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
 };

@@ -223,6 +223,12 @@ void gsmSetIncidentSeq(uint32_t seq) { s_incidentSeq = seq; }
 void gsmQueueSms(const char* number, const char* message,
                  const char* role, const char* alertEventId) {
     if (!smsMutex) return;
+    // No number configured (e.g. an admin cleared the BFP contact): nothing
+    // to send, so don't occupy a queue slot or the modem with it.
+    if (!number || number[0] == '\0') {
+        GSMLOG("SMS (%s) skipped: no number configured", role);
+        return;
+    }
     if (xSemaphoreTake(smsMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         if (smsCount < SMS_QUEUE_SIZE) {
             SmsJob* job = &smsQueue[smsTail];

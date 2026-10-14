@@ -4,7 +4,7 @@
 // switched off is disabled.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getDeviceStatus, getStatusNote, formatLastSeen } from '../src/lib/deviceStatus.ts';
+import { getDeviceStatus, getStatusNote, formatLastSeen, formatAgo } from '../src/lib/deviceStatus.ts';
 
 const NOW = Date.parse('2026-10-12T12:00:00Z');
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -46,4 +46,10 @@ test('getStatusNote: last seen for offline, reconnecting and disabled devices', 
 test('formatLastSeen: switches to hours and days', () => {
   assert.equal(formatLastSeen(ago(3 * 3600_000), NOW), 'Last seen 3 h ago');
   assert.equal(formatLastSeen(ago(20 * 86400_000), NOW), 'Last seen 20 d ago');
+});
+
+test('formatAgo: same steps as formatLastSeen, without the prefix', () => {
+  assert.equal(formatAgo(ago(10_000), NOW), 'just now');
+  assert.equal(formatAgo(ago(12 * 60_000), NOW), '12 min ago');
+  assert.equal(formatAgo(ago(14 * 3600_000), NOW), '14 h ago');
 });

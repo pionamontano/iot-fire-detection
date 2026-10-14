@@ -9,7 +9,14 @@ const SHOWN = 3;
 // The signed-in user's own "Contact Administrator" requests, with their status
 // and the administrator's reply. RLS ("Users view own support requests") limits
 // the read to their own rows. `refreshKey` changes after they submit a new one.
-export const MySupportRequests = ({ userId, refreshKey }: { userId: string; refreshKey?: number }) => {
+// `cardClassName` / `titleClassName` let a page match its own card style (the
+// resident Account page uses white cards with a normal heading).
+export const MySupportRequests = ({ userId, refreshKey, cardClassName, titleClassName }: {
+  userId: string;
+  refreshKey?: number;
+  cardClassName?: string;
+  titleClassName?: string;
+}) => {
   const [requests, setRequests] = useState<SupportRequest[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -38,9 +45,9 @@ export const MySupportRequests = ({ userId, refreshKey }: { userId: string; refr
   const openCount = (requests ?? []).filter(r => r.status === 'open').length;
 
   return (
-    <div className="bg-surface-alt border border-border rounded-lg p-6">
+    <div className={cardClassName ?? 'bg-surface-alt border border-border rounded-lg p-6'}>
       <div className="flex items-center justify-between gap-2 mb-4">
-        <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-text-body">My Requests</h3>
+        <h3 className={titleClassName ?? 'text-xs font-bold uppercase tracking-[0.1em] text-text-body'}>My Requests</h3>
         {openCount > 0 && (
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-tier1-bg text-tier1-text">{openCount} open</span>
         )}
@@ -55,7 +62,7 @@ export const MySupportRequests = ({ userId, refreshKey }: { userId: string; refr
       ) : requests.length === 0 ? (
         <div className="text-center py-3">
           <Inbox className="w-6 h-6 mx-auto text-border mb-2" />
-          <p className="text-xs text-text-warm">No requests yet. Use Contact Administrator below if you need help.</p>
+          <p className="text-xs text-text-warm">No requests yet. Use Contact administrator if you need help.</p>
         </div>
       ) : (
         <ul className="flex flex-col gap-3">

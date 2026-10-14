@@ -6,6 +6,10 @@ import { Filter, FileText, Flame, RefreshCw, ThermometerSun } from 'lucide-react
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
 import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { usePagedRows } from '../../hooks/usePagedRows';
+import { AlertStatusPill } from '../../components/StatusBadge';
+import { formatEventTime } from '../../lib/alertText';
+import { PageHeader } from '../../components/PageHeader';
+import { BTN_SECONDARY } from '../../components/ui';
 
 // The resident's one alert page (it replaced the separate resident System
 // Log): every alert their device raised, filtered by date range, tier and
@@ -31,8 +35,8 @@ const daysAgo = (n: number) => {
   return localDate(d);
 };
 
-const FIELD = 'w-full bg-[#FCF9F8] border border-[#E4E4E7] rounded px-3 py-2 text-sm text-[#18181B] focus:border-[#B91C1C] focus:ring-1 focus:ring-[#B91C1C]/30 outline-none';
-const LABEL = 'text-xs font-bold text-[#52525B] uppercase tracking-wider';
+const FIELD = 'w-full bg-surface border border-border rounded px-3 py-2 text-sm text-text focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none';
+const LABEL = 'text-xs font-bold text-text-body uppercase tracking-wider';
 
 export const ResidentAlerts = () => {
   const { profile } = useAuth();
@@ -127,30 +131,19 @@ export const ResidentAlerts = () => {
 
   return (
     <div className="flex flex-col gap-6 pb-12">
-      {/* Header (same layout as the other resident pages) */}
-      <div className="flex flex-wrap justify-between items-start gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-[#DC2626]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Alerts</span>
-          </div>
-          <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Alert History</h1>
-          <p className="text-sm text-[#52525B] mt-1">Every fire alert and warning your device raised, and whether it has been resolved.</p>
-        </div>
-        {deviceId && (
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing || loading}
-            className="flex items-center gap-2 px-4 py-2 bg-[#18181B] text-white text-[10px] font-bold uppercase tracking-widest rounded hover:bg-black transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+      <PageHeader
+        title="Alert History"
+        description="Every fire alert and warning your device raised, and whether it has been resolved."
+        actions={deviceId && (
+          <button type="button" onClick={handleRefresh} disabled={refreshing || loading} className={BTN_SECONDARY}>
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
         )}
-      </div>
+      />
 
       {/* Filters */}
-      <div className="bg-white border border-[#E4E4E7] rounded-lg p-4 flex flex-col gap-4">
+      <div className="bg-white border border-border rounded-lg p-4 flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row gap-4 items-end">
           <div className="flex flex-col gap-1.5 w-full sm:w-auto">
             <label htmlFor="alerts-from" className={LABEL}>From date</label>
@@ -168,13 +161,13 @@ export const ResidentAlerts = () => {
                 <option value="1">Tier 1 Warning</option>
                 <option value="2">Tier 2 Alert</option>
               </select>
-              <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA] pointer-events-none" />
+              <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint pointer-events-none" />
             </div>
           </div>
         </div>
 
         {activeOutsideRange > 0 && (
-          <p className="text-xs font-medium text-[#B91C1C]">
+          <p className="text-xs font-medium text-primary">
             Includes {activeOutsideRange} active {activeOutsideRange === 1 ? 'alert' : 'alerts'} from outside these dates. Active alerts always show until they are resolved.
           </p>
         )}
@@ -192,11 +185,11 @@ export const ResidentAlerts = () => {
                 className={`h-8 px-3 rounded-full border text-xs whitespace-nowrap inline-flex items-center gap-2 transition-colors ${
                   selected
                     ? 'bg-primary border-primary text-white font-bold'
-                    : 'bg-white border-[#E5E2E1] text-[#5B403D] font-semibold hover:border-[#A1A1AA] hover:text-[#1C1B1B]'
+                    : 'bg-white border-border text-text-body font-semibold hover:border-text-faint hover:text-text'
                 }`}
               >
                 {c.label}
-                <span className={`font-bold tabular-nums ${selected ? 'text-white/80' : 'text-[#A1A1AA]'}`}>{c.count}</span>
+                <span className={`font-bold tabular-nums ${selected ? 'text-white/80' : 'text-text-faint'}`}>{c.count}</span>
               </button>
             );
           })}
@@ -234,32 +227,28 @@ export const ResidentAlerts = () => {
                   <td className={TD}>
                     <div className="flex items-center gap-2">
                       {alert.alert_tier === 2
-                        ? <Flame className="w-4 h-4 text-[#DC2626] shrink-0" />
-                        : <ThermometerSun className="w-4 h-4 text-[#F59E0B] shrink-0" />}
-                      <span className="text-sm font-bold text-[#18181B] whitespace-nowrap">
+                        ? <Flame className="w-4 h-4 text-primary shrink-0" />
+                        : <ThermometerSun className="w-4 h-4 text-amber-light shrink-0" />}
+                      <span className="text-sm font-bold text-text whitespace-nowrap">
                         {alert.alert_tier === 2 ? 'Tier 2 Alert' : 'Tier 1 Warning'}
                       </span>
                     </div>
-                    <span className="text-[9px] text-[#A1A1AA] font-mono ml-6">{alert.id.substring(0, 8)}</span>
+                    <span className="text-[9px] text-text-faint font-mono ml-6">{alert.id.substring(0, 8)}</span>
                   </td>
-                  <td className={TD}>
-                    <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${alert.resolved_at ? 'bg-[#E4E4E7] text-[#52525B]' : 'bg-[#DC2626] text-white'}`}>
-                      {alert.resolved_at ? 'Resolved' : 'Active'}
-                    </span>
-                  </td>
-                  <td className={`${TD} text-xs text-[#52525B] whitespace-nowrap`}>{new Date(alert.triggered_at).toLocaleString()}</td>
-                  <td className={`${TD} text-right font-mono text-xs font-bold text-[#18181B] whitespace-nowrap`}>{alert.temp_celsius?.toFixed(1)}°C</td>
-                  <td className={`${TD} text-right font-mono text-xs font-bold text-[#18181B] whitespace-nowrap`}>{alert.co_ppm?.toFixed(0)} ppm</td>
+                  <td className={TD}><AlertStatusPill alert={alert} /></td>
+                  <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>{formatEventTime(alert.triggered_at)}</td>
+                  <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.temp_celsius?.toFixed(1)}°C</td>
+                  <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.co_ppm?.toFixed(0)} ppm</td>
                   <td className={TD}>
                     <div className="flex gap-1">
-                      {alert.sms_sent_owner && <span title="SMS sent to you" className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#E0F2FE] text-[#00799C]">SMS</span>}
-                      {alert.sms_sent_bfp && <span title="Bureau of Fire Protection notified" className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#FEE2E2] text-[#DC2626]">BFP</span>}
-                      {alert.telegram_sent && <span title="Telegram message sent" className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#E4E4E7] text-[#52525B]">TG</span>}
-                      {!alert.sms_sent_owner && !alert.sms_sent_bfp && !alert.telegram_sent && <span className="text-xs text-[#A1A1AA]">—</span>}
+                      {alert.sms_sent_owner && <span title="SMS sent to you" className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-teal-light/10 text-teal-light">SMS</span>}
+                      {alert.sms_sent_bfp && <span title="Bureau of Fire Protection notified" className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-tier2-bg text-primary">BFP</span>}
+                      {alert.telegram_sent && <span title="Telegram message sent" className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-surface-cream text-text-body">TG</span>}
+                      {!alert.sms_sent_owner && !alert.sms_sent_bfp && !alert.telegram_sent && <span className="text-xs text-text-faint">—</span>}
                     </div>
                   </td>
-                  <td className={`${TD} text-xs text-[#52525B] whitespace-nowrap`}>
-                    {alert.resolved_at ? new Date(alert.resolved_at).toLocaleString() : '—'}
+                  <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>
+                    {alert.resolved_at ? formatEventTime(alert.resolved_at) : '—'}
                   </td>
                 </tr>
               ))}
@@ -270,7 +259,7 @@ export const ResidentAlerts = () => {
       </div>
 
       {hitFetchLimit && (
-        <p className="text-xs text-[#A1A1AA]">Only the {FETCH_LIMIT} most recent alerts in this range are shown. Narrow the dates to see older ones.</p>
+        <p className="text-xs text-text-faint">Only the {FETCH_LIMIT} most recent alerts in this range are shown. Narrow the dates to see older ones.</p>
       )}
     </div>
   );
