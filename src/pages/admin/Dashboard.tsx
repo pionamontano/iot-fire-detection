@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import { PageHeader } from '../../components/PageHeader';
+import { StatCard } from '../../components/StatCard';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { AlertEvent } from '../../lib/supabase';
 import {
@@ -359,26 +360,3 @@ const SectionLink = ({ to, children }: { to: string; children: React.ReactNode }
   </Link>
 );
 
-const StatCard = ({
-  label,
-  value,
-  icon: Icon,
-  urgent = false,
-}: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-  urgent?: boolean;
-}) => (
-  <div className={`rounded-lg border shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 sm:p-5 flex flex-col gap-2 min-w-0 ${urgent ? 'bg-tier2-bg/60 border-tier2-border/40 border-b-4 border-b-primary-dark' : 'bg-surface-card border-border'}`}>
-    <div className="flex items-start justify-between gap-2">
-      <span className={`font-bold text-[10px] leading-[15px] tracking-[0.1em] uppercase ${urgent ? 'text-primary-dark' : 'text-text-body'}`}>
-        {label}
-      </span>
-      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${urgent ? 'text-accent' : 'text-text-subtle'}`} />
-    </div>
-    <span className={`font-extrabold text-[28px] leading-8 sm:text-[36px] sm:leading-10 tracking-[-0.04em] ${urgent ? 'text-primary-dark' : 'text-text'}`}>
-      {value}
-    </span>
-  </div>
-);
