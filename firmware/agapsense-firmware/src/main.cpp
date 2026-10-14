@@ -20,9 +20,13 @@
 #include "gps.h"
 #include "connectivity.h"
 #include "gsm.h"
+#include "diag_log.h"
+#include "diag_server.h"
 
 #if DEBUG_MODE
   #define LOG(fmt, ...) Serial.printf("[MAIN] " fmt "\n", ##__VA_ARGS__)
+#elif ENABLE_DIAG_SERVER
+  #define LOG(fmt, ...) diagLogAdd("[MAIN] " fmt, ##__VA_ARGS__)
 #else
   #define LOG(fmt, ...)
 #endif
@@ -181,6 +185,9 @@ void setup() {
         while (true) delay(1000);
     }
     LOG("Mutexes created OK");
+
+    // No-op unless ENABLE_DIAG_SERVER is set — see diag_server.h.
+    diagServerInit();
 
     // ── FreeRTOS Tasks ─────────────────────────────────────
     // Core 1: sensor sampling + GPS (real-time I/O, latency-sensitive)

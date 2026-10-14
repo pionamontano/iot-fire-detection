@@ -68,9 +68,12 @@
 #include <Update.h>
 #include <esp_task_wdt.h>
 #include <functional>
+#include "diag_log.h"
 
 #if DEBUG_MODE
   #define CLOG(fmt, ...) Serial.printf("[CONN] " fmt "\n", ##__VA_ARGS__)
+#elif ENABLE_DIAG_SERVER
+  #define CLOG(fmt, ...) diagLogAdd("[CONN] " fmt, ##__VA_ARGS__)
 #else
   #define CLOG(fmt, ...)
 #endif
