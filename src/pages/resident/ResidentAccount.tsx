@@ -4,10 +4,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Cpu, Settings, Mail } from 'lucide-react';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
 import { AdminSupportModal } from '../../components/AdminSupportModal';
+import { MySupportRequests } from '../../components/MySupportRequests';
 
 export const ResidentAccount = () => {
   const { profile, user } = useAuth();
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [supportRefresh, setSupportRefresh] = useState(0);
   const [fullName, setFullName] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [saving, setSaving] = useState(false);
@@ -198,6 +200,8 @@ export const ResidentAccount = () => {
               Contact Administrator
             </button>
           </div>
+
+          <MySupportRequests userId={profile.id} refreshKey={supportRefresh} />
         </div>
       </div>
 
@@ -206,6 +210,7 @@ export const ResidentAccount = () => {
         onClose={() => setIsSupportModalOpen(false)}
         profile={profile}
         userEmail={user?.email}
+        onSubmitted={() => setSupportRefresh(n => n + 1)}
       />
     </div>
   );

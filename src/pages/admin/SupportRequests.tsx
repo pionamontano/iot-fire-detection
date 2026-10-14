@@ -2,77 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { PageHeader } from '../../components/PageHeader';
 import { FilterChips } from '../../components/FilterChips';
 import { supabase } from '../../lib/supabase';
-import type { SupportRequest } from '../../lib/supabase';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
-import { Loader2, CheckCircle, Inbox, Mail, Phone, Search, Eye, RotateCcw } from 'lucide-react';
+import { Loader2, CheckCircle, Inbox, Search, Eye, X } from 'lucide-react';
 import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { usePagedRows } from '../../hooks/usePagedRows';
-import {
-  LABEL, FIELD, BTN_SECONDARY, BTN_PRIMARY, BTN_SUCCESS, ACTION_APPROVE, ACTION_EDIT,
-  PILL, Identity, ErrorNote, Modal, ModalActions,
-} from '../../components/ui';
-
-const EMPTY = '—';
-const Empty = () => <span className="text-text-warm">{EMPTY}</span>;
-
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return EMPTY;
-  return new Date(dateStr).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-};
-
-const getRoleLabel = (role: string | null) => {
-  switch (role) {
-    case 'admin': return 'Administrator';
-    case 'bfp_responder': return 'BFP Responder';
-    case 'resident': return 'Resident / Owner';
-    default: return role || 'Unknown role';
-  }
-};
-
-// Same categories as AdminSupportModal's picker; anything else falls back to grey.
-const CATEGORY_BADGE: Record<string, string> = {
-  'Role Change': 'bg-blue-100 text-blue-800 border-blue-200',
-  'Password Reset': 'bg-purple-100 text-purple-800 border-purple-200',
-  'Station Assignment': 'bg-green-100 text-green-800 border-green-200',
-  'Account Access / Permissions': 'bg-amber-100 text-amber-800 border-amber-200',
-};
-
-const CategoryBadge = ({ category }: { category: string }) => (
-  <span className={`${PILL} font-semibold ${CATEGORY_BADGE[category] ?? 'bg-gray-100 text-gray-800 border-gray-200'}`}>
-    {category}
-  </span>
-);
-
-const ContactLines = ({ req }: { req: SupportRequest }) => {
-  if (!req.contact_email && !req.contact_phone) return <Empty />;
-  return (
-    <div className="space-y-1 text-text-body">
-      {req.contact_email && (
-        <a href={`mailto:${req.contact_email}`} className="flex items-center gap-1.5 hover:text-primary break-all">
-          <Mail className="w-3.5 h-3.5 shrink-0 text-text-faint" />{req.contact_email}
-        </a>
-      )}
-      {req.contact_phone && (
-        <a href={`tel:${req.contact_phone}`} className="flex items-center gap-1.5 hover:text-primary">
-          <Phone className="w-3.5 h-3.5 shrink-0 text-text-faint" />{req.contact_phone}
-        </a>
-      )}
-    </div>
-  );
-};
+import { FIELD, ACTION_APPROVE, ACTION_EDIT, Identity } from '../../components/ui';
+import { formatDateTime as formatDate, getRoleLabel } from '../../lib/supportRequests';
+import { SupportRequestDialog, CategoryBadge, ContactLines } from './SupportRequestDialog';
+import type { SupportRequestRow } from './SupportRequestDialog';
 
 type TabType = 'open' | 'resolved';
-type Column = { header: string; cell: (r: SupportRequest) => React.ReactNode; wrap?: boolean };
+type Column = { header: string; cell: (r: SupportRequestRow) => React.ReactNode; wrap?: boolean };
 
 export const SupportRequests = () => {
-  const [requests, setRequests] = useState<SupportRequest[]>([]);
+  const [requests, setRequests] = useState<SupportRequestRow[]>([]);
   const [reviewerNames, setReviewerNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('open');
@@ -80,10 +24,8 @@ export const SupportRequests = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
 
-  const [selected, setSelected] = useState<SupportRequest | null>(null);
-  const [adminNotes, setAdminNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<SupportRequestRow | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRequests();
@@ -98,14 +40,20 @@ export const SupportRequests = () => {
     if (showSpinner) setLoading(true);
     const { data, error } = await supabase
       .from('support_requests')
-      .select(`*, profile:profiles(full_name)`)
+      .select(`*, profile:profiles(full_name, role, device_id, is_active, telegram_chat_id)`)
       .order('created_at', { ascending: false });
 
     setLoadError(error ? { message: error.message, code: error.code } : null);
 
-    const formatted: SupportRequest[] = (data || []).map((req: any) => ({
+    const formatted: SupportRequestRow[] = (data || []).map((req: any) => ({
       ...req,
       full_name: req.profile?.full_name || 'Unknown user',
+      requester: req.profile ? {
+        role: req.profile.role,
+        device_id: req.profile.device_id,
+        is_active: req.profile.is_active,
+        telegram_chat_id: req.profile.telegram_chat_id,
+      } : null,
     }));
     setRequests(formatted);
 
@@ -118,39 +66,14 @@ export const SupportRequests = () => {
     setLoading(false);
   };
 
-  const openDetails = (req: SupportRequest) => {
+  const openDetails = (req: SupportRequestRow) => {
+    setNotice(null);
     setSelected(req);
-    setAdminNotes(req.admin_notes ?? '');
-    setActionError(null);
   };
 
-  const closeDetails = () => {
-    if (saving) return;
+  const handleDone = (message: string) => {
     setSelected(null);
-    setAdminNotes('');
-    setActionError(null);
-  };
-
-  const updateStatus = async (status: SupportRequest['status']) => {
-    if (!selected) return;
-    setSaving(true);
-    setActionError(null);
-
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase
-      .from('support_requests')
-      .update(status === 'resolved'
-        ? { status, admin_notes: adminNotes.trim() || null, reviewed_by: user?.id, reviewed_at: new Date().toISOString() }
-        : { status, reviewed_by: null, reviewed_at: null })
-      .eq('id', selected.id);
-
-    setSaving(false);
-    if (error) {
-      setActionError(`Couldn't update this request: ${error.message}`);
-      return;
-    }
-    setSelected(null);
-    setAdminNotes('');
+    setNotice(message);
     fetchRequests(false);
   };
 
@@ -194,13 +117,13 @@ export const SupportRequests = () => {
     },
     ...(activeTab === 'open'
       ? [
-          { header: 'Contact', cell: (r: SupportRequest) => <ContactLines req={r} /> },
-          { header: 'Submitted', cell: (r: SupportRequest) => <span className="text-text-warm">{formatDate(r.created_at)}</span> },
+          { header: 'Contact', cell: (r: SupportRequestRow) => <ContactLines req={r} /> },
+          { header: 'Submitted', cell: (r: SupportRequestRow) => <span className="text-text-warm">{formatDate(r.created_at)}</span> },
         ]
       : [
           {
             header: 'Resolved',
-            cell: (r: SupportRequest) => (
+            cell: (r: SupportRequestRow) => (
               <>
                 <div className="text-text-warm">{formatDate(r.reviewed_at)}</div>
                 {r.reviewed_by && reviewerNames.get(r.reviewed_by) && (
@@ -212,7 +135,7 @@ export const SupportRequests = () => {
           {
             header: 'Resolution Notes',
             wrap: true,
-            cell: (r: SupportRequest) => r.admin_notes
+            cell: (r: SupportRequestRow) => r.admin_notes
               ? <p className="text-text line-clamp-2">{r.admin_notes}</p>
               : <span className="text-text-warm italic">No notes</span>,
           },
@@ -220,7 +143,7 @@ export const SupportRequests = () => {
   ];
 
   // Open requests go straight to the resolve dialog, which also shows the full message.
-  const actions = (r: SupportRequest) => r.status === 'open' ? (
+  const actions = (r: SupportRequestRow) => r.status === 'open' ? (
     <button onClick={() => openDetails(r)} className={ACTION_APPROVE}>
       <CheckCircle className="w-4 h-4" />
       Resolve
@@ -253,6 +176,13 @@ export const SupportRequests = () => {
         <div className="space-y-4 md:space-y-6">
           {loadError && (
             <LoadErrorBanner what="support requests" error={loadError} onRetry={() => fetchRequests()} />
+          )}
+          {notice && (
+            <div role="status" className="p-3 bg-success/10 border border-success/30 text-success-dark text-sm font-semibold rounded-lg flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="flex-1">{notice}</span>
+              <button onClick={() => setNotice(null)} aria-label="Dismiss" className="p-0.5 -m-0.5 hover:text-text"><X className="w-4 h-4" /></button>
+            </div>
           )}
 
           <div role="tablist" className="flex gap-1 bg-surface-card p-1 rounded-lg border border-border shadow-sm w-full sm:w-fit">
@@ -348,71 +278,13 @@ export const SupportRequests = () => {
       </div>
 
       {selected && (
-        <Modal title={selected.status === 'open' ? 'Resolve Request' : 'Support Request'} onClose={closeDetails}>
-          {actionError && <ErrorNote message={actionError} />}
-
-          <Identity name={selected.full_name} sub={getRoleLabel(selected.role_at_request)} />
-
-          <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-            <div>
-              <dt className="text-text-body font-black text-[10px] uppercase tracking-[0.1em] mb-1">Category</dt>
-              <dd><CategoryBadge category={selected.category} /></dd>
-            </div>
-            <div>
-              <dt className="text-text-body font-black text-[10px] uppercase tracking-[0.1em] mb-1">Submitted</dt>
-              <dd className="text-text-warm">{formatDate(selected.created_at)}</dd>
-            </div>
-            <div className="col-span-2">
-              <dt className="text-text-body font-black text-[10px] uppercase tracking-[0.1em] mb-1">Contact</dt>
-              <dd><ContactLines req={selected} /></dd>
-            </div>
-          </dl>
-
-          <p className={`${LABEL} mt-5`}>Message</p>
-          <div className="bg-surface border border-border rounded-lg p-3 text-sm text-text whitespace-pre-line break-words">
-            {selected.message}
-          </div>
-
-          {selected.status === 'open' ? (
-            <>
-              <label htmlFor="resolution-notes" className={`${LABEL} mt-5`}>
-                Resolution notes <span className="font-medium text-text-warm">(optional)</span>
-              </label>
-              <textarea
-                id="resolution-notes"
-                value={adminNotes}
-                onChange={(e) => setAdminNotes(e.target.value)}
-                placeholder="e.g. Role changed to BFP Responder, user notified"
-                className={`${FIELD} h-24 py-2 resize-none`}
-              />
-              <ModalActions>
-                <button onClick={closeDetails} disabled={saving} className={BTN_SECONDARY}>Cancel</button>
-                <button onClick={() => updateStatus('resolved')} disabled={saving} className={BTN_SUCCESS}>
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                  Mark Resolved
-                </button>
-              </ModalActions>
-            </>
-          ) : (
-            <>
-              <p className={`${LABEL} mt-5`}>Resolution</p>
-              <p className="text-sm text-text-warm">
-                {formatDate(selected.reviewed_at)}
-                {selected.reviewed_by && reviewerNames.get(selected.reviewed_by) && <> by {reviewerNames.get(selected.reviewed_by)}</>}
-              </p>
-              <p className="text-sm text-text mt-1 whitespace-pre-line">
-                {selected.admin_notes || <span className="text-text-warm italic">No notes</span>}
-              </p>
-              <ModalActions>
-                <button onClick={() => updateStatus('open')} disabled={saving} className={BTN_SECONDARY}>
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-                  Reopen
-                </button>
-                <button onClick={closeDetails} disabled={saving} className={BTN_PRIMARY}>Done</button>
-              </ModalActions>
-            </>
-          )}
-        </Modal>
+        <SupportRequestDialog
+          key={selected.id}
+          request={selected}
+          reviewerName={selected.reviewed_by ? reviewerNames.get(selected.reviewed_by) : undefined}
+          onClose={() => setSelected(null)}
+          onDone={handleDone}
+        />
       )}
     </>
   );
