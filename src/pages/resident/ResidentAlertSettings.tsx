@@ -294,7 +294,7 @@ const handleConnectTelegram = async () => {
                 />
               </div>
               <p className="text-[10px] text-text-subtle leading-relaxed">
-                Philippine number only — e.g. 09171234567. Automated alerts will be dispatched to this number within 150ms of trigger detection.
+                Philippine number only — e.g. 09171234567. Tier 2 fire alerts are sent to this number by SMS.
               </p>
               {contactError && <span className="text-primary text-[11px] font-bold mt-1 block">{contactError}</span>}
             </div>
