@@ -840,7 +840,8 @@ export const ResidentHome = () => {
         {/* Side column (1/3) */}
         <div className="lg:col-span-1 flex flex-col gap-6 min-w-0">
 
-          {/* Emergency contacts: always visible, not only during an alert */}
+          {/* Emergency contacts: hidden until a number is set (none during testing) */}
+          {EMERGENCY_CONTACTS.length > 0 && (
           <section className={CARD}>
             <SectionHeader title="Emergency Contacts" meta="Tap to call" />
             <ul className="mt-5 flex flex-col divide-y divide-border-warm">
@@ -861,6 +862,7 @@ export const ResidentHome = () => {
               ))}
             </ul>
           </section>
+          )}
 
           {/* Notifications: will the resident actually be told? */}
           <section className={CARD}>

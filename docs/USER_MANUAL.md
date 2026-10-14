@@ -158,7 +158,7 @@ Your home screen answers "is my home OK?" first, then shows the details:
   Along the bottom: **Last report**, the number of alerts in the **last 7 days** (and how many are still open), and your **device** code.
 - **Readings** — temperature and carbon monoxide (CO) against their alert levels. Press either one to see its last 24 readings in the chart below; the dashed red line is the alert level and bars at or above it are red. Point at (or tab to) a bar to see its value and time. If the device is offline the values are greyed out and dated. *"Warming up"* shows while the CO sensor calibrates.
 - **Recent Alerts** — the five newest alerts with their status (*Active*, *Acknowledged*, *Responding*, *Resolved* or *False alarm*); **View all** opens Alert History.
-- **Emergency Contacts** — the **911** emergency hotline, always shown. On a phone, tap the number to call it.
+- **Emergency Contacts** — your local fire station's number, once it has been set up. On a phone, tap the number to call it.
 - **Notifications** — whether an **SMS** number is set (for fire alerts), **Telegram** is linked, and **push notifications** are on in this browser. **Alert settings** is where you change them.
 - **Device Health** — **Sensors**, **GPS** and **Power** (**Mains** or **On battery**). *On battery* means the building has lost mains power and the device is running on its backup. These show *No data* while the device is offline.
 - **Install Location** — the address on file and where the position comes from. **View on map** opens Device Information.
