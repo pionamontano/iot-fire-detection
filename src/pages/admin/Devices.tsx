@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device, FirmwareRelease } from '../../lib/supabase';
-import { isValidCoordinate } from '../../lib/location';
-import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket } from 'lucide-react';
+import { isValidCoordinate, displayAddress } from '../../lib/location';
+import { Cpu, ChevronRight, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket, MapPin, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { CardListSkeleton } from '../../components/SkeletonLoaders';
+import { PinMap } from '../../components/PinMap';
 
 // Fleet-wide firmware push. Safe because device ID / API key are stored per node (NVS) rather than compiled
 // into the image (docs/FIRMWARE_GUIDE.md, 5.1 and 8.6). Set to false to disable it again (e.g. while nodes still
@@ -16,6 +18,25 @@ const FLEET_PUSH_ENABLED = true;
 const FLEET_PUSH_DISABLED_REASON =
   'Fleet push is disabled. See docs/FIRMWARE_GUIDE.md, section 8.6.';
 
+
+// Where a device's install location stands (20261102000000): the resident sets the address and
+// pin, an admin confirms them. Only a pin with both coordinates counts as set.
+type LocationState = 'not_set' | 'unverified' | 'verified';
+const locationState = (d: Pick<Device, 'latitude' | 'longitude' | 'location_verified'>): LocationState =>
+  !isValidCoordinate(d.latitude, d.longitude) ? 'not_set' : d.location_verified ? 'verified' : 'unverified';
+
+const LocationStateBadge = ({ state }: { state: LocationState }) => {
+  if (state === 'verified') return null;
+  return state === 'unverified' ? (
+    <span title="The resident set this pin; confirm it in Edit device" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] text-[9px] font-bold uppercase tracking-wide shrink-0">
+      <MapPin className="w-3 h-3" /> Unverified pin
+    </span>
+  ) : (
+    <span title="Waiting for the resident to set the address and pin" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#F4F4F5] text-[#52525B] text-[9px] font-bold uppercase tracking-wide shrink-0">
+      <MapPin className="w-3 h-3" /> No pin
+    </span>
+  );
+};
 
 const timeAgo = (dateStr: string) => {
   const seconds = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 1000);
@@ -40,7 +61,9 @@ export const Devices = () => {
   // (spec HW-1.1.5 / SW-2.5.5) — previously only settable at creation.
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
   const [editForm, setEditForm] = useState({
+    label: '',
     location_desc: '',
+    location_verified: false,
     latitude: '',
     longitude: '',
     temp_threshold: 65,
@@ -67,17 +90,14 @@ export const Devices = () => {
   const [publishingRelease, setPublishingRelease] = useState(false);
   const [pushingFleet, setPushingFleet] = useState(false);
 
-  // Form state matching Figma fields
-  const [form, setForm] = useState({
-    device_code: '',
-    label: '',        // "Assigned Owner" maps to label
-    location_desc: '', // "Location Reference"
-    latitude: '',
-    longitude: '',
-    temp_threshold: 65,
-    co_threshold: 200,  // ppm, matches devices.co_threshold's own default
-    bfp_contact: '',
-  });
+  // Registration only asks for an optional name. The code, API key and thresholds come from
+  // register_device() / column defaults; the resident sets the address and pin later.
+  const [newLabel, setNewLabel] = useState('');
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  // Shown once after registering: the API key cannot be read back afterwards (devices.api_key has
+  // no SELECT grant), only regenerated.
+  const [registered, setRegistered] = useState<{ device_code: string; api_key: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<'code' | 'key' | null>(null);
 
   const fetchDevices = useCallback(async () => {
     setLoading(true);
@@ -177,7 +197,9 @@ export const Devices = () => {
   const openEditDevice = (device: Device) => {
     setEditingDevice(device);
     setEditForm({
+      label: device.label || '',
       location_desc: device.location_desc || '',
+      location_verified: device.location_verified,
       latitude: device.latitude != null ? String(device.latitude) : '',
       longitude: device.longitude != null ? String(device.longitude) : '',
       temp_threshold: device.temp_threshold,
@@ -228,11 +250,13 @@ export const Devices = () => {
       return;
     }
 
-    const locationDesc = editForm.location_desc.trim();
-    if (!locationDesc) {
-      alert('Location Reference cannot be empty.');
+    const label = editForm.label.trim();
+    if (!label) {
+      alert('Device name cannot be empty.');
       return;
     }
+
+    const locationDesc = editForm.location_desc.trim();
 
     // Registered coordinates are the install position (not a GPS fix — see
     // lib/location.ts), so they must either both be present and valid, or
@@ -254,13 +278,21 @@ export const Devices = () => {
       }
     }
 
+    if (editForm.location_verified && (!locationDesc || latitude === null)) {
+      alert('A location can only be confirmed once it has both an address and a map pin.');
+      return;
+    }
+
     setSavingEdit(true);
     const { error } = await supabase
       .from('devices')
       .update({
-        location_desc: locationDesc,
+        label,
+        location_desc: locationDesc || null,
         latitude,
         longitude,
+        // Stamped with who/when by the devices_location_verification trigger.
+        location_verified: editForm.location_verified,
         temp_threshold: editForm.temp_threshold,
         co_threshold: editForm.co_threshold,
         bfp_contact: editForm.bfp_contact || null,
@@ -282,36 +314,31 @@ export const Devices = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setRegisterError(null);
 
-    // api_key is generated server-side (devices.api_key column default,
-    // a CSPRNG via pgcrypto) - not set here.
-    const { error } = await supabase.from('devices').insert([{
-      device_code: form.device_code,
-      label: form.label || form.device_code,
-      location_desc: form.location_desc,
-      latitude: form.latitude ? parseFloat(form.latitude) : null,
-      longitude: form.longitude ? parseFloat(form.longitude) : null,
-      co_threshold: form.co_threshold,
-      temp_threshold: form.temp_threshold,
-      bfp_contact: form.bfp_contact || null,
-    }]);
+    // The next AGS-NNN code and the API key (CSPRNG via pgcrypto) are generated server-side.
+    const { data, error } = await supabase.rpc('register_device', { p_label: newLabel.trim() || null });
 
-    if (!error) {
-      setForm({
-        device_code: '',
-        label: '',
-        location_desc: '',
-        latitude: '',
-        longitude: '',
-        temp_threshold: 65,
-        co_threshold: 200,
-        bfp_contact: '',
-      });
-      fetchDevices();
+    if (error) {
+      setRegisterError(error.message);
     } else {
-      alert(error.message);
+      const r = data as { device_code: string; api_key: string };
+      setRegistered({ device_code: r.device_code, api_key: r.api_key });
+      setCopiedField(null);
+      setNewLabel('');
+      fetchDevices();
     }
     setSubmitting(false);
+  };
+
+  const copyRegistered = async (which: 'code' | 'key') => {
+    if (!registered) return;
+    try {
+      await navigator.clipboard.writeText(which === 'code' ? registered.device_code : registered.api_key);
+      setCopiedField(which);
+    } catch {
+      // Clipboard API unavailable (e.g. insecure context): the fields stay selectable by hand.
+    }
   };
 
   // A device counts as outdated only once it's told us what it's running —
@@ -319,6 +346,8 @@ export const Devices = () => {
   // older firmware predating this field, or never seen online) is unknown,
   // not assumed current.
   const activeDevices = devices.filter(d => d.is_active);
+  // All of them, not just the five most recent: a resident can move an old device's pin at any time.
+  const awaitingConfirmation = devices.filter(d => locationState(d) === 'unverified');
   const outdatedDevices = latestRelease
     ? activeDevices.filter(d => d.firmware_version_reported && d.firmware_version_reported !== latestRelease.version)
     : [];
@@ -331,133 +360,156 @@ export const Devices = () => {
       {/* Page Header */}
       <PageHeader
         title="Device Registration"
-        description="Register and manage AgapSense units. Accurate GPS coordinates matter: they are what responders are dispatched to."
+        description="Register AgapSense units and confirm the install locations residents set. Confirmed pins matter: they are where responders are sent when a device has no GPS fix."
       />
 
       {/* Main Grid: 12-col → 7-col Left + 5-col Right */}
       <div className="grid grid-cols-12 gap-8">
         {/* ─── LEFT PANEL: Registration Form ─── */}
-        <div className="col-span-12 lg:col-span-7">
-          <form onSubmit={handleSubmit} className="bg-[#F6F3F2] rounded-lg p-8 pb-12 flex flex-col gap-8">
-            {/* Form Fields Grid: 2-col */}
-            <div className="grid grid-cols-2 gap-6">
-              {/* Device UID */}
-              <FormField label="Device UID">
-                <input
-                  type="text"
-                  required
-                  placeholder="VG-IOT-XXXXX"
-                  value={form.device_code}
-                  onChange={e => setForm({ ...form, device_code: e.target.value })}
-                  className="form-input-field"
-                />
-              </FormField>
-
-              {/* Assigned Owner */}
-              <FormField label="Assigned Owner">
-                <input
-                  type="text"
-                  placeholder="Industrial Safety Div."
-                  value={form.label}
-                  onChange={e => setForm({ ...form, label: e.target.value })}
-                  className="form-input-field"
-                />
-              </FormField>
-
-              {/* Location Reference — full width */}
-              <div className="col-span-2">
-                <FormField label="Location Reference">
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Server Room 402 - East Wing"
-                    value={form.location_desc}
-                    onChange={e => setForm({ ...form, location_desc: e.target.value })}
-                    className="form-input-field"
-                  />
-                </FormField>
+        <div className="col-span-12 lg:col-span-7 flex flex-col gap-6">
+          {registered ? (
+            <div className="bg-[#F6F3F2] rounded-lg p-8 flex flex-col gap-6">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-6 h-6 text-[#047857] shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-[#1C1B1B] font-bold text-lg">{registered.device_code} registered</h3>
+                  <p className="text-[#5B403D] text-sm mt-1">
+                    Enter the device code and API key in the device's Wi-Fi setup portal. Give the device code to the
+                    resident: they enter it when they create their account.
+                  </p>
+                </div>
               </div>
 
-              {/* GPS Latitude */}
-              <FormField label="GPS Latitude">
+              <CopyField label="Device Code" value={registered.device_code} copied={copiedField === 'code'} onCopy={() => copyRegistered('code')} />
+              <CopyField label="API Key" value={registered.api_key} copied={copiedField === 'key'} onCopy={() => copyRegistered('key')} />
+
+              <div className="flex items-start gap-1.5 text-[#B45309]">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                <span className="text-xs font-bold">
+                  Copy the API key now. It won't be shown again; if it's lost, regenerate it from Edit device.
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setRegistered(null)}
+                className="w-full py-3 rounded border border-[#D6D1D0] text-[#5B403D] font-bold text-sm tracking-[0.025em] uppercase hover:bg-white transition-colors"
+              >
+                Register another device
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="bg-[#F6F3F2] rounded-lg p-8 flex flex-col gap-6">
+              <FormField label="Device Name (optional)" htmlFor="new-device-label">
                 <input
+                  id="new-device-label"
                   type="text"
-                  placeholder="40.7128° N"
-                  value={form.latitude}
-                  onChange={e => setForm({ ...form, latitude: e.target.value })}
+                  maxLength={100}
+                  placeholder="e.g. Unit 6 — Barangay Hall"
+                  value={newLabel}
+                  onChange={e => setNewLabel(e.target.value)}
                   className="form-input-field"
                 />
+                <span className="text-[11px] text-[#5B403D]">
+                  Shown on the dashboard and map. Leave blank to use the device code.
+                </span>
               </FormField>
 
-              {/* GPS Longitude */}
-              <FormField label="GPS Longitude">
-                <input
-                  type="text"
-                  placeholder="74.0060° W"
-                  value={form.longitude}
-                  onChange={e => setForm({ ...form, longitude: e.target.value })}
-                  className="form-input-field"
-                />
-              </FormField>
-            </div>
+              <ul className="text-xs text-[#5B403D] leading-5 flex flex-col gap-1.5 border-t border-[#E5E2E1] pt-5">
+                <li><span className="font-bold text-[#1C1B1B]">Device code and API key</span> are generated for you and shown once after registering.</li>
+                <li><span className="font-bold text-[#1C1B1B]">Alert thresholds</span> start at 60 °C and 200 ppm CO. Change them later in Edit device.</li>
+                <li><span className="font-bold text-[#1C1B1B]">Address and map pin</span> are set by the resident once their account is linked. You confirm them before they count as verified.</li>
+              </ul>
 
-            {/* Threshold Sliders — separated by divider */}
-            <div className="border-t border-[#E5E2E1] pt-4 flex flex-col gap-6">
-              {/* Temperature Alert Threshold */}
-              <ThresholdSlider
-                label="Temperature Alert Threshold"
-                value={form.temp_threshold}
-                onChange={val => setForm({ ...form, temp_threshold: val })}
-                min={20}
-                max={120}
-                unit="°C"
-                minLabel="Safe (20°C)"
-                maxLabel="Critical (120°C)"
-                warning={form.temp_threshold < 40 ? 'Very low — may cause frequent false alarms' : form.temp_threshold > 80 ? 'Dangerously high — fire may go undetected' : undefined}
-              />
-
-              {/* Smoke Particulate Threshold */}
-              <ThresholdSlider
-                label="Smoke Particulate Threshold"
-                value={form.co_threshold}
-                onChange={val => setForm({ ...form, co_threshold: val })}
-                min={0}
-                max={1000}
-                unit="ppm"
-                minLabel="Clear (0ppm)"
-                maxLabel="Hazardous (1000ppm)"
-                warning={form.co_threshold < 100 ? 'Very sensitive — expect frequent alerts' : form.co_threshold > 800 ? 'Very high — smoke may go undetected' : undefined}
-              />
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-4 rounded text-white font-bold text-base tracking-[0.025em] uppercase flex items-center justify-center gap-2 transition-all disabled:opacity-60"
-              style={{ background: 'linear-gradient(90deg, #AF101A 0%, #D32F2F 100%)' }}
-            >
-              {submitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Cpu className="w-4 h-4" />
+              {registerError && (
+                <div className="flex items-start gap-1.5 text-[#B91C1C]">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  <span className="text-xs font-bold">Failed to register device: {registerError}</span>
+                </div>
               )}
-              {submitting ? 'Registering...' : 'Initialize & Register Device'}
-            </button>
-          </form>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-4 rounded text-white font-bold text-base tracking-[0.025em] uppercase flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                style={{ background: 'linear-gradient(90deg, #AF101A 0%, #D32F2F 100%)' }}
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
+                {submitting ? 'Registering...' : 'Register Device'}
+              </button>
+            </form>
+          )}
+
+          {/* Sensor warm-up (firmware sensors.cpp: alerts held until the MQ-7's first heat + measure cycle). */}
+          <div
+            className="rounded-lg p-6 flex gap-4"
+            style={{
+              background: 'rgba(0, 121, 156, 0.1)',
+              borderLeft: '4px solid #00799C',
+            }}
+          >
+            <div className="shrink-0 mt-0.5">
+              <Info className="w-5 h-5 text-[#005F7B]" />
+            </div>
+            <div>
+              <h4 className="text-[#005F7B] font-bold text-sm tracking-[0.05em] uppercase">
+                Sensor Warm-up
+              </h4>
+              <p className="text-[#5B403D] text-xs leading-[19.5px] mt-1">
+                Each time the device powers on, its CO sensor needs one heat-and-measure cycle (about 2.5 minutes)
+                before its readings count. Alerts are held until then.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* ─── RIGHT PANEL: Recently Registered ─── */}
         <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
+          {/* Pins residents have set or moved that no admin has checked yet. */}
+          {awaitingConfirmation.length > 0 && (
+            <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg p-6 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.1em] uppercase">
+                  Locations to Confirm
+                </h3>
+                <span className="bg-[rgba(245,158,11,0.15)] text-[#B45309] font-bold text-[9.6px] uppercase px-2 py-1 rounded-sm">
+                  {awaitingConfirmation.length} Waiting
+                </span>
+              </div>
+              <p className="text-[#5B403D] text-xs -mt-2">
+                Residents set these pins. Until you confirm them, alerts label them as unverified.
+              </p>
+              <div className="flex flex-col gap-2">
+                {awaitingConfirmation.map(device => (
+                  <button
+                    key={device.id}
+                    type="button"
+                    onClick={() => openEditDevice(device)}
+                    className="bg-white rounded flex items-center gap-3 p-3 text-left hover:shadow-sm transition-shadow group"
+                  >
+                    <MapPin className="w-4 h-4 text-[#B45309] shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="block font-bold text-xs text-[#1C1B1B]">{device.device_code}</span>
+                      <span className="block text-[#5B403D] text-[11px] truncate">{displayAddress(device.location_desc)}</span>
+                    </div>
+                    <span className="text-[#AF101A] font-bold text-[10px] uppercase tracking-wide shrink-0 group-hover:underline">Review</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Recently Registered Card */}
           <div className="bg-[#EBE7E7] rounded-lg p-6 flex flex-col gap-6">
             <div className="flex items-center justify-between">
               <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.1em] uppercase">
                 Recently Registered
               </h3>
-              <span className="bg-[rgba(211,47,47,0.1)] text-[#D32F2F] font-bold text-[9.6px] uppercase px-2 py-1 rounded-sm">
-                System Real-time
-              </span>
+              {devices.length > 5 && (
+                <span className="text-[#5B403D] font-bold text-[9.6px] uppercase">
+                  Latest 5 of {devices.length}
+                </span>
+              )}
             </div>
 
             <div className="flex flex-col gap-4">
@@ -469,7 +521,7 @@ export const Devices = () => {
                 <div className="bg-white rounded py-8 px-4 text-center">
                   <Cpu className="w-10 h-10 mx-auto mb-3 text-[#E5E2E1]" />
                   <p className="text-[#5B403D] font-medium text-sm">No devices registered yet.</p>
-                  <p className="text-[#5B403D] text-xs mt-1">Use the form to provision your first device.</p>
+                  <p className="text-[#5B403D] text-xs mt-1">Use the form to register your first device.</p>
                 </div>
               ) : (
                 devices.slice(0, 5).map(device => (
@@ -485,16 +537,22 @@ export const Devices = () => {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-end justify-between">
-                        <span className="font-bold text-xs text-[#1C1B1B]">{device.device_code}</span>
-                        <span className="text-[#5B403D] font-medium text-[9.6px]">
+                      <div className="flex items-end justify-between gap-2">
+                        <span className="font-bold text-xs text-[#1C1B1B] truncate">
+                          {device.device_code}
+                          {device.label && device.label !== device.device_code && (
+                            <span className="font-medium text-[#5B403D]"> · {device.label}</span>
+                          )}
+                        </span>
+                        <span className="text-[#5B403D] font-medium text-[9.6px] whitespace-nowrap shrink-0">
                           {timeAgo(device.created_at)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <p className="text-[#5B403D] text-[11px] leading-[16.5px] truncate">
-                          {device.location_desc}
+                          {displayAddress(device.location_desc)}
                         </p>
+                        <LocationStateBadge state={locationState(device)} />
                         {batteryByDevice[device.id] && (
                           <span title="Running on backup battery" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] text-[9px] font-bold uppercase tracking-wide shrink-0">
                             <BatteryWarning className="w-3 h-3" /> Battery
@@ -508,10 +566,10 @@ export const Devices = () => {
                       </div>
                     </div>
 
-                    {/* Edit */}
+                    {/* Edit (the whole row opens it too) */}
                     <button
-                      onClick={() => openEditDevice(device)}
-                      title="Edit thresholds and BFP contact"
+                      onClick={e => { e.stopPropagation(); openEditDevice(device); }}
+                      title="Edit device"
                       className="text-[#A1A1AA] hover:text-[#AF101A] transition-colors shrink-0"
                     >
                       <Pencil className="w-3.5 h-3.5" />
@@ -627,36 +685,14 @@ export const Devices = () => {
             </form>
           </div>
 
-          {/* Calibration Protocol Info Card */}
-          <div
-            className="rounded-lg p-6 flex gap-4"
-            style={{
-              background: 'rgba(0, 121, 156, 0.1)',
-              borderLeft: '4px solid #00799C',
-            }}
-          >
-            <div className="shrink-0 mt-0.5">
-              <Info className="w-5 h-5 text-[#005F7B]" />
-            </div>
-            <div>
-              <h4 className="text-[#005F7B] font-bold text-sm tracking-[0.05em] uppercase">
-                Calibration Protocol
-              </h4>
-              <p className="text-[#5B403D] text-xs leading-[19.5px] mt-1">
-                Once registered, the device will enter a 10-minute
-                baseline calibration period. Alerts will be
-                suppressed until atmospheric normalization is
-                complete.
-              </p>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Edit Device Modal — thresholds + BFP contact for an existing device */}
-      {editingDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setEditingDevice(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
+      {/* Edit Device Modal — name, thresholds, BFP contact, location, firmware, API key */}
+      {/* Portalled to <body>: inside the page's scroll container it would sit under the app header. */}
+      {editingDevice && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={() => setEditingDevice(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-[#1C1B1B] font-extrabold text-xl">Edit Device Settings</h3>
               <button onClick={() => setEditingDevice(null)} className="text-[#A1A1AA] hover:text-[#1C1B1B] transition-colors">
@@ -664,10 +700,21 @@ export const Devices = () => {
               </button>
             </div>
             <p className="text-[#5B403D] text-sm mb-6">
-              Update alert thresholds, install location, BFP contact, and firmware target for <span className="font-bold">{editingDevice.device_code}</span>. Threshold and firmware changes take effect on the device's next config sync.
+              Update the name, alert thresholds, BFP contact, install location and firmware target for <span className="font-bold">{editingDevice.device_code}</span>. Threshold and firmware changes take effect on the device's next config sync (within 10 minutes).
             </p>
 
             <div className="flex flex-col gap-6">
+              <FormField label="Device Name" htmlFor="edit-device-label">
+                <input
+                  id="edit-device-label"
+                  type="text"
+                  maxLength={100}
+                  value={editForm.label}
+                  onChange={e => setEditForm({ ...editForm, label: e.target.value })}
+                  className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+                />
+              </FormField>
+
               <ThresholdSlider
                 label="Temperature Alert Threshold"
                 value={editForm.temp_threshold}
@@ -675,20 +722,20 @@ export const Devices = () => {
                 min={20}
                 max={120}
                 unit="°C"
-                minLabel="Safe (20°C)"
-                maxLabel="Critical (120°C)"
+                minLabel="20 °C"
+                maxLabel="120 °C"
                 warning={editForm.temp_threshold < 40 ? 'Very low — may cause frequent false alarms' : editForm.temp_threshold > 80 ? 'Dangerously high — fire may go undetected' : undefined}
               />
               <ThresholdSlider
-                label="Smoke Particulate Threshold"
+                label="CO Alert Threshold"
                 value={editForm.co_threshold}
                 onChange={val => setEditForm({ ...editForm, co_threshold: val })}
                 min={0}
                 max={1000}
                 unit="ppm"
-                minLabel="Clear (0ppm)"
-                maxLabel="Hazardous (1000ppm)"
-                warning={editForm.co_threshold < 100 ? 'Very sensitive — expect frequent alerts' : editForm.co_threshold > 800 ? 'Very high — smoke may go undetected' : undefined}
+                minLabel="0 ppm"
+                maxLabel="1000 ppm"
+                warning={editForm.co_threshold < 100 ? 'Very sensitive — expect frequent alerts' : editForm.co_threshold > 800 ? 'Very high — a fire may go undetected' : undefined}
               />
 
               <FormField label="BFP Responder Contact">
@@ -701,47 +748,86 @@ export const Devices = () => {
                 />
               </FormField>
 
-              {/* Install location — the address/label and the registered GPS fix are
-                  independent fields (lib/location.ts), so a wrong address here does
-                  not fix itself when the GPS coordinates are corrected, and vice versa. */}
+              {/* Install location — set by the resident (update_own_device_location), confirmed here.
+                  The address text and the pin are independent fields (lib/location.ts), so check both.
+                  Any change the resident makes later withdraws the confirmation (DB trigger). */}
               <div className="border-t border-[#E5E2E1] pt-6 flex flex-col gap-4">
-                <span className="text-[#5B403D] font-semibold text-[11px] tracking-[0.05em] uppercase">
-                  Install Location
-                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[#5B403D] font-semibold text-[11px] tracking-[0.05em] uppercase">
+                    Install Location
+                  </span>
+                  {(() => {
+                    const saved = locationState(editingDevice);
+                    if (saved === 'verified') return (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#047857]">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        Confirmed{editingDevice.location_verified_at ? ` ${new Date(editingDevice.location_verified_at).toLocaleDateString()}` : ''}
+                      </span>
+                    );
+                    return <LocationStateBadge state={saved} />;
+                  })()}
+                </div>
 
-                <FormField label="Location Reference">
+                <FormField label="Address" htmlFor="edit-location-desc">
                   <input
+                    id="edit-location-desc"
                     type="text"
-                    placeholder="e.g. Server Room 402 - East Wing"
+                    maxLength={200}
+                    placeholder="Not set by the resident yet"
                     value={editForm.location_desc}
                     onChange={e => setEditForm({ ...editForm, location_desc: e.target.value })}
                     className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
                   />
                 </FormField>
 
+                <PinMap
+                  lat={editForm.latitude.trim() ? parseFloat(editForm.latitude) : null}
+                  lng={editForm.longitude.trim() ? parseFloat(editForm.longitude) : null}
+                  onChange={(lat, lng) => setEditForm({ ...editForm, latitude: String(lat), longitude: String(lng) })}
+                  heightClass="h-48"
+                />
+
                 <div className="grid grid-cols-2 gap-4">
-                  <FormField label="GPS Latitude">
+                  <FormField label="Latitude" htmlFor="edit-latitude">
                     <input
+                      id="edit-latitude"
                       type="text"
-                      placeholder="40.7128"
+                      inputMode="decimal"
+                      placeholder="14.8447"
                       value={editForm.latitude}
                       onChange={e => setEditForm({ ...editForm, latitude: e.target.value })}
                       className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
                     />
                   </FormField>
-                  <FormField label="GPS Longitude">
+                  <FormField label="Longitude" htmlFor="edit-longitude">
                     <input
+                      id="edit-longitude"
                       type="text"
-                      placeholder="-74.0060"
+                      inputMode="decimal"
+                      placeholder="120.8112"
                       value={editForm.longitude}
                       onChange={e => setEditForm({ ...editForm, longitude: e.target.value })}
                       className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
                     />
                   </FormField>
                 </div>
-                <p className="text-[10px] text-[#A1A1AA]">
-                  These are the registered install coordinates, used only when the device has no GPS fix of its own. Leave both blank to clear them.
+                <p className="text-[10px] text-[#5B403D] -mt-2">
+                  Decimal degrees; west and south are negative. Click the map or drag the pin to move it. Used only
+                  when the device has no GPS fix of its own. Clear both to remove the pin.
                 </p>
+
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.location_verified}
+                    onChange={e => setEditForm({ ...editForm, location_verified: e.target.checked })}
+                    className="mt-0.5 accent-[#047857]"
+                  />
+                  <span className="text-xs text-[#1C1B1B]">
+                    <span className="font-bold">Location confirmed.</span> I've checked that the address and pin
+                    match where this device is installed.
+                  </span>
+                </label>
               </div>
 
               {/* Firmware (OTA) — target version/URL/MD5 the admin sets vs
@@ -857,7 +943,8 @@ export const Devices = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Inline style for form inputs */}
@@ -875,7 +962,7 @@ export const Devices = () => {
           transition: box-shadow 0.2s;
         }
         .form-input-field::placeholder {
-          color: #6B7280;
+          color: #A1A1AA;
         }
         .form-input-field:focus {
           box-shadow: 0 2px 0 0 #AF101A;
@@ -886,13 +973,37 @@ export const Devices = () => {
 };
 
 // ─── Helper: Form Field ───
-const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
+const FormField = ({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) => (
   <div className="flex flex-col gap-2">
-    <label className="text-[#5B403D] font-semibold text-[11px] tracking-[0.05em] uppercase">
+    <label htmlFor={htmlFor} className="text-[#5B403D] font-semibold text-[11px] tracking-[0.05em] uppercase">
       {label}
     </label>
     {children}
   </div>
+);
+
+// ─── Helper: read-only value with a copy button (shown once after registering) ───
+const CopyField = ({ label, value, copied, onCopy }: { label: string; value: string; copied: boolean; onCopy: () => void }) => (
+  <FormField label={label}>
+    <div className="flex gap-2">
+      <input
+        type="text"
+        readOnly
+        value={value}
+        onFocus={e => e.target.select()}
+        aria-label={label}
+        className="flex-1 min-w-0 bg-white rounded px-4 py-3 text-sm font-mono text-[#1C1B1B] focus:outline-none"
+      />
+      <button
+        type="button"
+        onClick={onCopy}
+        title={`Copy ${label.toLowerCase()}`}
+        className="px-3 rounded border border-[#E5E2E1] bg-white text-[#5B403D] hover:bg-[#F6F3F2] transition-colors shrink-0"
+      >
+        {copied ? <Check className="w-4 h-4 text-[#10B981]" /> : <Copy className="w-4 h-4" />}
+      </button>
+    </div>
+  </FormField>
 );
 
 // ─── Helper: Threshold Slider ───
@@ -927,7 +1038,7 @@ const ThresholdSlider = ({
           {label}
         </span>
         <span className="text-[#AF101A] font-bold text-sm">
-          {value}{unit}
+          {value} {unit}
         </span>
       </div>
 
@@ -958,10 +1069,10 @@ const ThresholdSlider = ({
 
       {/* Min/Max labels */}
       <div className="flex items-center justify-between">
-        <span className="text-[#5B403D] uppercase text-[9.6px] leading-[14.4px]">
+        <span className="text-[#5B403D] text-[9.6px] leading-[14.4px]">
           {minLabel}
         </span>
-        <span className="text-[#5B403D] uppercase text-[9.6px] leading-[14.4px]">
+        <span className="text-[#5B403D] text-[9.6px] leading-[14.4px]">
           {maxLabel}
         </span>
       </div>

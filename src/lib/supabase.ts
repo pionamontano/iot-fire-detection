@@ -68,7 +68,8 @@ export interface Device {
   id: string;
   device_code: string;
   label: string;
-  location_desc: string;
+  /** Null until the linked resident sets their address (20261102000000). */
+  location_desc: string | null;
   api_key: string;
   co_threshold: number;
   temp_threshold: number;
@@ -84,6 +85,9 @@ export interface Device {
   firmware_url: string | null;
   firmware_md5: string | null;
   firmware_version_reported: string | null;
+  /** An admin has confirmed the install pin; reset whenever the resident changes it. */
+  location_verified: boolean;
+  location_verified_at: string | null;
 }
 
 export interface FirmwareRelease {

@@ -4,8 +4,9 @@
 //   live         a reading with valid coordinates, gps_valid = true, reported within LIVE_FIX_MAX_AGE_MS
 //   last_known   a reading with valid coordinates that is NOT live (gps_valid = false, i.e. the firmware
 //                is re-sending its cached position, or the fix is older than the live window)
-//   registered   coordinates an administrator entered on the device record (install position).
-//                This is NOT a GPS fix and is never labelled live.
+//   registered   the install pin on the device record: placed by the resident and confirmed by an
+//                administrator (`verified`), or not confirmed yet. This is NOT a GPS fix and is never
+//                labelled live.
 //   unavailable  nothing usable. Callers must show "unavailable" - never invent a position and never
 //                place a marker at a default map centre.
 //
@@ -31,6 +32,7 @@ export interface ReadingLocationInput {
 export interface RegisteredLocationInput {
   latitude?: number | null;
   longitude?: number | null;
+  location_verified?: boolean | null;
 }
 
 export interface ResolvedLocation {
@@ -39,6 +41,8 @@ export interface ResolvedLocation {
   lng: number | null;
   /** ISO timestamp of the reading that carried the coordinates (live / last_known only). */
   fixAt: string | null;
+  /** registered only: an administrator has confirmed the pin (devices.location_verified). */
+  verified?: boolean;
 }
 
 /** A coordinate pair is usable only if both are finite numbers in range and not the (0,0) "no fix" sentinel. */
@@ -81,7 +85,13 @@ export const resolveDeviceLocation = ({
     };
   }
   if (device && isValidCoordinate(device.latitude, device.longitude)) {
-    return { kind: 'registered', lat: device.latitude as number, lng: device.longitude as number, fixAt: null };
+    return {
+      kind: 'registered',
+      lat: device.latitude as number,
+      lng: device.longitude as number,
+      fixAt: null,
+      verified: device.location_verified === true,
+    };
   }
   return UNAVAILABLE;
 };
@@ -113,7 +123,9 @@ export const describeLocation = (loc: ResolvedLocation, now: number = Date.now()
     case 'last_known':
       return { label: 'Last-known GPS', detail: `Not a current fix - last reported ${when}`, approximate: true };
     case 'registered':
-      return { label: 'Registered location', detail: 'Install coordinates entered by an administrator - not a GPS fix', approximate: true };
+      return loc.verified
+        ? { label: 'Registered location', detail: 'Install pin confirmed by an administrator - not a GPS fix', approximate: true }
+        : { label: 'Registered location (unverified)', detail: 'Install pin set by the resident, not yet confirmed by an administrator - not a GPS fix', approximate: true };
     default:
       return { label: 'Location unavailable', detail: 'No valid GPS coordinates have been reported and none are registered', approximate: true };
   }
@@ -122,3 +134,10 @@ export const describeLocation = (loc: ResolvedLocation, now: number = Date.now()
 /** Marker opacity so non-live positions are visibly distinct on maps. */
 export const markerOpacity = (kind: LocationKind): number =>
   kind === 'live' ? 1 : kind === 'last_known' ? 0.75 : 0.6;
+
+/** Address text for display. A device has none until its resident sets it (20261102000000). */
+export const LOCATION_NOT_SET = 'Location not set';
+export const displayAddress = (desc: string | null | undefined): string => desc?.trim() || LOCATION_NOT_SET;
+
+/** Six decimals (~11 cm); more digits than this is noise from a map click or a phone fix. */
+export const roundCoord = (v: number): number => Math.round(v * 1e6) / 1e6;

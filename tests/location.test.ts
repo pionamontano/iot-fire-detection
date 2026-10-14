@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  LIVE_FIX_MAX_AGE_MS, isValidCoordinate, resolveDeviceLocation, describeLocation, formatAge, markerOpacity,
+  LIVE_FIX_MAX_AGE_MS, isValidCoordinate, resolveDeviceLocation, describeLocation, formatAge, markerOpacity, displayAddress,
 } from '../src/lib/location.ts';
 
 const NOW = Date.parse('2026-10-12T12:00:00Z');
@@ -74,6 +74,16 @@ test('registered coordinates are never labelled live and carry no fix time', () 
   assert.deepEqual([r.kind, r.fixAt], ['registered', null]);
   assert.equal(resolveDeviceLocation({ readings: null, device: reg, now: NOW }).kind, 'registered');
 });
+test('registered location carries the admin confirmation flag', () => {
+  assert.equal(resolveDeviceLocation({ device: { latitude: 14.8, longitude: 120.8, location_verified: true }, now: NOW }).verified, true);
+  assert.equal(resolveDeviceLocation({ device: { latitude: 14.8, longitude: 120.8, location_verified: false }, now: NOW }).verified, false);
+  assert.equal(resolveDeviceLocation({ device: { latitude: 14.8, longitude: 120.8 }, now: NOW }).verified, false);
+});
+test('displayAddress falls back when no address is set', () => {
+  assert.equal(displayAddress(null), 'Location not set');
+  assert.equal(displayAddress('  '), 'Location not set');
+  assert.equal(displayAddress('Malolos'), 'Malolos');
+});
 test('a usable reading takes precedence over registered coordinates', () => {
   const r = resolveDeviceLocation({ readings: [{ latitude: 14.7, longitude: 120.7, gps_valid: false, recorded_at: ago(1000) }], device: reg, now: NOW });
   assert.equal(r.kind, 'last_known'); assert.equal(r.lat, 14.7);
@@ -93,6 +103,9 @@ test('describeLocation: wording never calls registered/last-known "live"; unavai
   assert.match(lk.label, /Last-known/); assert.match(lk.detail, /3 h ago/); assert.equal(lk.approximate, true);
   const rg = describeLocation({ kind: 'registered', lat: 1, lng: 1, fixAt: null }, NOW);
   assert.match(rg.detail, /not a GPS fix/); assert.doesNotMatch(rg.label, /live/i);
+  assert.match(rg.label, /unverified/, 'a pin is unverified unless marked otherwise');
+  const rgv = describeLocation({ kind: 'registered', lat: 1, lng: 1, fixAt: null, verified: true }, NOW);
+  assert.match(rgv.detail, /confirmed by an administrator/); assert.doesNotMatch(rgv.label, /unverified/);
   assert.equal(describeLocation({ kind: 'unavailable', lat: null, lng: null, fixAt: null }, NOW).label, 'Location unavailable');
   assert.equal(describeLocation({ kind: 'last_known', lat: 1, lng: 1, fixAt: null }, NOW).detail.includes('time unknown'), true);
 });

@@ -140,7 +140,8 @@ Your menu has four pages plus **Account**: **Dashboard**, **Alert Settings**, **
 The first time you sign in, you must complete a short setup:
 
 1. **Mobile number** — enter it as `09XXXXXXXXX` and re-enter it to confirm. This is the number that receives **SMS fire alerts**, so make sure it is correct and that your phone can receive texts.
-2. **Link your device** — if no device is linked yet, enter your device code (for example `FA-001`). Only one resident can be linked to a device.
+2. **Link your device** — if no device is linked yet, enter your device code (for example `AGS-001`). Only one resident can be linked to a device.
+3. **Install location** — if your device is linked, enter the address where it is installed and place the pin on the map (tap the map, drag the pin, or use **Use my location** while you stand next to the device). Responders are sent to this pin when the device has no GPS signal, so put it on the right building. An administrator checks it afterwards; until then it is shown as *unverified*. You can skip this step and do it later from **Device Information**.
 
 ### 6.2 Dashboard
 
@@ -185,7 +186,7 @@ The device picks up new settings automatically within about **10 minutes**.
 
 ### 6.4 Device Information
 
-Shows your device's details: name, **Location** (you can edit the address with the pencil icon), temperature and smoke thresholds, **Last Seen**, **Recent Sensor Readings** (table with time and values), a **map**, and device specs. If you see *"No device registered to your account"*, your device is not linked yet — contact your administrator.
+Shows your device's details: name, **Location** (use the pencil icon, or **Set pin** / **Move pin** under the map, to change the address and map pin), temperature and CO thresholds, **Last Seen**, **Recent Sensor Readings** (table with time and values), a **map** with the status of your install pin (*not set*, *waiting for confirmation* or *confirmed*), and device specs. Any change you make to the address or pin goes back to an administrator to confirm. If you see *"No device registered to your account"*, your device is not linked yet — contact your administrator.
 
 ### 6.5 System Log
 

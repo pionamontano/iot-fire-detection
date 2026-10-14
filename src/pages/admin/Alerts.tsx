@@ -29,6 +29,7 @@ import type { DeviceStatus } from '../../lib/deviceStatus';
 import { StatusBadge } from '../../components/StatusBadge';
 import { useNowTick } from '../../hooks/useNowTick';
 import { transitionIncident } from '../../lib/incidents';
+import { displayAddress } from '../../lib/location';
 
 type DeviceWithStatus = Device & {
   status: DeviceStatus;
@@ -403,7 +404,7 @@ export const Alerts = () => {
                           </td>
                           <td className="px-5 py-4 align-top">
                             <span className="text-[#5B403D] text-xs block max-w-[150px] leading-tight">
-                              {device.location_desc}
+                              {displayAddress(device.location_desc)}
                             </span>
                           </td>
                           <td className="px-5 py-4 align-top">

@@ -4,7 +4,7 @@ import { Bell, Search, Cpu, Settings, LogOut, ArrowRight, Map as MapIcon } from 
 import { supabase } from '../lib/supabase';
 import type { AlertEvent, Device } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { formatAge } from '../lib/location';
+import { formatAge, displayAddress } from '../lib/location';
 import { getConnectivityStatus, DEVICE_STATUS } from '../lib/deviceStatus';
 import type { DeviceStatus } from '../lib/deviceStatus';
 
@@ -339,7 +339,7 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ resultPath, al
                       </span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-xs font-bold text-[#1C1B1B] truncate">{device.device_code}</span>
-                        <span className="block text-[10px] text-[#5B403D] truncate">{device.label} · {device.location_desc}</span>
+                        <span className="block text-[10px] text-[#5B403D] truncate">{device.label} · {displayAddress(device.location_desc)}</span>
                       </span>
                       {/* Connectivity only: alerts aren't loaded here. Same
                           online rule and colors as everywhere else. */}

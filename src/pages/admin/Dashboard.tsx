@@ -24,6 +24,7 @@ import { DeviceMap, MapLegend } from '../../components/DeviceMap';
 import { MAP_READING_COLUMNS, toMapDevices, formatTemp } from '../../lib/mapDevices';
 import type { DeviceWithReadings } from '../../lib/mapDevices';
 import { alertTitle, alertActor, alertEventAt, formatEventTime } from '../../lib/alertText';
+import { displayAddress } from '../../lib/location';
 
 // Plain counts — no zero-padding ("00", "002"), which read as codes.
 const formatNumber = (n: number): string => n.toLocaleString();
@@ -229,7 +230,7 @@ export const Dashboard = () => {
                           </div>
                           <div className="col-span-2 row-start-2 sm:col-span-1 sm:row-start-auto sm:px-6 sm:py-5 flex flex-wrap items-center gap-2 min-w-0">
                             <span className={`text-text-muted text-sm leading-5 ${isAlert ? 'font-bold' : 'font-medium'}`}>
-                              {device.location_desc}
+                              {displayAddress(device.location_desc)}
                             </span>
                             {onBattery && (
                               <span title="Mains power lost — running on backup battery" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tier1-bg text-[#B45309] text-[10px] font-bold uppercase tracking-wide">

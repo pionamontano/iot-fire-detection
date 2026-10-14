@@ -34,6 +34,8 @@ Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware 
 - **GPS:** NEO-6M, parsed continuously. A fix is "live" only if valid and younger than 5 s; otherwise the last good fix is republished with `gps_valid = false`. Before the first fix the cached value is `0,0`.
 - **Reverse geocoding:** OpenStreetMap Nominatim, run in `trigger-alert`. Messages use a tiered address (street → barangay → municipality), falling back to `display_name`, and always include raw coordinates (labelled "estimated — last known" when `gps_valid` is false). Results are cached in memory (4-decimal grid).
 - **Interactive map** (`react-leaflet` + OSM tiles): pins are coloured green (online / normal), red (fire alert), amber (fault / pre-alert) and grey (offline). Each device is labelled live / last-known / registered / unavailable (`src/lib/location.ts`); devices with no usable coordinates are not drawn.
+- **Install address and pin:** set by the resident linked to the device (first-login setup or Device Information, `update_own_device_location()`), not at registration. `devices.location_verified` records whether an admin has confirmed it; a database trigger resets it whenever a non-admin changes the address or pin, and only an admin can set it (Devices page → Edit device; pending ones are listed under *Locations to Confirm*). Pins that existed before this change were marked confirmed.
+- **Registered-pin fallback in alerts:** when the device sends no usable GPS, the Tier 2 Telegram message includes the registered pin and a navigation link, labelled *confirmed by admin* or *UNVERIFIED — set by resident*. With no address set, messages say "Location not set".
 - **Address-drift detection:** if a reading is more than 100 m from the device's registered location, a prompt (`address_discrepancies`) is raised to the resident. Approving it overwrites the device's registered address and coordinates.
 
 ### 5. Communication and Provisioning
@@ -51,7 +53,7 @@ Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware 
 - **Sensor initialisation:** while `sensor_ready` is false the resident home page shows "Initializing sensors..." in place of values. `sensor_ready` becomes true after the first complete MQ-7 cycle (60 s heating + 90 s measuring ≈ 150 s after power-on).
 - **Admin:** dashboard, map, devices, users, System Overview (fleet status, rename, power toggle, manual resolve), system log with export, security settings.
 - **Responder:** dashboard (state per device, unresolved incidents, map, audible alarm for unacknowledged fire), alert logs, settings (profile, Telegram link, station information).
-- **Resident:** mandatory first-login setup (mobile number), home (status, readings, last 24 readings, alerts, address prompts), alert settings (thresholds, Web Push, Telegram link), device info, system log, account.
+- **Resident:** mandatory first-login setup (mobile number, then install address and pin if a device is linked), home (status, readings, last 24 readings, alerts, address prompts), alert settings (thresholds, Web Push, Telegram link), device info, system log, account.
 - **Support requests:** users file in-app requests (`support_requests`), which admins review in an inbox.
 - **Known defects:** some displayed metrics are placeholders (resident "System Uptime", responder "connectivity %", map "Signal / Latency"); see spec KI-01/02.
 
@@ -60,6 +62,7 @@ Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware 
 - Pending/rejected users can log in but the UI shows a Pending/Rejected screen instead of the app.
 - Admins approve/reject in Users (optionally assigning a device) or create a pre-approved account directly (`create-user`).
 - Residents link a device with its device code (`link-device`); one resident per device.
+- **Device registration** (Devices page): the admin enters only an optional name. `register_device()` generates the next device code (`AGS-NNN`) and the API key and returns both once, for the Wi-Fi setup portal; thresholds start at the column defaults (60 °C, 200 ppm CO). The address and pin are left empty for the resident.
 
 ---
 

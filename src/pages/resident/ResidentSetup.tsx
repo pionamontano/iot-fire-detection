@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import type { Device } from '../../lib/supabase';
 import { CheckCircle2 } from 'lucide-react';
+import { isValidCoordinate } from '../../lib/location';
+import { DeviceLocationEditor } from '../../components/DeviceLocationEditor';
+
+type SetupDevice = Pick<Device, 'location_desc' | 'latitude' | 'longitude' | 'location_verified'>;
 
 export const ResidentSetup = () => {
   const navigate = useNavigate();
@@ -12,6 +17,10 @@ export const ResidentSetup = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Step 2 (install address + pin) only when a device is linked and its pin isn't confirmed yet.
+  const [step, setStep] = useState<'contact' | 'location'>('contact');
+  // undefined while loading, so a quick submit can't skip the location step by accident.
+  const [device, setDevice] = useState<SetupDevice | null | undefined>(undefined);
 
   useEffect(() => {
     // If setup is already complete, redirect to home
@@ -19,6 +28,27 @@ export const ResidentSetup = () => {
       navigate('/home', { replace: true });
     }
   }, [profile, navigate]);
+
+  useEffect(() => {
+    if (!profile?.device_id) return;
+    supabase
+      .from('devices_safe')
+      .select('location_desc, latitude, longitude, location_verified')
+      .eq('id', profile.device_id)
+      .maybeSingle()
+      .then(({ data }) => setDevice((data as SetupDevice | null) ?? null));
+  }, [profile?.device_id]);
+
+  const needsLocation = !!device && !(device.location_verified && isValidCoordinate(device.latitude, device.longitude));
+  const totalSteps = needsLocation ? 2 : 1;
+
+  const finish = () => {
+    setSuccess(true);
+    setTimeout(() => {
+      // Full reload so the auth context picks up setup_complete.
+      window.location.href = '/home';
+    }, 1500);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,14 +79,10 @@ export const ResidentSetup = () => {
         .eq('id', profile.id);
 
       if (updateError) throw updateError;
-      
-      setSuccess(true);
-      setTimeout(() => {
-        // We might want to reload the window to refresh the auth context completely,
-        // or just navigate and let the context update based on realtime if we have it.
-        window.location.href = '/home';
-      }, 1500);
-      
+
+      if (needsLocation) setStep('location');
+      else finish();
+
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Failed to update contact number');
@@ -66,18 +92,31 @@ export const ResidentSetup = () => {
   };
 
   return (
-    <div className="h-screen w-full flex items-center justify-center bg-[#FCF9F8] px-4 font-['Inter',_sans-serif]">
-      <div className="max-w-md w-full flex flex-col gap-6">
+    <div className="min-h-screen w-full flex items-center justify-center bg-[#FCF9F8] px-4 py-8 font-['Inter',_sans-serif]">
+      <div className={`${step === 'location' ? 'max-w-xl' : 'max-w-md'} w-full flex flex-col gap-6`}>
         <div className="text-center flex flex-col gap-2">
           <span className="text-[#857371] text-xs font-bold tracking-[0.1em] uppercase">
-            Setup (1 of 1)
+            Setup ({step === 'contact' ? 1 : 2} of {totalSteps})
           </span>
-          <h2 className="text-[#231918] font-black text-2xl tracking-tight">
-            Set up your alert contact
-          </h2>
-          <p className="text-[#534341] text-sm leading-5">
-            Bantay Apoy sends SMS alerts directly to your phone during a fire event. Enter the mobile number you want to receive these alerts on.
-          </p>
+          {step === 'contact' ? (
+            <>
+              <h2 className="text-[#231918] font-black text-2xl tracking-tight">
+                Set up your alert contact
+              </h2>
+              <p className="text-[#534341] text-sm leading-5">
+                Bantay Apoy sends SMS alerts directly to your phone during a fire event. Enter the mobile number you want to receive these alerts on.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-[#231918] font-black text-2xl tracking-tight">
+                Where is your device installed?
+              </h2>
+              <p className="text-[#534341] text-sm leading-5">
+                Enter the address and place the pin on the building where the device is installed. Responders use it when the device has no GPS signal.
+              </p>
+            </>
+          )}
         </div>
 
         <div className="bg-white p-8 rounded-xl shadow-[0_24px_48px_rgba(0,0,0,0.08)] border border-[#E5E2E1]">
@@ -87,8 +126,25 @@ export const ResidentSetup = () => {
                 <CheckCircle2 className="w-8 h-8 text-[#00799C]" />
               </div>
               <p className="text-[#00799C] font-bold text-center">
-                Contact saved. Taking you to your dashboard...
+                Setup saved. Taking you to your dashboard...
               </p>
+            </div>
+          ) : step === 'location' && device ? (
+            <div className="flex flex-col gap-4">
+              <DeviceLocationEditor
+                initialAddress={device.location_desc}
+                initialLat={device.latitude}
+                initialLng={device.longitude}
+                saveLabel="Save and continue"
+                onSaved={finish}
+              />
+              <button
+                type="button"
+                onClick={finish}
+                className="text-[#534341] text-xs font-bold uppercase tracking-[0.1em] hover:underline"
+              >
+                Skip for now — set it later in Device Info
+              </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -134,7 +190,7 @@ export const ResidentSetup = () => {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (!!profile?.device_id && device === undefined)}
                 className="w-full mt-2 py-4 bg-primary text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-[0_4px_6px_-4px_rgba(211,47,47,0.2),0_10px_15px_-3px_rgba(211,47,47,0.2)] hover:bg-primary-dark transition-colors disabled:opacity-50"
               >
                 {loading ? 'Saving...' : 'Save and continue'}

@@ -132,7 +132,7 @@ export const Logs = () => {
           timestamp: device.created_at,
           type: 'Device Reg',
           initiator: 'Admin',
-          description: `Device ${device.device_code} registered at ${device.location_desc}.`,
+          description: `Device ${device.device_code} registered${device.location_desc ? ` at ${device.location_desc}` : ' (location not set yet)'}.`,
           status: 'INFO',
         });
       });

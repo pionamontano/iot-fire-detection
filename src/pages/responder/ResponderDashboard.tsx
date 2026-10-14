@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Device, AlertEvent } from '../../lib/supabase';
-import { resolveDeviceLocation, describeLocation, isValidCoordinate, markerOpacity } from '../../lib/location';
+import { resolveDeviceLocation, describeLocation, isValidCoordinate, markerOpacity, displayAddress } from '../../lib/location';
 import type { ReadingLocationInput, ResolvedLocation } from '../../lib/location';
 import { useNowTick } from '../../hooks/useNowTick';
 import { getDeviceStatus, getStatusNote, DEVICE_STATUS, DEVICE_STATUS_ORDER } from '../../lib/deviceStatus';
@@ -385,7 +385,7 @@ export const ResponderDashboard = () => {
                   <Popup>
                     <div className="font-sans">
                       <strong className="block text-sm font-bold">{device.device_code}</strong>
-                      <span className="text-xs text-gray-600 block mt-1">{device.location_desc}</span>
+                      <span className="text-xs text-gray-600 block mt-1">{displayAddress(device.location_desc)}</span>
                       <span className="text-xs font-bold mt-1 block" style={{ color: DEVICE_STATUS[device.status].color }}>
                         {DEVICE_STATUS[device.status].longLabel}{note ? ` · ${note}` : ''}
                       </span>
