@@ -206,7 +206,7 @@ The device picks up new settings automatically within about **10 minutes**.
 
 Shows your device: its **status** (Online, Reconnecting, Offline, or Disabled if an administrator switched it off), **last report**, **alert levels** (with a link to change them), **firmware** version, registration date, and whether a **BFP SMS** number has been set by an administrator. **Recent Readings** lists the latest readings with time, temperature, CO, GPS fix, power and sensor state; values at or over an alert level are red.
 
-**Install Location** shows the address on file, a map, where the position comes from, and the status of your install pin (*not set*, *waiting for confirmation* or *confirmed by an administrator*). Use **Set address and pin** / **Edit address or move pin** to change it; any change goes back to an administrator to confirm. If no device is linked yet, the page sends you to the Dashboard to link one with its device code.
+**Install Location** shows the address on file, a map, where the position comes from, and the status of your **Install pin** (*Not set*, *Waiting for confirmation*, or *Confirmed* once an administrator has checked it). Use **Set address and pin** / **Edit address or move pin** to change it; any change goes back to an administrator to confirm. If no device is linked yet, the page sends you to the Dashboard to link one with its device code.
 
 ### 6.6 Account
 

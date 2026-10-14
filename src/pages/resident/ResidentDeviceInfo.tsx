@@ -6,14 +6,14 @@ import { DeviceInfoSkeleton } from '../../components/SkeletonLoaders';
 import { TABLE_CARD, TABLE_TOOLBAR, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { usePagedRows } from '../../hooks/usePagedRows';
 import type { Device, SensorReading } from '../../lib/supabase';
-import { Wifi, WifiOff, Power, RefreshCw, ShieldCheck, MapPin, ArrowRight } from 'lucide-react';
+import { Wifi, WifiOff, Power, RefreshCw, ArrowRight } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { resolveDeviceLocation, markerOpacity, displayAddress, isValidCoordinate } from '../../lib/location';
 import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
 import { DeviceLocationEditor } from '../../components/DeviceLocationEditor';
 import { PageHeader } from '../../components/PageHeader';
-import { BTN_SECONDARY } from '../../components/ui';
+import { BTN_SECONDARY, PILL_OK, PILL_WARN } from '../../components/ui';
 import { StatusBadge } from '../../components/StatusBadge';
 import { NoDeviceLinked } from '../../components/NoDeviceLinked';
 import { DEVICE_STATUS, getDeviceStatus, formatAgo } from '../../lib/deviceStatus';
@@ -221,10 +221,13 @@ export const ResidentDeviceInfo = () => {
               )}
             </div>
             <LocationBadge location={location} />
-            <p className={`mt-4 flex items-center gap-1.5 text-xs font-bold ${hasPin && device.location_verified ? 'text-success-dark' : 'text-[#B45309]'}`}>
-              {hasPin && device.location_verified ? <ShieldCheck className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
-              {!hasPin ? 'Install pin not set' : device.location_verified ? 'Install pin confirmed by an administrator' : 'Install pin waiting for confirmation'}
-            </p>
+            {/* A label + pill, not another pin icon: the location badge right above already has one. */}
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <span className="text-xs font-bold text-text-body">Install pin</span>
+              <span className={!hasPin ? PILL_WARN : device.location_verified ? PILL_OK : PILL_WARN}>
+                {!hasPin ? 'Not set' : device.location_verified ? 'Confirmed' : 'Waiting for confirmation'}
+              </span>
+            </div>
             {locationMsg && <p role="status" className="text-xs font-semibold text-success-dark mt-2">{locationMsg}</p>}
             {!editingLocation && (
               <button type="button" onClick={startEditing} className="mt-4 inline-flex items-center gap-1 text-primary-dark font-bold text-xs hover:underline">
