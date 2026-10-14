@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
@@ -10,7 +10,6 @@ import {
   XCircle,
   CheckCircle2,
   List,
-  Filter,
   Plus,
   Pencil,
   Power,
@@ -21,7 +20,6 @@ import {
   Map as MapIcon,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
 } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
 import { getDeviceStatus as getSharedDeviceStatus, getStatusNote, DEVICE_STATUS, DEVICE_STATUS_ORDER } from '../../lib/deviceStatus';
@@ -58,7 +56,7 @@ export const Alerts = () => {
   const [residentNameByDevice, setResidentNameByDevice] = useState<Record<string, string>>({});
 
   // New states for functionality
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | DeviceStatus>('all');
   // ?q= comes from the header device search; ?device= highlights the row
   // that was picked there.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -77,10 +75,9 @@ export const Alerts = () => {
     setSearchParams(next, { replace: true });
     setCurrentPage(1);
   };
-  const [filterOpen, setFilterOpen] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  // Same page size as the Devices table.
+  const itemsPerPage = 10;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -189,21 +186,17 @@ export const Alerts = () => {
     if (result.ok || result.refresh) fetchData();
   };
 
-  const filterOptions = [
-    { value: 'all', label: 'All Statuses' },
-    ...DEVICE_STATUS_ORDER.map(st => ({ value: st, label: DEVICE_STATUS[st].longLabel })),
-  ];
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
-        setFilterOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // Status chips double as the legend: color, count, and (on hover) what
+  // the status means — so the legend no longer needs its own sidebar.
+  const countByStatus = useMemo(() => {
+    const counts = Object.fromEntries(DEVICE_STATUS_ORDER.map(st => [st, 0])) as Record<DeviceStatus, number>;
+    for (const d of devices) counts[d.status]++;
+    return counts;
+  }, [devices]);
+  const changeStatusFilter = (st: 'all' | DeviceStatus) => {
+    setStatusFilter(st);
+    setCurrentPage(1);
+  };
 
   const q = searchQuery.trim().toLowerCase();
   const filteredDevices = devices.filter(d =>
@@ -213,6 +206,10 @@ export const Alerts = () => {
   );
   const totalPages = Math.ceil(filteredDevices.length / itemsPerPage) || 1;
   const paginatedDevices = filteredDevices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const TH = 'text-left px-5 py-3 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap';
+  const rangeStart = (currentPage - 1) * itemsPerPage + 1;
+  const rangeEnd = Math.min(filteredDevices.length, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-8">
@@ -224,271 +221,225 @@ export const Alerts = () => {
         title="System Overview"
         description="Real-time status tracking for all deployed IoT environmental sensors."
         actions={
-        <div className="flex items-stretch gap-3 md:gap-4">
-          {/* Critical Alerts */}
-          <div className="bg-[#F6F3F2] border border-[#E5E2E1] rounded-lg px-5 py-3 flex items-center gap-4">
-            <div className="w-8 h-8 rounded-full bg-[rgba(220,38,38,0.1)] flex items-center justify-center shrink-0">
-              <XCircle className="w-5 h-5 text-[#DC2626]" />
-            </div>
-            <div>
-              <p className="text-[#5B403D] font-bold text-[10px] tracking-[0.1em] uppercase">Active Alerts</p>
-              <p className={`font-extrabold text-2xl leading-none mt-0.5 ${activeAlertCount > 0 ? 'text-[#DC2626]' : 'text-[#1C1B1B]'}`}>
-                {activeAlertCount.toLocaleString()}
-              </p>
-            </div>
-          </div>
-
-          {/* Active Nodes */}
-          <div className="bg-[#F6F3F2] border border-[#E5E2E1] rounded-lg px-5 py-3 flex items-center gap-4">
-            <div className="w-8 h-8 rounded-full bg-[rgba(16,185,129,0.1)] flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-5 h-5 text-[#10B981]" />
-            </div>
-            <div>
-              <p className="text-[#5B403D] font-bold text-[10px] tracking-[0.1em] uppercase">Online</p>
-              <p className="font-extrabold text-2xl leading-none text-[#1C1B1B] mt-0.5">
-                {onlineCount.toLocaleString()}
-              </p>
-            </div>
-          </div>
+        <div className="grid grid-cols-2 gap-3 md:gap-4">
+          <StatCard
+            label="Active Alerts"
+            value={activeAlertCount}
+            icon={<XCircle className="w-5 h-5 text-[#DC2626]" />}
+            iconBg="bg-[rgba(220,38,38,0.1)]"
+            valueClass={activeAlertCount > 0 ? 'text-[#DC2626]' : 'text-[#1C1B1B]'}
+          />
+          <StatCard
+            label="Online"
+            value={onlineCount}
+            icon={<CheckCircle2 className="w-5 h-5 text-[#10B981]" />}
+            iconBg="bg-[rgba(16,185,129,0.1)]"
+            valueClass="text-[#1C1B1B]"
+          />
         </div>
         }
       />
 
-      {/* ─── Bento Grid: 8-col Table + 4-col Sidebar ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-
-        {/* ─── MAIN TABLE (8/12) ─── */}
-        <div className="col-span-1 lg:col-span-8">
-          <div className="bg-white border border-[#E5E2E1] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
-            {/* Table Header Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-[#E5E2E1]">
-              <div className="flex items-center gap-3">
-                <div className="text-[#DC2626]">
-                  <List className="w-5 h-5" />
-                </div>
-                <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.02em] whitespace-nowrap">
-                  All Connected Devices
-                </h3>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-3">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A1AA]" />
-                  <input
-                    type="search"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search ID, owner, location…"
-                    aria-label="Search devices"
-                    className="w-52 pl-8 pr-7 py-1.5 border border-[#E5E2E1] rounded text-xs text-[#1C1B1B] placeholder:text-[#A1A1AA] focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                  {searchQuery && (
-                    <button onClick={() => setSearchQuery('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#1C1B1B]">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-                <div className="relative" ref={filterRef}>
-                  <button
-                    onClick={() => setFilterOpen(f => !f)}
-                    className="flex items-center gap-2 px-3 py-1.5 border border-[#E5E2E1] rounded text-[#1C1B1B] text-xs font-bold transition-colors hover:bg-gray-50 capitalize"
-                  >
-                    <Filter className="w-3.5 h-3.5" />
-                    {filterOptions.find(o => o.value === statusFilter)?.label}
-                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                  {filterOpen && (
-                    <div className="absolute right-0 mt-1 w-44 bg-white border border-[#E5E2E1] rounded-lg shadow-lg z-50 py-1 animate-in fade-in slide-in-from-top-1">
-                      {filterOptions.map(opt => (
-                        <button
-                          key={opt.value}
-                          onClick={() => { setStatusFilter(opt.value); setFilterOpen(false); setCurrentPage(1); }}
-                          className={`w-full text-left px-4 py-2 text-xs font-medium transition-colors ${statusFilter === opt.value
-                              ? 'bg-[#FEE2E2] text-primary font-bold'
-                              : 'text-[#1C1B1B] hover:bg-[#F6F3F2]'
-                            }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <Link to="/admin/devices?register=1" className="flex items-center gap-2 px-3 py-1.5 bg-primary rounded text-white text-xs font-bold transition-colors hover:bg-primary-dark">
-                  <Plus className="w-3.5 h-3.5" />
-                  Register New
-                </Link>
-              </div>
+      {/* ─── Device table (full width, same layout as Devices) ─── */}
+      <div className="bg-white border border-[#E5E2E1] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden">
+        <div className="flex flex-col gap-4 p-5 border-b border-[#E5E2E1]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <List className="w-5 h-5 text-[#DC2626]" />
+              <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.02em] whitespace-nowrap">
+                All Connected Devices <span className="text-[#A1A1AA] font-medium">({devices.length})</span>
+              </h3>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[#F6F3F2] border-b border-[#E5E2E1]">
-                    <th className="text-left px-5 py-4 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap">Device UID</th>
-                    <th className="text-left px-5 py-4 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap">Owner Name</th>
-                    <th className="text-left px-5 py-4 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap">Location</th>
-                    <th className="text-left px-5 py-4 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap">Status</th>
-                    <th className="text-left px-5 py-4 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <TableBodySkeleton cols={5} rows={5} />
-                  ) : paginatedDevices.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-16 text-[#A1A1AA]">
-                        <p className="font-medium text-sm text-[#5B403D]">{q ? `No devices match “${searchQuery}”.` : 'No devices found.'}</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A1AA]" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search code, owner, location…"
+                  aria-label="Search devices"
+                  className="w-60 pl-8 pr-7 py-1.5 border border-[#E5E2E1] rounded text-xs text-[#1C1B1B] placeholder:text-[#A1A1AA] focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#1C1B1B]">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <Link to="/admin/devices?register=1" className="flex items-center gap-2 px-3 py-1.5 bg-primary rounded text-white text-xs font-bold transition-colors hover:bg-primary-dark">
+                <Plus className="w-3.5 h-3.5" />
+                Register Device
+              </Link>
+            </div>
+          </div>
+
+          {/* Status filter + legend in one row. Hover a chip for its meaning. */}
+          <div role="radiogroup" aria-label="Filter by status" className="flex flex-wrap gap-2">
+            <StatusChip
+              selected={statusFilter === 'all'}
+              onClick={() => changeStatusFilter('all')}
+              label="All"
+              count={devices.length}
+            />
+            {DEVICE_STATUS_ORDER.map(st => (
+              <StatusChip
+                key={st}
+                selected={statusFilter === st}
+                onClick={() => changeStatusFilter(st)}
+                label={DEVICE_STATUS[st].longLabel}
+                count={countByStatus[st]}
+                color={DEVICE_STATUS[st].color}
+                description={DEVICE_STATUS[st].description}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[#F6F3F2] border-b border-[#E5E2E1]">
+                <th className={TH}>Device</th>
+                <th className={TH}>Resident</th>
+                <th className={TH}>Install Location</th>
+                <th className={TH}>Status</th>
+                <th className={TH}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <TableBodySkeleton cols={5} rows={5} />
+              ) : paginatedDevices.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-center py-14">
+                    <p className="font-medium text-sm text-[#5B403D]">
+                      {q ? `No devices match “${searchQuery}”.` : statusFilter !== 'all' ? 'No devices with this status.' : 'No devices found.'}
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                paginatedDevices.map((device) => {
+                  const note = getStatusNote(device, device.status, now);
+                  const isHighlighted = device.id === highlightedId;
+                  const resident = residentNameByDevice[device.id];
+                  return (
+                    <tr
+                      key={device.id}
+                      data-device-id={device.id}
+                      className={`border-b border-[#E5E2E1] last:border-0 hover:bg-[#FCF9F8] transition-colors ${isHighlighted ? 'bg-[#FFF5F2] outline outline-2 -outline-offset-2 outline-primary/40' : ''}`}
+                    >
+                      <td className="px-5 py-4 align-top">
+                        <span className="block font-mono font-semibold text-xs text-[#1C1B1B] whitespace-nowrap">{device.device_code}</span>
+                        {device.label && device.label !== device.device_code && (
+                          <span className="block text-[11px] text-[#5B403D] max-w-[220px] leading-tight mt-0.5">{device.label}</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        {resident
+                          ? <span className="text-xs font-bold text-[#1C1B1B] whitespace-nowrap">{resident}</span>
+                          : <span className="text-xs text-[#A1A1AA]">Not linked</span>}
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <span className="block text-xs text-[#5B403D] max-w-[260px] leading-tight">
+                          {displayAddress(device.location_desc)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <div className="flex flex-col gap-1 items-start">
+                          <StatusBadge status={device.status} />
+                          {note && <span className="text-[10px] text-[#71717A] whitespace-nowrap">{note}</span>}
+                          {batteryByDevice[device.id] && (
+                            <span title="Running on backup battery" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] text-[9px] font-bold uppercase tracking-wide">
+                              <BatteryWarning className="w-3 h-3" /> Battery
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <div className="flex items-center gap-3 text-[#A1A1AA]">
+                          <Link to={`/admin/map?device=${device.id}`} className="hover:text-[#1C1B1B] transition-colors" title="Show on map"><MapIcon className="w-4 h-4" /></Link>
+                          <Link to={`/admin/devices?edit=${device.id}`} className="hover:text-[#AF101A] transition-colors" title="Edit device (name, thresholds, location, firmware)"><Pencil className="w-4 h-4" /></Link>
+                          <button onClick={() => handleTogglePower(device)} className={`transition-colors ${device.is_active ? 'hover:text-red-500' : 'text-red-400 hover:text-green-500'}`} title={device.is_active ? 'Disable device' : 'Enable device'}><Power className="w-4 h-4" /></button>
+                          {device.activeAlert && (
+                            <button onClick={() => handleResolveAlert(device)} className="hover:text-[#10B981] transition-colors" title="Manually Resolve Alert"><ShieldCheck className="w-4 h-4" /></button>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    paginatedDevices.map((device) => {
-                      const note = getStatusNote(device, device.status, now);
-                      const isHighlighted = device.id === highlightedId;
-                      return (
-                        <tr
-                          key={device.id}
-                          data-device-id={device.id}
-                          className={`border-b border-[#E5E2E1] last:border-0 hover:bg-[#FCF9F8] transition-colors ${isHighlighted ? 'bg-[#FFF5F2] outline outline-2 -outline-offset-2 outline-primary/40' : ''}`}
-                        >
-                          <td className="px-5 py-4 align-top">
-                            <span className="font-mono font-semibold text-xs text-[#1C1B1B] whitespace-nowrap">
-                              {device.device_code}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4 align-top">
-                            {residentNameByDevice[device.id] ? (
-                              <>
-                                <span className="text-[#1C1B1B] text-xs font-bold block max-w-[120px] leading-tight">
-                                  {residentNameByDevice[device.id]}
-                                </span>
-                                <span className="text-[#A1A1AA] text-[10px] block max-w-[120px] leading-tight mt-0.5">
-                                  {device.label}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-[#1C1B1B] text-xs font-bold block max-w-[120px] leading-tight">
-                                  {device.label}
-                                </span>
-                                <span className="text-[#A1A1AA] text-[10px] block max-w-[120px] leading-tight mt-0.5">
-                                  Unassigned
-                                </span>
-                              </>
-                            )}
-                          </td>
-                          <td className="px-5 py-4 align-top">
-                            <span className="text-[#5B403D] text-xs block max-w-[150px] leading-tight">
-                              {displayAddress(device.location_desc)}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4 align-top">
-                            <div className="flex flex-col gap-1 items-start">
-                              <StatusBadge status={device.status} />
-                              {note && <span className="text-[10px] text-[#71717A] whitespace-nowrap">{note}</span>}
-                              {batteryByDevice[device.id] && (
-                                <span title="Running on backup battery" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] text-[9px] font-bold uppercase tracking-wide">
-                                  <BatteryWarning className="w-3 h-3" /> Battery
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-5 py-4 align-top">
-                            <div className="flex items-center gap-3 text-[#A1A1AA]">
-                              <Link to={`/admin/map?device=${device.id}`} className="hover:text-[#1C1B1B] transition-colors" title="Show on map"><MapIcon className="w-4 h-4" /></Link>
-                              <Link to={`/admin/devices?edit=${device.id}`} className="hover:text-[#1C1B1B] transition-colors" title="Edit device (name, thresholds, location, firmware)"><Pencil className="w-4 h-4" /></Link>
-                              <button onClick={() => handleTogglePower(device)} className={`transition-colors ${device.is_active ? 'hover:text-red-500' : 'text-red-400 hover:text-green-500'}`} title="Toggle Active Status"><Power className="w-4 h-4" /></button>
-                              {device.activeAlert && (
-                                <button onClick={() => handleResolveAlert(device)} className="hover:text-[#10B981] transition-colors" title="Manually Resolve Alert"><ShieldCheck className="w-4 h-4" /></button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Table Footer / Pagination */}
-            <div className="mt-auto p-5 border-t border-[#E5E2E1] flex items-center justify-between">
-              <span className="text-[#A1A1AA] text-xs font-medium">
-                Showing {Math.min(filteredDevices.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(filteredDevices.length, currentPage * itemsPerPage)} of {filteredDevices.length} devices
-              </span>
-              <div className="flex items-center gap-1 text-xs font-medium">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="w-6 h-6 flex items-center justify-center text-[#A1A1AA] hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-
-                {Array.from({ length: Math.min(3, totalPages) }).map((_, i) => {
-                  // Simple moving window for pagination
-                  let pageNum = i + 1;
-                  if (totalPages > 3 && currentPage > 2) {
-                    pageNum = currentPage - 1 + i;
-                    if (pageNum > totalPages) pageNum = totalPages - (2 - i);
-                  }
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${currentPage === pageNum ? 'bg-[#DC2626] text-white font-bold' : 'text-[#5B403D] hover:bg-gray-100'
-                        }`}
-                    >
-                      {pageNum}
-                    </button>
                   );
-                })}
-
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="w-6 h-6 flex items-center justify-center text-[#A1A1AA] hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
+                })
+              )}
+            </tbody>
+          </table>
         </div>
 
-        {/* ─── ASIDE SIDEBAR (4/12) ─── */}
-        <div className="col-span-1 lg:col-span-4 flex flex-col gap-6">
-          {/* Status Legend Card */}
-          <div className="bg-[#F6F3F2] rounded-lg p-6 flex flex-col gap-6">
-            <h4 className="text-[#A1A1AA] font-bold text-[10px] tracking-[0.1em] uppercase">
-              Status Legend
-            </h4>
-
-            <div className="flex flex-col gap-6">
-              {DEVICE_STATUS_ORDER.map(st => (
-                <LegendRow key={st} color={DEVICE_STATUS[st].color} label={DEVICE_STATUS[st].longLabel} desc={DEVICE_STATUS[st].description} />
-              ))}
+        {/* Same pager as the Devices table: only when there's more than one page. */}
+        {filteredDevices.length > itemsPerPage && (
+          <div className="p-4 border-t border-[#E5E2E1] flex items-center justify-between text-xs">
+            <span className="text-[#A1A1AA] font-medium">
+              Showing {rangeStart}–{rangeEnd} of {filteredDevices.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} aria-label="Previous page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="font-bold text-[#1C1B1B]">{currentPage} / {totalPages}</span>
+              <button type="button" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} aria-label="Next page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
-
-        </div>
-
+        )}
       </div>
-
     </div>
   );
 };
 
 // ─── Helper Components ───
 
-const LegendRow = ({ color, label, desc }: { color: string; label: string; desc: string }) => (
-  <div className="flex items-start gap-3">
-    <span className="w-2.5 h-2.5 rounded-full mt-1 shrink-0" style={{ background: color }}></span>
-    <div className="flex-1">
-      <span className="text-[#1C1B1B] font-bold text-xs leading-none">{label}</span>
-      <p className="text-[#5B403D] text-[10px] leading-[15px] mt-1 pr-4">{desc}</p>
+const StatCard = ({ label, value, icon, iconBg, valueClass }: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  iconBg: string;
+  valueClass: string;
+}) => (
+  <div className="bg-[#F6F3F2] border border-[#E5E2E1] rounded-lg px-4 md:px-5 py-3 flex items-center gap-3 md:gap-4 min-w-0 md:min-w-[170px]">
+    <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center shrink-0`}>
+      {icon}
+    </div>
+    <div>
+      <p className="text-[#5B403D] font-bold text-[10px] tracking-[0.1em] uppercase whitespace-nowrap">{label}</p>
+      <p className={`font-extrabold text-2xl leading-none mt-0.5 ${valueClass}`}>{value.toLocaleString()}</p>
     </div>
   </div>
+);
+
+// Same chip shape as the Users page filters, plus the status color dot.
+const StatusChip = ({ selected, onClick, label, count, color, description }: {
+  selected: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+  color?: string;
+  description?: string;
+}) => (
+  <button
+    type="button"
+    role="radio"
+    aria-checked={selected}
+    onClick={onClick}
+    title={description}
+    className={`h-8 px-3 rounded-full border text-xs whitespace-nowrap inline-flex items-center gap-2 transition-colors ${
+      selected
+        ? 'bg-primary border-primary text-white font-bold'
+        : 'bg-white border-[#E5E2E1] text-[#5B403D] font-semibold hover:border-[#A1A1AA] hover:text-[#1C1B1B]'
+    }`}
+  >
+    {color && <span className={`w-2 h-2 rounded-full shrink-0 ${selected ? 'ring-2 ring-white/70' : ''}`} style={{ background: color }}></span>}
+    {label}
+    <span className={`font-bold tabular-nums ${selected ? 'text-white/80' : 'text-[#A1A1AA]'}`}>{count}</span>
+  </button>
 );
