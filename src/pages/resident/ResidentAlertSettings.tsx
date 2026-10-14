@@ -7,6 +7,7 @@ import { AlertSettingsSkeleton } from '../../components/SkeletonLoaders';
 import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
 import { startTelegramLink } from '../../lib/telegramLink';
 import { Bell, BellOff } from 'lucide-react';
+import { displayAddress } from '../../lib/location';
 
 
 export const ResidentAlertSettings = () => {
@@ -451,7 +452,7 @@ const handleConnectTelegram = async () => {
                 </div>
               )}
               <p className="text-[10px] text-[#52525B] leading-relaxed">
-                Device: <strong>{device.device_code}</strong> — {device.location_desc}
+                Device: <strong>{device.device_code}</strong> — {displayAddress(device.location_desc)}
               </p>
             </div>
           </div>

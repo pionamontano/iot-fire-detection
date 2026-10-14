@@ -23,7 +23,7 @@ export const AdminLayout: React.FC = () => {
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Live Map', path: '/admin/map', icon: MapIcon },
     { name: 'User Management', path: '/admin/users', icon: Users },
-    { name: 'Device Registration', path: '/admin/devices', icon: Cpu },
+    { name: 'Devices', path: '/admin/devices', icon: Cpu },
     { name: 'System Overview', path: '/admin/alerts', icon: BarChart3 },
     { name: 'System Log', path: '/admin/logs', icon: FileText },
     { name: 'Support Requests', path: '/admin/support', icon: LifeBuoy },

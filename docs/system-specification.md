@@ -511,7 +511,7 @@ Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `supp
 | Public | `PendingApproval`, `SessionExpired`, `ForgotPassword`, `ResetPassword`, `NotFound` | Account/session screens | Supabase Auth | | none | Verified/Partial | |
 | Admin | `Dashboard` | Fleet overview | `devices`, `alert_events`, `profiles`, `sensor_readings` | View | AuthGuard(admin) / RLS admin | Partial | |
 | Admin | `InteractiveMap` | Map + alert feed | `devices`, `sensor_readings`, `alert_events` | View | same | Partial | no sidebar entry |
-| Admin | `Devices` ("Device Registration") | CRUD devices, keys | `devices`; RPC | Create, edit, toggle, regenerate key | same | Verified | |
+| Admin | `Devices` ("Devices") | CRUD devices, keys | `devices`; RPC | Create, edit, toggle, regenerate key | same | Verified | |
 | Admin | `Users` | Approvals, create, assign | `profiles`, `registration_requests`, `devices`; Edge | Approve/reject/delete/create/assign | same | Verified | No UI to set `is_active` found |
 | Admin | `Alerts` ("System Overview") | Fleet + incident close | `devices`, `alert_events`, `sensor_readings` | Rename, power toggle, resolve | same | Verified | |
 | Admin | `Logs` ("System Log") | Event/log view + export | `alert_events`, `login_attempts`, `devices` | Filter, export | same | Partial | KI-04 |

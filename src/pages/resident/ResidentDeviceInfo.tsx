@@ -3,11 +3,12 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { DeviceInfoSkeleton } from '../../components/SkeletonLoaders';
 import type { Device, SensorReading } from '../../lib/supabase';
-import { MapPin, Thermometer, Wind, Clock, Wifi, WifiOff, CheckCircle2, XCircle, RefreshCw, Pencil, Save, X, AlertTriangle } from 'lucide-react';
+import { MapPin, Thermometer, Wind, Clock, Wifi, WifiOff, CheckCircle2, XCircle, RefreshCw, Pencil, ShieldCheck } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
-import { resolveDeviceLocation, markerOpacity } from '../../lib/location';
+import { resolveDeviceLocation, markerOpacity, displayAddress, isValidCoordinate } from '../../lib/location';
 import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
+import { DeviceLocationEditor } from '../../components/DeviceLocationEditor';
 
 const markerIcon = new L.Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -23,13 +24,10 @@ export const ResidentDeviceInfo = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Resident-editable address text (lib/location.ts: "registered" is the
-  // install reference text, independent of any GPS fix). Lets a resident
-  // make it more specific (unit/floor/landmark) without admin involvement.
-  const [editingAddress, setEditingAddress] = useState(false);
-  const [addressInput, setAddressInput] = useState('');
-  const [savingAddress, setSavingAddress] = useState(false);
-  const [addressMsg, setAddressMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // The resident sets the install address and pin themselves; an admin then confirms them
+  // (update_own_device_location, 20261102000000).
+  const [editingLocation, setEditingLocation] = useState(false);
+  const [locationMsg, setLocationMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (profile?.device_id) {
@@ -59,44 +57,6 @@ export const ResidentDeviceInfo = () => {
     setRefreshing(true);
     await fetchData(profile.device_id);
     setRefreshing(false);
-  };
-
-  const startEditingAddress = () => {
-    setAddressInput(device?.location_desc || '');
-    setAddressMsg(null);
-    setEditingAddress(true);
-  };
-
-  const cancelEditingAddress = () => {
-    setEditingAddress(false);
-    setAddressMsg(null);
-  };
-
-  const saveAddress = async () => {
-    const trimmed = addressInput.trim();
-    if (!trimmed) {
-      setAddressMsg({ type: 'error', text: 'Address cannot be empty.' });
-      return;
-    }
-    setSavingAddress(true);
-    setAddressMsg(null);
-    try {
-      // Residents have no direct UPDATE grant on devices - this goes through
-      // a narrow RPC that only ever touches location_desc on the caller's
-      // own device (see 20261028000000_resident_update_device_address_rpc.sql).
-      const { data, error } = await supabase.rpc('update_own_device_location_desc', {
-        p_location_desc: trimmed,
-      });
-      if (error) throw error;
-      setDevice(prev => (prev ? { ...prev, location_desc: data as string } : prev));
-      setEditingAddress(false);
-      setAddressMsg({ type: 'success', text: 'Address updated.' });
-      setTimeout(() => setAddressMsg(null), 4000);
-    } catch (e: any) {
-      setAddressMsg({ type: 'error', text: e.message || 'Failed to update address.' });
-    } finally {
-      setSavingAddress(false);
-    }
   };
 
   if (loading) return <DeviceInfoSkeleton />;
@@ -151,52 +111,19 @@ export const ResidentDeviceInfo = () => {
               <div className="bg-[#F4F4F5] p-3 rounded col-span-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Location</span>
-                  {!editingAddress && (
+                  {!editingLocation && (
                     <button
-                      onClick={startEditingAddress}
-                      title="Edit address"
+                      onClick={() => { setLocationMsg(null); setEditingLocation(true); }}
+                      title="Edit address and pin"
                       className="text-[#A1A1AA] hover:text-[#18181B] transition-colors"
                     >
                       <Pencil className="w-3 h-3" />
                     </button>
                   )}
                 </div>
-                {editingAddress ? (
-                  <div className="flex flex-col gap-2 mt-1">
-                    <input
-                      type="text"
-                      autoFocus
-                      value={addressInput}
-                      onChange={e => setAddressInput(e.target.value)}
-                      placeholder="e.g. Unit 402, Server Room - East Wing"
-                      className="w-full px-2 py-1.5 text-xs font-bold text-[#18181B] bg-white border border-[#D4D4D8] rounded focus:outline-none focus:ring-1 focus:ring-[#00799C] focus:border-[#00799C]"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={saveAddress}
-                        disabled={savingAddress}
-                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-[#18181B] text-white text-[10px] font-bold uppercase rounded hover:bg-black transition-colors disabled:opacity-50"
-                      >
-                        <Save className="w-3 h-3" />
-                        {savingAddress ? 'Saving...' : 'Save'}
-                      </button>
-                      <button
-                        onClick={cancelEditingAddress}
-                        disabled={savingAddress}
-                        className="px-2 py-1 border border-[#D4D4D8] text-[#52525B] text-[10px] font-bold uppercase rounded hover:bg-white transition-colors disabled:opacity-50"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-xs font-bold text-[#18181B] flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />{device.location_desc}</span>
-                )}
-                {addressMsg && (
-                  <p className={`text-[10px] font-bold mt-1.5 flex items-center gap-1 ${addressMsg.type === 'success' ? 'text-[#00799C]' : 'text-[#DC2626]'}`}>
-                    {addressMsg.type === 'error' && <AlertTriangle className="w-3 h-3 shrink-0" />}
-                    {addressMsg.text}
-                  </p>
+                <span className="text-xs font-bold text-[#18181B] flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />{displayAddress(device.location_desc)}</span>
+                {locationMsg && (
+                  <p className="text-[10px] font-bold mt-1.5 text-[#00799C]">{locationMsg}</p>
                 )}
               </div>
               <div className="bg-[#F4F4F5] p-3 rounded">
@@ -204,8 +131,8 @@ export const ResidentDeviceInfo = () => {
                 <span className="text-xs font-bold text-[#DC2626] flex items-center gap-1 mt-1"><Thermometer className="w-3 h-3" />{device.temp_threshold}°C</span>
               </div>
               <div className="bg-[#F4F4F5] p-3 rounded">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Smoke Threshold</span>
-                <span className="text-xs font-bold text-[#DC2626] flex items-center gap-1 mt-1"><Wind className="w-3 h-3" />{device.co_threshold} PPM</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">CO Threshold</span>
+                <span className="text-xs font-bold text-[#DC2626] flex items-center gap-1 mt-1"><Wind className="w-3 h-3" />{device.co_threshold} ppm</span>
               </div>
               <div className="bg-[#F4F4F5] p-3 rounded">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Last Seen</span>
@@ -213,6 +140,26 @@ export const ResidentDeviceInfo = () => {
               </div>
             </div>
           </div>
+
+          {editingLocation && (
+            <div className="bg-white border border-[#E4E4E7] rounded-lg p-6">
+              <h2 className="text-lg font-black tracking-tight text-[#18181B]">Install Location</h2>
+              <p className="text-xs text-[#52525B] mt-1 mb-5">
+                Where is the device installed? Changing it sends the new pin to an administrator to confirm.
+              </p>
+              <DeviceLocationEditor
+                initialAddress={device.location_desc}
+                initialLat={device.latitude}
+                initialLng={device.longitude}
+                onCancel={() => setEditingLocation(false)}
+                onSaved={saved => {
+                  setDevice(prev => prev ? { ...prev, ...saved, location_verified_at: null } : prev);
+                  setEditingLocation(false);
+                  setLocationMsg('Location saved. An administrator will confirm it.');
+                }}
+              />
+            </div>
+          )}
 
           {/* Recent Readings Table */}
           <div className="bg-white border border-[#E4E4E7] rounded-lg overflow-hidden">
@@ -226,7 +173,7 @@ export const ResidentDeviceInfo = () => {
                   <tr>
                     <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Timestamp</th>
                     <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Temp</th>
-                    <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Smoke</th>
+                    <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">CO</th>
                     <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">GPS</th>
                     <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Power</th>
                     <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Sensor</th>
@@ -237,7 +184,7 @@ export const ResidentDeviceInfo = () => {
                     <tr key={r.id} className="hover:bg-[#F9FAFB]">
                       <td className="px-6 py-3 text-xs text-[#52525B]">{new Date(r.recorded_at).toLocaleString()}</td>
                       <td className={`px-6 py-3 text-xs font-bold ${r.temp_celsius >= device.temp_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.temp_celsius.toFixed(1)}°C</td>
-                      <td className={`px-6 py-3 text-xs font-bold ${r.co_ppm >= device.co_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.co_ppm.toFixed(0)} PPM</td>
+                      <td className={`px-6 py-3 text-xs font-bold ${r.co_ppm >= device.co_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.co_ppm.toFixed(0)} ppm</td>
                       <td className="px-6 py-3 text-xs">{r.gps_valid ? <CheckCircle2 className="w-4 h-4 text-[#00799C]" /> : <XCircle className="w-4 h-4 text-[#A1A1AA]" />}</td>
                       <td className="px-6 py-3 text-xs text-[#18181B]">{r.on_battery ? 'Battery' : 'Mains'}</td>
                       <td className="px-6 py-3 text-xs">{r.sensor_ready ? <CheckCircle2 className="w-4 h-4 text-[#00799C]" /> : <XCircle className="w-4 h-4 text-[#DC2626]" />}</td>
@@ -266,7 +213,7 @@ export const ResidentDeviceInfo = () => {
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <Marker position={[location.lat, location.lng]} icon={markerIcon} opacity={markerOpacity(location.kind)}>
-                    <Popup><strong>{device.device_code}</strong><br />{device.location_desc}</Popup>
+                    <Popup><strong>{device.device_code}</strong><br />{displayAddress(device.location_desc)}</Popup>
                   </Marker>
                 </MapContainer>
               </div>
@@ -274,6 +221,23 @@ export const ResidentDeviceInfo = () => {
               <LocationUnavailablePanel heightClass="h-56" />
             )}
             <LocationBadge location={location} />
+            <div className="mt-3 flex items-center justify-between gap-2 text-[11px]">
+              {!isValidCoordinate(device.latitude, device.longitude) ? (
+                <span className="font-bold text-[#B45309] flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />Install pin not set</span>
+              ) : device.location_verified ? (
+                <span className="font-bold text-[#047857] flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />Install pin confirmed</span>
+              ) : (
+                <span className="font-bold text-[#B45309] flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />Install pin waiting for confirmation</span>
+              )}
+              {!editingLocation && (
+                <button
+                  onClick={() => { setLocationMsg(null); setEditingLocation(true); }}
+                  className="font-bold uppercase tracking-wide text-[#00799C] hover:underline shrink-0"
+                >
+                  {isValidCoordinate(device.latitude, device.longitude) ? 'Move pin' : 'Set pin'}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Device Specs */}

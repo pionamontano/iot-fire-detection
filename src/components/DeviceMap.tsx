@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap } from 'rea
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapPin } from 'lucide-react';
-import { describeLocation, isValidCoordinate, markerOpacity, formatAge } from '../lib/location';
+import { describeLocation, isValidCoordinate, markerOpacity, formatAge, displayAddress } from '../lib/location';
 import { getDeviceStatus, DEVICE_STATUS, DEVICE_STATUS_ORDER } from '../lib/deviceStatus';
 import type { DeviceStatus } from '../lib/deviceStatus';
 import type { Device, AlertEvent } from '../lib/supabase';
@@ -206,7 +206,7 @@ const DevicePopup = ({
         <div className="min-w-0">
           <h3 className="font-extrabold text-sm text-[#18181B] leading-tight">{device.device_code}</h3>
           {device.label && <div className="text-xs font-medium text-[#52525B] mt-0.5 truncate" title={device.label}>{device.label}</div>}
-          <div className="text-xs text-[#71717A] mt-1">{device.location_desc}</div>
+          <div className="text-xs text-[#71717A] mt-1">{displayAddress(device.location_desc)}</div>
           <div
             className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-wider"
             style={{ color: locInfo.approximate ? '#B45309' : '#047857' }}

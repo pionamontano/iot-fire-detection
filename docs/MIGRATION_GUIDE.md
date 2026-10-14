@@ -54,6 +54,10 @@ These files create:
 - ✅ All RLS policies
 - ✅ Default data (settings + station info)
 - ✅ Fixes, enhancements, and new fields (like `telegram_chat_id` and `local_ip`)
+- ✅ Device registration with generated codes (`register_device`) and resident-set, admin-confirmed install locations (`update_own_device_location`, `devices.location_verified`) — `20261102000000_device_registration_location_verification.sql`
+
+> [!NOTE]
+> `20261102000000` continues device codes after the highest existing `AGS-NNN` code. If you later run `supabase/reset_and_seed_devices.sql`, it resets the counter to follow the seeded `AGS-005`.
 
 ---
 

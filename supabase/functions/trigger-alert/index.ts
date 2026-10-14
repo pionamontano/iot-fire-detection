@@ -181,6 +181,20 @@ async function complete(
 const recentUnrecorded = new Map<string, number>();
 const UNRECORDED_WINDOW_MS = 5 * 60 * 1000;
 
+// No GPS from the device: fall back to the registered install pin (devices.latitude/longitude).
+// A pin the resident placed that no admin has confirmed yet (location_verified, 20261102000000)
+// is still sent, because it is better than nothing, but labelled so responders know it is unchecked.
+function registeredPinString(device: { latitude?: unknown; longitude?: unknown; location_verified?: unknown }): string {
+  const { latitude: lat, longitude: lng } = device;
+  const valid = typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)
+    && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+  if (!valid) return `GPS: Unavailable\n\n`;
+  const status = device.location_verified === true
+    ? 'confirmed by admin'
+    : 'UNVERIFIED — set by resident, not yet confirmed by an admin';
+  return `GPS: Unavailable\nRegistered pin: ${lat}, ${lng} (${status})\nNavigate: https://maps.google.com/?q=${lat},${lng}\n\n`;
+}
+
 async function dispatchNotifications(p: {
   admin: any; alertId: string | null; tier: number; device: any; locationString: string; tgText: string;
 }): Promise<void> {
@@ -311,7 +325,7 @@ serve(async (req: Request) => {
 
     const { data: device, error: deviceError } = await supabaseAdmin
       .from('devices')
-      .select('id, device_code, location_desc, is_active, co_threshold, temp_threshold, bfp_contact')
+      .select('id, device_code, location_desc, latitude, longitude, location_verified, is_active, co_threshold, temp_threshold, bfp_contact')
       .eq('api_key', deviceKey)
       .maybeSingle();
 
@@ -431,7 +445,7 @@ serve(async (req: Request) => {
 
     // The effective tier is the tier now in force for the incident (never lower than an earlier, higher tier).
     const effectiveTier = incident?.tier ?? tier;
-    const locationString = address_resolved || device.location_desc || 'Unknown Location';
+    const locationString = address_resolved || device.location_desc || 'Location not set';
     const timeString = fmtTime(now);
 
     let tgText = '';
@@ -440,7 +454,7 @@ serve(async (req: Request) => {
     } else {
       const gpsString = hasCachedCoords
         ? `GPS: ${latitude}, ${longitude}${gps_valid ? '' : ' (estimated — last known)'}\nNavigate: https://maps.google.com/?q=${latitude},${longitude}\n\n`
-        : `GPS: Unavailable\n\n`;
+        : registeredPinString(device);
 
       tgText = `FIRE ALERT — Tier 2\n\nDevice: ${device.device_code}\nLocation: ${locationString}\nTime: ${timeString}\n\nSensor readings:\n- CO: ${co_ppm} ppm (threshold: ${device.co_threshold} ppm)\n- Temp: ${temp_celsius}°C (threshold: ${device.temp_threshold}°C)\n\n${gpsString}SMS alerts have been dispatched.`;
     }

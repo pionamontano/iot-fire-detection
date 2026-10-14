@@ -48,12 +48,17 @@ delete from public.devices;
 -- api_key is intentionally omitted — the column has a server-side
 -- default (pgcrypto CSPRNG) that generates it on insert.
 insert into public.devices
-  (device_code, label, location_desc, latitude, longitude, co_threshold, temp_threshold, bfp_contact, is_active)
+  (device_code, label, location_desc, latitude, longitude, co_threshold, temp_threshold, bfp_contact, is_active, location_verified)
 values
-  ('AGS-001', 'Unit 1 — Barangay Hall',      'Barangay Look Hall, Malolos City, Bulacan',              14.8447, 120.8112, 200, 60.0, '+63 44 791 1234', true),
-  ('AGS-002', 'Unit 2 — Public Market',      'Malolos Public Market, Malolos City, Bulacan',           14.8461, 120.8148, 200, 60.0, '+63 44 791 1234', true),
-  ('AGS-003', 'Unit 3 — Elementary School',  'Malolos Elementary School, Malolos City, Bulacan',       14.8478, 120.8130, 200, 60.0, '+63 44 791 1234', true),
-  ('AGS-004', 'Unit 4 — Health Center',      'Malolos City Health Center, Malolos City, Bulacan',      14.8455, 120.8095, 200, 60.0, '+63 44 791 1234', true),
-  ('AGS-005', 'Unit 5 — Residential Block A','Residential Block A, Sto. Rosario, Malolos City, Bulacan', 14.8502, 120.8090, 200, 60.0, '+63 44 791 1234', true);
+  ('AGS-001', 'Unit 1 — Barangay Hall',      'Barangay Look Hall, Malolos City, Bulacan',              14.8447, 120.8112, 200, 60.0, '+63 44 791 1234', true, true),
+  ('AGS-002', 'Unit 2 — Public Market',      'Malolos Public Market, Malolos City, Bulacan',           14.8461, 120.8148, 200, 60.0, '+63 44 791 1234', true, true),
+  ('AGS-003', 'Unit 3 — Elementary School',  'Malolos Elementary School, Malolos City, Bulacan',       14.8478, 120.8130, 200, 60.0, '+63 44 791 1234', true, true),
+  ('AGS-004', 'Unit 4 — Health Center',      'Malolos City Health Center, Malolos City, Bulacan',      14.8455, 120.8095, 200, 60.0, '+63 44 791 1234', true, true),
+  ('AGS-005', 'Unit 5 — Residential Block A','Residential Block A, Sto. Rosario, Malolos City, Bulacan', 14.8502, 120.8090, 200, 60.0, '+63 44 791 1234', true, true);
+
+-- register_device() continues numbering after the seeded codes.
+-- The pins above were entered here by the project owner, so they are
+-- seeded as confirmed (location_verified, 20261102000000).
+select setval('public.device_code_seq', 5);
 
 commit;

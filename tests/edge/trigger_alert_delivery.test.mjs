@@ -266,3 +266,29 @@ test('an unexpected exception is a generic 500 that does not leak internals', as
   assert.equal(res.status, 500); assert.equal(json.code, 'internal');
   assert.ok(!JSON.stringify(json).includes('secret internal detail'));
 });
+
+// ---- no GPS from the device: registered install pin (location_verified, 20261102000000) ----
+const pinned = (extra) => ({ devices: [{ ...device, latitude: 14.8447, longitude: 120.8112, ...extra }] });
+
+test('no GPS + admin-confirmed registered pin: pin and navigate link are sent, labelled confirmed', async () => {
+  const t = setup({ tables: pinned({ location_verified: true }) }); await t.send(TIER2);
+  assert.match(t.calls.telegram[0].text, /\n\nGPS: Unavailable\nRegistered pin: 14\.8447, 120\.8112 \(confirmed by admin\)\nNavigate: https:\/\/maps\.google\.com\/\?q=14\.8447,120\.8112\n\nSMS alerts/);
+});
+
+test('no GPS + resident pin not yet confirmed: still sent, labelled UNVERIFIED', async () => {
+  const t = setup({ tables: pinned({ location_verified: false }) }); await t.send(TIER2);
+  assert.match(t.calls.telegram[0].text, /Registered pin: 14\.8447, 120\.8112 \(UNVERIFIED — set by resident, not yet confirmed by an admin\)\nNavigate: /);
+});
+
+test('device GPS wins over the registered pin', async () => {
+  const t = setup({ tables: pinned({ location_verified: true }) });
+  await t.send({ co_ppm: 500, temp_celsius: 90, gps_valid: true, latitude: 14.9, longitude: 120.9 });
+  assert.match(t.calls.telegram[0].text, /\nGPS: 14\.9, 120\.9\n/);
+  assert.doesNotMatch(t.calls.telegram[0].text, /Registered pin/);
+});
+
+test('no address set yet: location reads "Location not set"', async () => {
+  const t = setup({ tables: { devices: [{ ...device, location_desc: null }] } }); await t.send(TIER2);
+  assert.match(t.calls.telegram[0].text, /\nLocation: Location not set\n/);
+  assert.equal(t.calls.push[0].body, 'Device: T-001\nLocation: Location not set');
+});

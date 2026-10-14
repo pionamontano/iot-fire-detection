@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { Device, AlertEvent, SensorReading } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,7 +11,7 @@ import {
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { ResidentHomeSkeleton } from '../../components/SkeletonLoaders';
-import { resolveDeviceLocation, markerOpacity } from '../../lib/location';
+import { resolveDeviceLocation, markerOpacity, displayAddress, isValidCoordinate } from '../../lib/location';
 import { formatLastSeen } from '../../lib/deviceStatus';
 import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
 
@@ -666,7 +667,7 @@ export const ResidentHome = () => {
                   <Marker position={[location.lat, location.lng]} icon={markerIcon} opacity={markerOpacity(location.kind)}>
                     <Popup>
                       <strong>{device.device_code}</strong><br />
-                      {device.location_desc}
+                      {displayAddress(device.location_desc)}
                     </Popup>
                   </Marker>
                 </MapContainer>
@@ -677,8 +678,16 @@ export const ResidentHome = () => {
             <div className="mb-4"><LocationBadge location={location} /></div>
             <div className="flex gap-3 items-start">
               <MapPin size={16} className="text-[#52525B] mt-0.5" />
-              <span className="text-xs font-bold text-[#18181B] uppercase">{device.location_desc}</span>
+              <span className="text-xs font-bold text-[#18181B] uppercase">{displayAddress(device.location_desc)}</span>
             </div>
+            {!isValidCoordinate(device.latitude, device.longitude) && (
+              <Link
+                to="/home/devices"
+                className="mt-4 block w-full text-center py-2.5 rounded bg-[#FEF3C7] text-[#B45309] text-[11px] font-bold uppercase tracking-wide hover:bg-[#FDE68A] transition-colors"
+              >
+                Set your install address and pin
+              </Link>
+            )}
           </div>
 
         </div>

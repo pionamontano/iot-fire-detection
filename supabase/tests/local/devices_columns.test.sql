@@ -11,7 +11,7 @@ do $$ declare cols text[]; begin
   where table_schema='public' and table_name='devices' and grantee='authenticated' and privilege_type='SELECT';
   perform pg_temp.check('granted SELECT columns match DEVICE_COLUMNS ('||array_to_string(cols,',')||')',
     cols = (select array_agg(c order by c) from unnest(string_to_array(
-      'id,device_code,label,location_desc,co_threshold,temp_threshold,bfp_contact,is_active,created_at,last_seen_at,latitude,longitude,local_ip,firmware_version,firmware_url,firmware_md5,firmware_version_reported', ',')) c));
+      'id,device_code,label,location_desc,co_threshold,temp_threshold,bfp_contact,is_active,created_at,last_seen_at,latitude,longitude,local_ip,firmware_version,firmware_url,firmware_md5,firmware_version_reported,location_verified,location_verified_at', ',')) c));
 end $$;
 
 set role authenticated;

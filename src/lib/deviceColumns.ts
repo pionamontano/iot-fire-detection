@@ -33,6 +33,8 @@
 //   firmware_url               OTA target .bin location               (Devices edit form)
 //   firmware_md5                OTA target .bin integrity check         (Devices edit form)
 //   firmware_version_reported  version the device last reported running (Devices edit form, read-only)
+//   location_verified          admin confirmed the resident's pin (Devices list badge + edit form, maps)
+//   location_verified_at       when it was confirmed                  (Devices edit form)
 export const DEVICE_COLUMN_LIST = [
   'id',
   'device_code',
@@ -51,6 +53,8 @@ export const DEVICE_COLUMN_LIST = [
   'firmware_url',
   'firmware_md5',
   'firmware_version_reported',
+  'location_verified',
+  'location_verified_at',
 ] as const;
 
 /** Comma-separated form for PostgREST `select(...)`, e.g. `select(DEVICE_COLUMNS)`. */
