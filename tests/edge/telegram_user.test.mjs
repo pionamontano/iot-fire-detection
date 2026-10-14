@@ -23,9 +23,16 @@ test('a resident is not messaged on their personal chat at Tier 1 (same role rul
   assert.equal(t.calls.telegram[0].chat_id, 'chat');
 });
 
-test('admins and responders with a linked chat are messaged on every tier', async () => {
+test('Tier 1: only admins with a linked chat are messaged; BFP responders are not', async () => {
   const t = setup({ tables: { profiles: withTelegramLinks({ 'admin-ok': 'chat-admin', 'resp-ok': 'chat-resp' }) } });
   await t.send(TIER1);
+  const chatIds = t.calls.telegram.map((c) => c.chat_id).sort();
+  assert.deepEqual(chatIds, ['chat', 'chat-admin']);
+});
+
+test('Tier 2: admins and responders with a linked chat are both messaged', async () => {
+  const t = setup({ tables: { profiles: withTelegramLinks({ 'admin-ok': 'chat-admin', 'resp-ok': 'chat-resp' }) } });
+  await t.send(TIER2);
   const chatIds = t.calls.telegram.map((c) => c.chat_id).sort();
   assert.deepEqual(chatIds, ['chat', 'chat-admin', 'chat-resp']);
 });

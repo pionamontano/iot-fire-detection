@@ -32,3 +32,11 @@ test('partial and wrong numbers are kept so validation can flag them', () => {
   assert.equal(normalizePhone('091712345678999'), '09171234567');
   assert.equal(normalizePhone(''), '');
 });
+
+test('station hotline: PH mobiles and landlines with area code are accepted, as typed', async () => {
+  const { isStationPhone } = await import('../src/lib/phone.ts');
+  for (const ok of ['09171234567', '0917 123 4567', '+63 917 123 4567', '+63 2 8555 1234', '(02) 8555-1234', '0285551234', '044 791 1234', '+63 44 791 1234'])
+    assert.equal(isStationPhone(ok), true, ok);
+  for (const bad of ['', '911', '8555 1234', '0917123456', '091712345678', '02 8555 12345', 'abc', '+1 415 555 0100', '0917-123-4567 ext 2'])
+    assert.equal(isStationPhone(bad), false, bad);
+});

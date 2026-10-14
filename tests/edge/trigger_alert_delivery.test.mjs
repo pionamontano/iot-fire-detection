@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { setup, TIER1, TIER2, device } from './delivery_helpers.mjs';
 
 const ELIGIBLE_T2 = ['admin-ok', 'res-ok', 'resp-ok'];
-const ELIGIBLE_T1 = ['admin-ok', 'resp-ok'];
+const ELIGIBLE_T1 = ['admin-ok'];   // Tier 1 warnings go to admins only; BFP responders join at Tier 2
 const sorted = (a) => [...a].sort();
 
 test('PERSIST FIRST: raise_alert is called before any provider is contacted', async () => {
@@ -43,7 +43,7 @@ test('CONCURRENT replay: 12 simultaneous identical requests still notify once', 
   assert.deepEqual(t.calls.push.flatMap((c) => c.userIds).sort(), ELIGIBLE_T2, 'each eligible recipient pushed exactly once');
 });
 
-test('ESCALATION tier 1 -> 2 is a NEW notification (same incident), residents join only at tier 2', async () => {
+test('ESCALATION tier 1 -> 2 is a NEW notification (same incident), responders and residents join only at tier 2', async () => {
   const t = setup();
   const one = await t.send(TIER1); const two = await t.send(TIER2);
   assert.equal(one.json.alert_event_id, two.json.alert_event_id);

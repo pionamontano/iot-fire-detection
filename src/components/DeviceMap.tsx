@@ -50,9 +50,13 @@ const iconCache:Record<DeviceStatus, L.DivIcon> = {
 
 // Optional per-status counts make the legend answer "how many are offline?"
 // at a glance, which is what the Hide Offline filter acts on.
-export const MapLegend = ({ counts }: { counts?: Partial<Record<DeviceStatus, number>> }) => (
+// `statuses` limits the legend to the states a page can show (the responder map has no Tier 1 warnings).
+export const MapLegend = ({ counts, statuses = DEVICE_STATUS_ORDER }: {
+  counts?: Partial<Record<DeviceStatus, number>>;
+  statuses?: readonly DeviceStatus[];
+}) => (
   <div className="bg-white/80 backdrop-blur-md border border-white/40 shadow-sm rounded-lg py-2 px-3 sm:px-4 flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-1">
-    {DEVICE_STATUS_ORDER.map(s => (
+    {statuses.map(s => (
       <div key={s} className="flex items-center gap-2">
         <div className="w-2 h-2 rounded-full" style={{ background: DEVICE_STATUS[s].color }}></div>
         <span className="text-[10px] font-bold uppercase tracking-widest text-[#52525B]">

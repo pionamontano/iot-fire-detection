@@ -48,9 +48,11 @@ const useDismiss = (ref: React.RefObject<HTMLDivElement | null>, close: () => vo
 // ═══════════════════════════════════════════
 interface NotificationDropdownProps {
   alertsPath: string;
+  /** Lowest alert tier listed and counted. BFP responders pass 2: Tier 1 warnings are not dispatched to them. */
+  minTier?: 1 | 2;
 }
 
-export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ alertsPath }) => {
+export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ alertsPath, minTier = 1 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [alerts, setAlerts] = useState<(AlertEvent & { devices?: { device_code: string; label: string; location_desc: string } })[]>([]);
   const [loading, setLoading] = useState(false);
@@ -67,11 +69,13 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
       supabase
         .from('alert_events')
         .select('*, devices(device_code, label, location_desc)')
+        .gte('alert_tier', minTier)
         .order('triggered_at', { ascending: false })
         .limit(10),
       supabase
         .from('alert_events')
         .select('id', { count: 'exact', head: true })
+        .gte('alert_tier', minTier)
         .is('resolved_at', null),
     ]);
 
@@ -82,7 +86,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
       setUnresolvedCount(countRes.count);
     }
     setLoading(false);
-  }, []);
+  }, [minTier]);
 
   useEffect(() => {
     fetchAlerts();

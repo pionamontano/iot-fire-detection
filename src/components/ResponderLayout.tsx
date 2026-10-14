@@ -40,7 +40,7 @@ export const ResponderLayout: React.FC = () => {
           <HeaderSearchBar resultPath={(d) => `/responder/alerts?device=${encodeURIComponent(d.device_code)}`} />
 
           {/* Notification Bell */}
-          <NotificationDropdown alertsPath="/responder/alerts" />
+          <NotificationDropdown alertsPath="/responder/alerts" minTier={2} />
 
           {/* User Menu */}
           <UserMenuDropdown settingsPath="/responder/settings" onSignOut={() => setShowLogoutModal(true)} />

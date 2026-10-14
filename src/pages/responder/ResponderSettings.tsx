@@ -1,482 +1,352 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type { ComponentType, InputHTMLAttributes } from 'react';
 import { supabase } from '../../lib/supabase';
 import { startTelegramLink } from '../../lib/telegramLink';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
-import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Send, Bell } from 'lucide-react';
+import { Save, User, Phone, Shield, Calendar, Building2, MapPin, Mail, Send, Bell } from 'lucide-react';
 import { AdminSupportModal } from '../../components/AdminSupportModal';
 import { MySupportRequests } from '../../components/MySupportRequests';
+import { PageHeader } from '../../components/PageHeader';
+import { BTN_PRIMARY, BTN_SECONDARY, FIELD, LABEL, PILL_OK, PILL_WARN, PILL_OFF } from '../../components/ui';
+import { getRoleLabel } from '../../lib/supportRequests';
+import { PHONE_PATTERN, PHONE_ERROR, normalizePhone, isStationPhone, STATION_PHONE_ERROR } from '../../lib/phone';
 import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
+
+type Msg = { ok: boolean; text: string } | null;
+
+const CARD = 'bg-white border border-border rounded-lg p-5 sm:p-6 min-w-0';
+const CARD_TITLE = 'text-lg font-bold tracking-[-0.01em] text-text';
+
+// Flash a message for a few seconds (success) or until replaced (errors stay so they can be read).
+const useMsg = () => {
+  const [msg, setMsg] = useState<Msg>(null);
+  useEffect(() => {
+    if (!msg?.ok) return;
+    const t = setTimeout(() => setMsg(null), 4000);
+    return () => clearTimeout(t);
+  }, [msg]);
+  return [msg, setMsg] as const;
+};
+
+const MsgLine = ({ msg }: { msg: Msg }) => msg && (
+  <p role={msg.ok ? 'status' : 'alert'} className={`text-xs font-semibold ${msg.ok ? 'text-success-dark' : 'text-primary'}`}>{msg.text}</p>
+);
+
+const IconField = ({ id, label, icon: Icon, hint, error, ...input }: {
+  id: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  hint?: string;
+  error?: string;
+} & InputHTMLAttributes<HTMLInputElement>) => (
+  <div>
+    <label htmlFor={id} className={LABEL}>{label}</label>
+    <div className="relative">
+      <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint pointer-events-none" />
+      <input
+        id={id}
+        aria-invalid={!!error}
+        aria-describedby={hint || error ? `${id}-help` : undefined}
+        className={`${FIELD} pl-10 ${error ? '!border-primary' : ''}`}
+        {...input}
+      />
+    </div>
+    {(error || hint) && (
+      <p id={`${id}-help`} className={`text-xs mt-2 ${error ? 'text-primary font-semibold' : 'text-text-subtle'}`}>{error || hint}</p>
+    )}
+  </div>
+);
 
 export const ResponderSettings = () => {
   const { profile, user } = useAuth();
+
+  // ─── Personal details ───
   const [fullName, setFullName] = useState('');
   const [contactNumber, setContactNumber] = useState('');
+  const [orig, setOrig] = useState({ name: '', contact: '' });
+  const [contactError, setContactError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [profileMsg, setProfileMsg] = useMsg();
 
-  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
-  const [pushLoading, setPushLoading] = useState(true);
+  // ─── Notifications ───
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(true);
+  const [notifyMsg, setNotifyMsg] = useMsg();
 
-  const [hasChanges, setHasChanges] = useState(false);
-  const [profileContactError, setProfileContactError] = useState('');
-
-  const [origName, setOrigName] = useState('');
-  const [origContact, setOrigContact] = useState('');
-
-  // Station Settings State
+  // ─── Station ───
+  const [station, setStation] = useState({ name: '', address: '', contact: '', email: '' });
+  const [stationOrig, setStationOrig] = useState(station);
   const [stationLoading, setStationLoading] = useState(true);
   const [stationSaving, setStationSaving] = useState(false);
-  const [stationSuccess, setStationSuccess] = useState('');
-  const [stationError, setStationError] = useState('');
   const [stationContactError, setStationContactError] = useState('');
-  
-  const [stationName, setStationName] = useState('');
-  const [address, setAddress] = useState('');
-  const [stationContact, setStationContact] = useState('');
-  const [email, setEmail] = useState('');
+  const [stationMsg, setStationMsg] = useMsg();
+
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [supportRefresh, setSupportRefresh] = useState(0);
 
   useEffect(() => {
-    if (profile) {
-      setFullName(profile.full_name || '');
-      setContactNumber(profile.contact_number || '');
-      setOrigName(profile.full_name || '');
-      setOrigContact(profile.contact_number || '');
-    }
-    fetchStationSettings();
-    getPushSubscription().then(sub => {
-      setIsPushSubscribed(!!sub);
-      setPushLoading(false);
-    });
+    if (!profile) return;
+    setFullName(profile.full_name || '');
+    setContactNumber(profile.contact_number || '');
+    setOrig({ name: profile.full_name || '', contact: profile.contact_number || '' });
   }, [profile]);
 
-  const handleTogglePush = async () => {
-    setPushLoading(true);
-    try {
-      if (isPushSubscribed) {
-        await unsubscribeUserFromPush();
-        setIsPushSubscribed(false);
-      } else {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-          await subscribeUserToPush();
-          setIsPushSubscribed(true);
-        } else {
-          setErrorMsg('Notification permission denied by browser.');
-          setTimeout(() => setErrorMsg(''), 5000);
-        }
-      }
-    } catch (e: any) {
-      console.error(e);
-      setErrorMsg(describePushError(e, await isBraveBrowser()));
-      setTimeout(() => setErrorMsg(''), 5000);
-    } finally {
-      setPushLoading(false);
-    }
-  };
-
-  const fetchStationSettings = async () => {
-    try {
-      const { data } = await supabase.from('station_settings').select('*').eq('id', 1).single();
-      if (data) {
-        setStationName(data.station_name);
-        setAddress(data.address);
-        setStationContact(data.contact_number);
-        setEmail(data.email);
-      }
-    } catch (e) {
-      console.error('Error fetching station settings:', e);
-    } finally {
-      setStationLoading(false);
-    }
-  };
-
   useEffect(() => {
-    setHasChanges(fullName !== origName || contactNumber !== origContact);
-  }, [fullName, contactNumber, origName, origContact]);
+    getPushSubscription().then(sub => { setPushOn(!!sub); setPushBusy(false); });
+    (async () => {
+      const { data, error } = await supabase.from('station_settings').select('*').eq('id', 1).maybeSingle();
+      if (error) setStationMsg({ ok: false, text: "Couldn't load station information." });
+      if (data) {
+        const s = { name: data.station_name ?? '', address: data.address ?? '', contact: data.contact_number ?? '', email: data.email ?? '' };
+        setStation(s);
+        setStationOrig(s);
+      }
+      setStationLoading(false);
+    })();
+  }, [setStationMsg]);
+
+  const profileChanged = fullName.trim() !== orig.name || contactNumber !== orig.contact;
+  const stationChanged = (Object.keys(station) as (keyof typeof station)[]).some(k => station[k].trim() !== stationOrig[k]);
 
   const handleSaveProfile = async () => {
     if (!profile) return;
-    
-    // Validate contact number format if provided
-    const phoneRegex = /^(09\d{9})$/;
-    if (contactNumber && !phoneRegex.test(contactNumber)) {
-      setProfileContactError('Enter a valid Philippine mobile number (e.g. 09171234567).');
-      return;
-    }
-    setProfileContactError('');
+    if (!fullName.trim()) { setProfileMsg({ ok: false, text: 'Enter your full name.' }); return; }
+    if (contactNumber && !PHONE_PATTERN.test(contactNumber)) { setContactError(PHONE_ERROR); return; }
+    setContactError('');
     setSaving(true);
-    setSuccessMsg('');
-    setErrorMsg('');
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: fullName.trim(),
-          contact_number: contactNumber.trim() || null,
-        })
-        .eq('id', profile.id);
-
-      if (error) throw error;
-
-      setOrigName(fullName.trim());
-      setOrigContact(contactNumber.trim());
-      setSuccessMsg('Profile updated successfully!');
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (e: any) {
-      console.error(e);
-      setErrorMsg('Failed to save: ' + (e.message || 'Unknown error'));
-      setTimeout(() => setErrorMsg(''), 5000);
-    } finally {
-      setSaving(false);
-    }
+    const { error } = await supabase
+      .from('profiles')
+      .update({ full_name: fullName.trim(), contact_number: contactNumber || null })
+      .eq('id', profile.id);
+    setSaving(false);
+    if (error) { setProfileMsg({ ok: false, text: `Couldn't save: ${error.message}` }); return; }
+    setOrig({ name: fullName.trim(), contact: contactNumber });
+    setFullName(fullName.trim());
+    setProfileMsg({ ok: true, text: 'Saved.' });
   };
 
   const handleSaveStation = async () => {
-    const phoneRegex = /^(09\d{9})$/;
-    
-    // Validate station contact
-    if (stationContact && !phoneRegex.test(stationContact)) {
-      setStationContactError('Enter a valid Philippine mobile number (e.g. 09171234567).');
-      return;
-    }
+    if (station.contact.trim() && !isStationPhone(station.contact)) { setStationContactError(STATION_PHONE_ERROR); return; }
+    if (station.email.trim() && !/^\S+@\S+\.\S+$/.test(station.email.trim())) { setStationMsg({ ok: false, text: 'Enter a valid email address.' }); return; }
     setStationContactError('');
-    
     setStationSaving(true);
-    setStationSuccess('');
-    setStationError('');
+    const next = { name: station.name.trim(), address: station.address.trim(), contact: station.contact.trim(), email: station.email.trim() };
+    const { error } = await supabase
+      .from('station_settings')
+      .update({ station_name: next.name, address: next.address, contact_number: next.contact, email: next.email })
+      .eq('id', 1);
+    setStationSaving(false);
+    if (error) { setStationMsg({ ok: false, text: `Couldn't save: ${error.message}` }); return; }
+    setStation(next);
+    setStationOrig(next);
+    setStationMsg({ ok: true, text: 'Saved.' });
+  };
+
+  const handleTogglePush = async () => {
+    setPushBusy(true);
+    setNotifyMsg(null);
     try {
-      const { error } = await supabase
-        .from('station_settings')
-        .update({
-          station_name: stationName.trim(),
-          address: address.trim(),
-          contact_number: stationContact.trim(),
-          email: email.trim()
-        })
-        .eq('id', 1);
-
-      if (error) throw error;
-
-      setStationSuccess('Station information updated successfully!');
-      setTimeout(() => setStationSuccess(''), 4000);
-    } catch (e: any) {
+      if (pushOn) {
+        await unsubscribeUserFromPush();
+        setPushOn(false);
+      } else if ((await Notification.requestPermission()) === 'granted') {
+        await subscribeUserToPush();
+        setPushOn(true);
+      } else {
+        setNotifyMsg({ ok: false, text: 'Notifications are blocked for this site. Allow them in your browser settings, then try again.' });
+      }
+    } catch (e) {
       console.error(e);
-      setStationError('Failed to update station info: ' + (e.message || 'Unknown error'));
-      setTimeout(() => setStationError(''), 5000);
+      setNotifyMsg({ ok: false, text: describePushError(e, await isBraveBrowser()) });
     } finally {
-      setStationSaving(false);
+      setPushBusy(false);
     }
   };
 
   const handleConnectTelegram = async () => {
-    if (!profile) return;
+    setNotifyMsg(null);
     const message = await startTelegramLink();
-    if (message) {
-      setErrorMsg(message);
-      setTimeout(() => setErrorMsg(''), 5000);
-    }
+    if (message) setNotifyMsg({ ok: false, text: message });
   };
 
   if (!profile) return <ProfileSkeleton />;
+  const telegramLinked = !!profile.telegram_chat_id;
 
   return (
-    <div className="flex flex-col gap-8 pb-12">
-      {/* Header */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-primary">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Account Management</span>
-        </div>
-        <h1 className="text-3xl font-black tracking-tight text-text-heading">Settings</h1>
-        <p className="text-sm text-text-muted mt-1">Manage your profile and station information.</p>
-      </div>
+    <div className="flex flex-col gap-6 pb-12">
+      <PageHeader title="Settings" description="Your details, how you get fire alerts, and your station's information." />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          {/* Profile Form */}
-          <div className="bg-surface-card border border-border rounded-lg p-8">
-            <h2 className="text-lg font-black tracking-tight text-text-heading mb-6">Personal Profile</h2>
-
-            <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="lg:col-span-2 flex flex-col gap-6 min-w-0">
+          {/* ─── Personal details ─── */}
+          <section className={CARD}>
+            <h2 className={CARD_TITLE}>Personal Details</h2>
+            <div className="flex flex-col gap-6 mt-6">
+              <IconField id="full-name" label="Full name" icon={User} value={fullName} onChange={e => setFullName(e.target.value)} autoComplete="name" />
+              <IconField
+                id="contact-number"
+                label="Mobile number"
+                icon={Phone}
+                type="tel"
+                inputMode="numeric"
+                placeholder="09XXXXXXXXX"
+                value={contactNumber}
+                onChange={e => { setContactNumber(normalizePhone(e.target.value)); setContactError(''); }}
+                hint="So an administrator can reach you. Optional."
+                error={contactError}
+              />
               <div>
-                <label className="block text-xs font-bold text-text-body mb-1.5 uppercase tracking-[0.1em]">Full Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={e => setFullName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-surface-alt border border-border rounded-md text-sm text-text focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
-                  />
+                <span className={LABEL}>Email</span>
+                <div className="flex items-center gap-2 h-10 px-3 border border-border rounded-lg bg-surface-alt text-sm text-text">
+                  <Mail className="w-4 h-4 text-text-faint shrink-0" />
+                  <span className="truncate">{user?.email || 'Not available'}</span>
                 </div>
+                <p className="text-xs text-text-subtle mt-2">Used to sign in. Ask an administrator to change it.</p>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-text-body mb-1.5 uppercase tracking-[0.1em]">Contact Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
-                  <input
-                    type="tel"
-                    maxLength={11}
-                    value={contactNumber}
-                    onChange={e => {
-                      const val = e.target.value.replace(/\D/g, '');
-                      setContactNumber(val);
-                      if (profileContactError) setProfileContactError('');
-                    }}
-                    placeholder="09XXXXXXXXX"
-                    className={`w-full pl-10 pr-4 py-3 bg-surface-alt border rounded-md text-sm text-text placeholder-text-faint focus:ring-1 transition-all ${profileContactError ? 'border-[#DC2626] focus:border-[#DC2626] focus:ring-[#DC2626]/30' : 'border-border focus:border-primary focus:ring-primary/30'}`}
-                  />
-                </div>
-                <span className="text-[10px] text-text-faint mt-1 block">Philippine number only — e.g. 09171234567</span>
-                {profileContactError && <span className="text-[#DC2626] text-[11px] font-bold mt-1 block">{profileContactError}</span>}
-              </div>
-
-              <div className="flex gap-3 mt-2">
-                <button
-                  onClick={handleSaveProfile}
-                  disabled={saving || !hasChanges}
-                  className="w-full sm:w-auto px-8 py-3 bg-gradient-to-b from-[#B91C1C] to-[#991B1B] text-white text-sm font-bold rounded-lg hover:from-[#DC2626] hover:to-[#B91C1C] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-                >
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-t border-border-warm pt-5">
+                <button type="button" onClick={handleSaveProfile} disabled={saving || !profileChanged} className={BTN_PRIMARY}>
                   <Save className="w-4 h-4" />
-                  {saving ? 'SAVING...' : 'SAVE PROFILE'}
+                  {saving ? 'Saving…' : 'Save changes'}
                 </button>
+                <MsgLine msg={profileMsg} />
               </div>
-
-              {successMsg && (
-                <div className="flex items-center gap-2 text-sm font-bold text-success-dark">
-                  <CheckCircle2 className="w-4 h-4" /> {successMsg}
-                </div>
-              )}
-
-          {/* Telegram Linking */}
-          <div className="bg-white border border-[#E4E4E7] rounded-xl overflow-hidden shadow-sm mt-6">
-            <div className="bg-[#F4F4F5] px-4 py-3 border-b border-[#E4E4E7] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Send className="w-4 h-4 text-[#71717A]" />
-                <h3 className="font-bold text-[13px] tracking-wide text-[#27272A] uppercase">TELEGRAM ALERTS</h3>
-              </div>
-              {profile?.telegram_chat_id ? (
-                <div className="flex items-center gap-1.5 text-xs font-bold text-[#10B981] bg-[#10B981]/10 px-2.5 py-1 rounded-full">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  LINKED
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 text-xs font-bold text-[#F59E0B] bg-[#F59E0B]/10 px-2.5 py-1 rounded-full">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  NOT LINKED
-                </div>
-              )}
             </div>
+          </section>
 
-            <div className="p-4 sm:p-5">
-              <p className="text-[13px] text-[#52525B] leading-relaxed mb-4">
-                Receive Tier 2 (Critical) dispatch alerts directly to your Telegram app. Telegram alerts include full technical context and GPS coordinates.
-              </p>
+          {/* ─── How alerts reach you ─── */}
+          <section className={CARD}>
+            <h2 className={CARD_TITLE}>Fire Alert Notifications</h2>
+            <p className="text-sm text-text-subtle mt-1">
+              You are alerted for fires (Tier 2) only. Single-sensor warnings (Tier 1) go to administrators, who check the site first.
+            </p>
 
-              <button
-                type="button"
-                onClick={handleConnectTelegram}
-                className="w-full sm:w-auto px-5 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-[13px] font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                <Send className="w-4 h-4" />
-                {profile?.telegram_chat_id ? 'Reconnect Telegram' : 'Link Telegram Account'}
-              </button>
-            </div>
-          </div>
-
-          {/* Browser Push Notifications */}
-          <div className="bg-white border border-[#E4E4E7] rounded-xl overflow-hidden shadow-sm mt-6">
-            <div className="bg-[#F4F4F5] px-4 py-3 border-b border-[#E4E4E7] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-[#71717A]" />
-                <h3 className="font-bold text-[13px] tracking-wide text-[#27272A] uppercase">BROWSER PUSH NOTIFICATIONS</h3>
-              </div>
-              {isPushSubscribed ? (
-                <div className="flex items-center gap-1.5 text-xs font-bold text-[#10B981] bg-[#10B981]/10 px-2.5 py-1 rounded-full">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  ACTIVE
+            <ul className="mt-5 flex flex-col divide-y divide-border-warm border border-border rounded-lg">
+              <li className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <span className="w-9 h-9 rounded-lg bg-surface-alt hidden sm:flex items-center justify-center shrink-0" aria-hidden="true">
+                  <Send className="w-4 h-4 text-text-body" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-bold text-text">Telegram</h3>
+                    <span className={telegramLinked ? PILL_OK : PILL_WARN}>{telegramLinked ? 'Linked' : 'Not linked'}</span>
+                  </div>
+                  <p className="text-xs text-text-subtle mt-1 leading-relaxed">
+                    A message with the device, address, readings and a map link, sent to your own Telegram account.
+                  </p>
                 </div>
-              ) : (
-                <div className="flex items-center gap-1.5 text-xs font-bold text-[#F59E0B] bg-[#F59E0B]/10 px-2.5 py-1 rounded-full">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  DISABLED
+                <button type="button" onClick={handleConnectTelegram} className={`${telegramLinked ? BTN_SECONDARY : BTN_PRIMARY} w-full sm:w-auto sm:shrink-0`}>
+                  <Send className="w-4 h-4" />
+                  {telegramLinked ? 'Relink' : 'Link Telegram'}
+                </button>
+              </li>
+              <li className="p-4 flex items-center gap-3">
+                <span className="w-9 h-9 rounded-lg bg-surface-alt hidden sm:flex items-center justify-center shrink-0" aria-hidden="true">
+                  <Bell className="w-4 h-4 text-text-body" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 id="push-label" className="text-sm font-bold text-text">Browser notifications</h3>
+                    <span className={pushOn ? PILL_OK : PILL_OFF}>{pushOn ? 'On' : 'Off'}</span>
+                  </div>
+                  <p className="text-xs text-text-subtle mt-1 leading-relaxed">
+                    A pop-up with sound on this device, even when AgapSense is not open. Turn it on for each phone or computer you use.
+                  </p>
                 </div>
-              )}
-            </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={pushOn}
+                  aria-labelledby="push-label"
+                  onClick={handleTogglePush}
+                  disabled={pushBusy}
+                  className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50 ${pushOn ? 'bg-primary' : 'bg-border'}`}
+                >
+                  <span aria-hidden="true" className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${pushOn ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </li>
+            </ul>
+            {notifyMsg && <div className="mt-3"><MsgLine msg={notifyMsg} /></div>}
+          </section>
 
-            <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
-              <p className="text-[13px] text-[#52525B] leading-relaxed flex-1">
-                Receive real-time sound and banner alerts on this device for high-priority incidents.
-              </p>
+          {/* ─── Station ─── */}
+          <section className={CARD}>
+            <h2 className={CARD_TITLE}>Station Information</h2>
+            <p className="text-sm text-text-subtle mt-1">Your fire station's public details. Shared by every responder account.</p>
 
-              <button
-                type="button"
-                onClick={handleTogglePush}
-                disabled={pushLoading}
-                aria-label={isPushSubscribed ? 'Disable push notifications' : 'Enable push notifications'}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${isPushSubscribed ? 'bg-primary' : 'bg-[#E4E4E7]'}`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPushSubscribed ? 'translate-x-5' : 'translate-x-0'}`}
-                />
-              </button>
-            </div>
-          </div>
-
-            {errorMsg && (
-                <div className="flex items-center gap-2 text-sm font-bold text-[#DC2626]">
-                  <AlertTriangle className="w-4 h-4" /> {errorMsg}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Station Info Form */}
-          <div className="bg-surface-card border border-border rounded-lg p-8">
-            <h2 className="text-lg font-black tracking-tight text-text-heading mb-6">Station Information</h2>
-            
             {stationLoading ? (
-              <p className="text-text-faint text-sm">Loading station settings...</p>
+              <div className="flex flex-col gap-4 mt-6">
+                {[0, 1, 2].map(i => <div key={i} className="h-10 rounded-lg skeleton-pulse" />)}
+              </div>
             ) : (
-              <div className="flex flex-col gap-6">
-                <div>
-                  <label className="block text-xs font-bold text-text-body mb-1.5 uppercase tracking-[0.1em]">Station Name</label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
-                    <input
-                      type="text"
-                      value={stationName}
-                      onChange={e => setStationName(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-surface-alt border border-border rounded-md text-sm text-text focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-text-body mb-1.5 uppercase tracking-[0.1em]">Address</label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
-                    <input
-                      type="text"
-                      value={address}
-                      onChange={e => setAddress(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-surface-alt border border-border rounded-md text-sm text-text focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
-                    />
-                  </div>
-                </div>
-
+              <div className="flex flex-col gap-6 mt-6">
+                <IconField id="station-name" label="Station name" icon={Building2} value={station.name} onChange={e => setStation(s => ({ ...s, name: e.target.value }))} placeholder="e.g. BFP Malolos City Fire Station" />
+                <IconField id="station-address" label="Address" icon={MapPin} value={station.address} onChange={e => setStation(s => ({ ...s, address: e.target.value }))} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-bold text-text-body mb-1.5 uppercase tracking-[0.1em]">Contact Number</label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
-                      <input
-                        type="tel"
-                        maxLength={11}
-                        value={stationContact}
-                        onChange={e => {
-                          const val = e.target.value.replace(/\D/g, '');
-                          setStationContact(val);
-                          if (stationContactError) setStationContactError('');
-                        }}
-                        placeholder="09XXXXXXXXX"
-                        className={`w-full pl-10 pr-4 py-3 bg-surface-alt border rounded-md text-sm text-text focus:ring-1 transition-all ${stationContactError ? 'border-[#DC2626] focus:border-[#DC2626] focus:ring-[#DC2626]/30' : 'border-border focus:border-primary focus:ring-primary/30'}`}
-                      />
-                    </div>
-                    <span className="text-[10px] text-text-faint mt-1 block">Philippine number only — e.g. 09171234567</span>
-                    {stationContactError && <span className="text-[#DC2626] text-[11px] font-bold mt-1 block">{stationContactError}</span>}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-text-body mb-1.5 uppercase tracking-[0.1em]">Email</label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-surface-alt border border-border rounded-md text-sm text-text focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
-                      />
-                    </div>
-                  </div>
+                  <IconField
+                    id="station-contact"
+                    label="Hotline"
+                    icon={Phone}
+                    type="tel"
+                    value={station.contact}
+                    onChange={e => { setStation(s => ({ ...s, contact: e.target.value })); setStationContactError(''); }}
+                    placeholder="e.g. 044 791 1234"
+                    hint="Mobile or landline with area code."
+                    error={stationContactError}
+                  />
+                  <IconField id="station-email" label="Email" icon={Mail} type="email" value={station.email} onChange={e => setStation(s => ({ ...s, email: e.target.value }))} />
                 </div>
-
-                <div className="flex gap-3 mt-4">
-                  <button
-                    onClick={handleSaveStation}
-                    disabled={stationSaving}
-                    className="w-full sm:w-auto px-8 py-3 bg-[#1C1B1B] text-white text-sm font-bold rounded-lg hover:bg-black transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-                  >
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-t border-border-warm pt-5">
+                  <button type="button" onClick={handleSaveStation} disabled={stationSaving || !stationChanged} className={BTN_PRIMARY}>
                     <Save className="w-4 h-4" />
-                    {stationSaving ? 'SAVING...' : 'SAVE STATION INFO'}
+                    {stationSaving ? 'Saving…' : 'Save station information'}
                   </button>
+                  <MsgLine msg={stationMsg} />
                 </div>
-
-                {stationSuccess && (
-                  <div className="flex items-center gap-2 text-sm font-bold text-success-dark">
-                    <CheckCircle2 className="w-4 h-4" /> {stationSuccess}
-                  </div>
-                )}
-                {stationError && (
-                  <div className="flex items-center gap-2 text-sm font-bold text-[#DC2626]">
-                    <AlertTriangle className="w-4 h-4" /> {stationError}
-                  </div>
-                )}
               </div>
             )}
-          </div>
+          </section>
         </div>
 
-        {/* Account Info Sidebar */}
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          <div className="bg-surface-alt border border-border rounded-lg p-6">
-            <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-text-body mb-4">Account Details</h3>
-            <div className="flex flex-col gap-4">
+        {/* ─── Sidebar ─── */}
+        <div className="lg:col-span-1 flex flex-col gap-6 min-w-0">
+          <section className={CARD}>
+            <h2 className={CARD_TITLE}>Account</h2>
+            <dl className="flex flex-col gap-4 mt-5">
               <div className="flex items-center gap-3">
-                <Shield className="w-4 h-4 text-[#B91C1C]" />
-                <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">Role</span>
-                  <span className="text-sm font-bold text-text-heading">BFP Responder</span>
+                <Shield className="w-4 h-4 text-text-body shrink-0" />
+                <div className="min-w-0">
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-body">Role</dt>
+                  <dd className="text-sm font-bold text-text">{getRoleLabel(profile.role)}</dd>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <User className="w-4 h-4 text-[#B91C1C]" />
-                <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">User ID</span>
-                  <span className="text-xs font-mono text-text-body">{profile.id.substring(0, 16)}...</span>
+                <Calendar className="w-4 h-4 text-text-body shrink-0" />
+                <div className="min-w-0">
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-body">Member since</dt>
+                  <dd className="text-sm font-bold text-text">{new Date(profile.created_at).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })}</dd>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Calendar className="w-4 h-4 text-[#B91C1C]" />
-                <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">Joined</span>
-                  <span className="text-sm font-bold text-text-heading">{new Date(profile.created_at).toLocaleDateString()}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+            </dl>
+          </section>
 
-          <div className="bg-[#B91C1C] rounded-lg p-6 text-white">
-            <Settings className="w-6 h-6 mb-3 text-white/80" />
-            <h3 className="font-bold text-lg mb-1">Need Admin Help?</h3>
-            <p className="text-xs text-white/80 leading-relaxed mb-4">
-              Contact your system administrator to change your role, reset your password, or manage account access.
+          <section className={CARD}>
+            <h2 className={CARD_TITLE}>Need Help?</h2>
+            <p className="text-xs text-text-subtle leading-relaxed mt-1">
+              Ask an administrator to change your role, reset your password, or fix account access.
             </p>
-            <button
-              onClick={() => setIsSupportModalOpen(true)}
-              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2.5 bg-white text-[#B91C1C] text-xs font-bold rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
-            >
+            <button type="button" onClick={() => setIsSupportModalOpen(true)} className={`${BTN_PRIMARY} w-full mt-4`}>
               <Mail className="w-4 h-4" />
-              Contact Administrator
+              Contact administrator
             </button>
-          </div>
+          </section>
 
-          <MySupportRequests userId={profile.id} refreshKey={supportRefresh} />
+          <MySupportRequests
+            userId={profile.id}
+            refreshKey={supportRefresh}
+            cardClassName={CARD}
+            titleClassName={CARD_TITLE}
+          />
         </div>
       </div>
 

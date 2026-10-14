@@ -212,11 +212,12 @@ async function dispatchNotifications(p: {
     }
   })();
 
-  // Recipients: roles and tiers unchanged (admins and responders always; the device's resident on Tier 2 only),
-  // but every recipient must be an APPROVED, ACTIVE account. Shared by push and per-user Telegram (D5.4/#95).
+  // Recipients: admins on every tier; BFP responders and the device's resident on Tier 2 (fire) only. A Tier 1
+  // warning is one sensor over its threshold, which the site and the admins check first, so it is not dispatched
+  // to the fire station. Every recipient must be an APPROVED, ACTIVE account. Shared by push and per-user Telegram (D5.4/#95).
   const recipientRoles = tier === 2
     ? `role.eq.admin,role.eq.bfp_responder,and(device_id.eq.${device.id},role.eq.resident)`
-    : 'role.eq.admin,role.eq.bfp_responder';
+    : 'role.eq.admin';
 
   // Per-user Telegram (owner decision D5.4, issue #95): any approved+active recipient who has linked their
   // own Telegram chat (profiles.telegram_chat_id) gets the same alert text the station chat receives, on the
