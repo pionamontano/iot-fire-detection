@@ -6,6 +6,8 @@ import { Filter, FileText, Flame, RefreshCw, ThermometerSun } from 'lucide-react
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
 import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { usePagedRows } from '../../hooks/usePagedRows';
+import { PageHeader } from '../../components/PageHeader';
+import { BTN_SECONDARY } from '../../components/ui';
 
 // The resident's one alert page (it replaced the separate resident System
 // Log): every alert their device raised, filtered by date range, tier and
@@ -127,27 +129,16 @@ export const ResidentAlerts = () => {
 
   return (
     <div className="flex flex-col gap-6 pb-12">
-      {/* Header (same layout as the other resident pages) */}
-      <div className="flex flex-wrap justify-between items-start gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-primary">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Alerts</span>
-          </div>
-          <h1 className="text-3xl font-black tracking-tight text-text">Alert History</h1>
-          <p className="text-sm text-text-body mt-1">Every fire alert and warning your device raised, and whether it has been resolved.</p>
-        </div>
-        {deviceId && (
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing || loading}
-            className="flex items-center gap-2 px-4 py-2 border border-border bg-surface-card text-text-body text-[10px] font-bold uppercase tracking-widest rounded hover:bg-surface transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+      <PageHeader
+        title="Alert History"
+        description="Every fire alert and warning your device raised, and whether it has been resolved."
+        actions={deviceId && (
+          <button type="button" onClick={handleRefresh} disabled={refreshing || loading} className={BTN_SECONDARY}>
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
         )}
-      </div>
+      />
 
       {/* Filters */}
       <div className="bg-white border border-border rounded-lg p-4 flex flex-col gap-4">

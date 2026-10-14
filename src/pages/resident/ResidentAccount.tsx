@@ -5,6 +5,7 @@ import { Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Cpu, 
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
 import { AdminSupportModal } from '../../components/AdminSupportModal';
 import { MySupportRequests } from '../../components/MySupportRequests';
+import { PageHeader } from '../../components/PageHeader';
 
 export const ResidentAccount = () => {
   const { profile, user } = useAuth();
@@ -88,20 +89,12 @@ export const ResidentAccount = () => {
 
   return (
     <div className="flex flex-col gap-8 pb-12">
-      {/* Header */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-primary">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.1em]">User Profile</span>
-        </div>
-        <h1 className="text-3xl font-black tracking-tight text-text">Account Settings</h1>
-        <p className="text-sm text-text-body mt-1">Manage your personal information and contact details.</p>
-      </div>
+      <PageHeader title="Account Settings" description="Manage your personal information and contact details." />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Form */}
         <div className="lg:col-span-2 bg-white border border-border rounded-lg p-8">
-          <h2 className="text-lg font-black tracking-tight text-text mb-6">Personal Details</h2>
+          <h2 className="text-lg font-bold tracking-[-0.01em] text-text mb-6">Personal Details</h2>
 
           <div className="flex flex-col gap-6">
             <div>

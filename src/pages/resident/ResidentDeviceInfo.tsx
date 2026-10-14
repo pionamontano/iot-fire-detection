@@ -11,6 +11,8 @@ import L from 'leaflet';
 import { resolveDeviceLocation, markerOpacity, displayAddress, isValidCoordinate } from '../../lib/location';
 import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
 import { DeviceLocationEditor } from '../../components/DeviceLocationEditor';
+import { PageHeader } from '../../components/PageHeader';
+import { BTN_SECONDARY } from '../../components/ui';
 import { StatusBadge } from '../../components/StatusBadge';
 import { DEVICE_STATUS, getConnectivityStatus } from '../../lib/deviceStatus';
 
@@ -78,24 +80,16 @@ export const ResidentDeviceInfo = () => {
 
   return (
     <div className="flex flex-col gap-8 pb-12">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-primary">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Hardware Profile</span>
-          </div>
-          <h1 className="text-3xl font-black tracking-tight text-text">Device Information</h1>
-        </div>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 border border-border bg-surface-card text-text-body text-[10px] font-bold uppercase tracking-widest rounded hover:bg-surface transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="Device Information"
+        description="Your device's details, install location and recent sensor readings."
+        actions={
+          <button type="button" onClick={handleRefresh} disabled={refreshing} className={BTN_SECONDARY}>
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Info (2/3) */}
@@ -149,7 +143,7 @@ export const ResidentDeviceInfo = () => {
 
           {editingLocation && (
             <div className="bg-white border border-border rounded-lg p-6">
-              <h2 className="text-lg font-black tracking-tight text-text">Install Location</h2>
+              <h2 className="text-lg font-bold tracking-[-0.01em] text-text">Install Location</h2>
               <p className="text-xs text-text-body mt-1 mb-5">
                 Where is the device installed? Changing it sends the new pin to an administrator to confirm.
               </p>
@@ -171,7 +165,7 @@ export const ResidentDeviceInfo = () => {
           <div className={TABLE_CARD}>
             <div className={TABLE_TOOLBAR}>
               <div>
-                <h2 className="text-lg font-black tracking-tight text-text">Recent Sensor Readings</h2>
+                <h2 className="text-lg font-bold tracking-[-0.01em] text-text">Recent Sensor Readings</h2>
                 <p className="text-[10px] text-text-faint uppercase tracking-wider mt-1">Last {readings.length} readings</p>
               </div>
             </div>

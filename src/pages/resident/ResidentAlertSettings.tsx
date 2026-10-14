@@ -9,6 +9,7 @@ import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, desc
 import { startTelegramLink } from '../../lib/telegramLink';
 import { Bell, BellOff } from 'lucide-react';
 import { displayAddress } from '../../lib/location';
+import { PageHeader } from '../../components/PageHeader';
 
 
 export const ResidentAlertSettings = () => {
@@ -27,12 +28,12 @@ export const ResidentAlertSettings = () => {
 
   // Form State
   const [tempThreshold, setTempThreshold] = useState(55);
-  const [smokeThreshold, setSmokeThreshold] = useState(300);
+  const [coThreshold, setCoThreshold] = useState(300);
   const [contactNumber, setContactNumber] = useState('');
   
   // Original values (to track changes)
   const [origTemp, setOrigTemp] = useState(55);
-  const [origSmoke, setOrigSmoke] = useState(300);
+  const [origCo, setOrigCo] = useState(300);
   const [origContact, setOrigContact] = useState('');
 
   const [isAdviceModalOpen, setIsAdviceModalOpen] = useState(false);
@@ -64,10 +65,10 @@ export const ResidentAlertSettings = () => {
   useEffect(() => {
     setHasChanges(
       tempThreshold !== origTemp || 
-      smokeThreshold !== origSmoke || 
+      coThreshold !== origCo || 
       contactNumber !== origContact
     );
-  }, [tempThreshold, smokeThreshold, contactNumber, origTemp, origSmoke, origContact]);
+  }, [tempThreshold, coThreshold, contactNumber, origTemp, origCo, origContact]);
 
 
 
@@ -111,9 +112,9 @@ const handleConnectTelegram = async () => {
       if (data) {
         setDevice(data);
         setTempThreshold(data.temp_threshold || 55);
-        setSmokeThreshold(data.co_threshold || 300);
+        setCoThreshold(data.co_threshold || 300);
         setOrigTemp(data.temp_threshold || 55);
-        setOrigSmoke(data.co_threshold || 300);
+        setOrigCo(data.co_threshold || 300);
       }
       if (error) console.error(error);
       // The number that actually receives the resident's own evacuation
@@ -153,7 +154,7 @@ const handleConnectTelegram = async () => {
       // co_threshold on the caller's own device.
       const { error: thresholdError } = await supabase.rpc('update_own_device_alert_settings', {
         p_temp_threshold: tempThreshold,
-        p_co_threshold: smokeThreshold,
+        p_co_threshold: coThreshold,
       });
       if (thresholdError) throw thresholdError;
 
@@ -170,7 +171,7 @@ const handleConnectTelegram = async () => {
 
       // Update originals so hasChanges resets
       setOrigTemp(tempThreshold);
-      setOrigSmoke(smokeThreshold);
+      setOrigCo(coThreshold);
       setOrigContact(contactNumber);
       setSuccessMsg('Settings saved successfully!');
       setTimeout(() => setSuccessMsg(''), 4000);
@@ -185,7 +186,7 @@ const handleConnectTelegram = async () => {
 
   const handleReset = () => {
     setTempThreshold(origTemp);
-    setSmokeThreshold(origSmoke);
+    setCoThreshold(origCo);
     setContactNumber(origContact);
   };
 
@@ -194,21 +195,14 @@ const handleConnectTelegram = async () => {
 
   // Threshold safety warnings
   const tempWarning = tempThreshold < 40 ? 'Very low — may cause frequent false alarms' : tempThreshold > 80 ? 'Dangerously high — fire may go undetected' : null;
-  const smokeWarning = smokeThreshold < 100 ? 'Very sensitive — expect frequent alerts' : smokeThreshold > 800 ? 'Very high — smoke may go undetected' : null;
+  const coWarning = coThreshold < 100 ? 'Very sensitive — expect frequent alerts' : coThreshold > 800 ? 'Very high — a fire may go undetected' : null;
 
   return (
     <div className="flex flex-col gap-8 pb-12">
-      {/* Header */}
-      <div className="flex flex-col gap-2 max-w-2xl">
-        <div className="flex items-center gap-2 text-primary">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
-          <span className="text-[10px] font-bold uppercase tracking-[0.1em]">System Security Configuration</span>
-        </div>
-        <h1 className="text-3xl font-black tracking-tight text-text">Alert Settings</h1>
-        <p className="text-sm text-text-body leading-relaxed mt-2">
-          Configure precision trigger points for environmental hazards. These parameters define the transition between operational telemetry and emergency protocols.
-        </p>
-      </div>
+      <PageHeader
+        title="Alert Settings"
+        description="Choose the temperature and carbon monoxide (CO) levels that trigger an alert, and where alerts are sent."
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Settings Form (2/3) */}
@@ -218,7 +212,7 @@ const handleConnectTelegram = async () => {
             {/* Temp Threshold */}
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-end">
-                <span className="text-[10px] font-bold tracking-widest uppercase text-text-body">THERMAL TRIGGER</span>
+                <span className="text-[10px] font-bold tracking-widest uppercase text-text-body">Temperature</span>
                 <span className={`text-3xl font-black tracking-tighter ${tempThreshold !== origTemp ? 'text-amber-light' : 'text-primary'}`}>{tempThreshold}°C</span>
               </div>
               <div>
@@ -232,8 +226,8 @@ const handleConnectTelegram = async () => {
                   className="w-full h-2 bg-surface-cream rounded-lg appearance-none cursor-pointer accent-primary"
                 />
                 <div className="flex justify-between text-[10px] font-bold text-text-faint uppercase mt-2">
-                  <span>AMBIENT (0°C)</span>
-                  <span>CRITICAL (100°C)</span>
+                  <span>0°C</span>
+                  <span>100°C</span>
                 </div>
                 {tempWarning && (
                   <div className="flex items-center gap-2 mt-3 text-amber-light">
@@ -244,31 +238,31 @@ const handleConnectTelegram = async () => {
               </div>
             </div>
 
-            {/* Smoke Threshold */}
+            {/* CO Threshold */}
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-end">
-                <span className="text-[10px] font-bold tracking-widest uppercase text-text-body">PARTICULATE DENSITY</span>
-                <span className={`text-3xl font-black tracking-tighter ${smokeThreshold !== origSmoke ? 'text-amber-light' : 'text-primary'}`}>{smokeThreshold}PPM</span>
+                <span className="text-[10px] font-bold tracking-widest uppercase text-text-body">Carbon Monoxide (CO)</span>
+                <span className={`text-3xl font-black tracking-tighter ${coThreshold !== origCo ? 'text-amber-light' : 'text-primary'}`}>{coThreshold} ppm</span>
               </div>
               <div>
-                <span className="text-sm font-bold text-text block mb-4">Smoke Threshold</span>
+                <span className="text-sm font-bold text-text block mb-4">CO Threshold</span>
                 <input 
                   type="range" 
                   min="0" 
                   max="1000" 
                   step="10"
-                  value={smokeThreshold} 
-                  onChange={(e) => setSmokeThreshold(Number(e.target.value))}
+                  value={coThreshold} 
+                  onChange={(e) => setCoThreshold(Number(e.target.value))}
                   className="w-full h-2 bg-surface-cream rounded-lg appearance-none cursor-pointer accent-primary"
                 />
                 <div className="flex justify-between text-[10px] font-bold text-text-faint uppercase mt-2">
-                  <span>CLEAR (0 PPM)</span>
-                  <span>DENSE (1000 PPM)</span>
+                  <span>0 ppm</span>
+                  <span>1000 ppm</span>
                 </div>
-                {smokeWarning && (
+                {coWarning && (
                   <div className="flex items-center gap-2 mt-3 text-amber-light">
                     <AlertTriangle size={14} />
-                    <span className="text-[10px] font-bold">{smokeWarning}</span>
+                    <span className="text-[10px] font-bold">{coWarning}</span>
                   </div>
                 )}
               </div>
@@ -420,16 +414,16 @@ const handleConnectTelegram = async () => {
               <div className="flex items-center justify-between bg-white p-3 rounded shadow-sm">
                 <div className="flex items-center gap-3">
                   <Thermometer size={16} className="text-primary" />
-                  <span className="text-xs font-bold text-text">Active Temp Ceiling</span>
+                  <span className="text-xs font-bold text-text">Temperature Threshold</span>
                 </div>
                 <span className={`text-xs font-black ${tempThreshold !== origTemp ? 'text-amber-light' : 'text-text'}`}>{tempThreshold}°C</span>
               </div>
               <div className="flex items-center justify-between bg-white p-3 rounded shadow-sm">
                 <div className="flex items-center gap-3">
                   <Wind size={16} className="text-primary" />
-                  <span className="text-xs font-bold text-text">Smoke Sensitivity</span>
+                  <span className="text-xs font-bold text-text">CO Threshold</span>
                 </div>
-                <span className={`text-xs font-black ${smokeThreshold !== origSmoke ? 'text-amber-light' : 'text-text'}`}>{smokeThreshold} PPM</span>
+                <span className={`text-xs font-black ${coThreshold !== origCo ? 'text-amber-light' : 'text-text'}`}>{coThreshold} ppm</span>
               </div>
               <div className="flex items-center justify-between bg-white p-3 rounded shadow-sm">
                 <div className="flex items-center gap-3">
@@ -528,7 +522,7 @@ const handleConnectTelegram = async () => {
                       <tr className={THEAD_ROW}>
                         <th className={TH}>Room / Environment</th>
                         <th className={TH}>Recommended Temp (°C)</th>
-                        <th className={TH}>Recommended Smoke (PPM)</th>
+                        <th className={TH}>Recommended CO (ppm)</th>
                         <th className={TH}>Considerations</th>
                       </tr>
                     </thead>
@@ -536,31 +530,31 @@ const handleConnectTelegram = async () => {
                       <tr className={TR}>
                         <td className={`${TD} font-bold text-text`}>Bedrooms & Living Areas</td>
                         <td className={`${TD} whitespace-nowrap`}>50°C – 54°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>80 – 120 PPM</td>
+                        <td className={`${TD} whitespace-nowrap`}>80 – 120 ppm</td>
                         <td className={TD}>Life-safety priority; high sensitivity for early sleep evacuation.</td>
                       </tr>
                       <tr className={TR}>
                         <td className={`${TD} font-bold text-text`}>Kitchens & Dining</td>
                         <td className={`${TD} whitespace-nowrap`}>58°C – 65°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>250 – 350 PPM</td>
+                        <td className={`${TD} whitespace-nowrap`}>250 – 350 ppm</td>
                         <td className={TD}>High ambient heat & cooking fumes; prevents false alarms.</td>
                       </tr>
                       <tr className={TR}>
                         <td className={`${TD} font-bold text-text`}>Server / Equipment Closets</td>
                         <td className={`${TD} whitespace-nowrap`}>40°C – 45°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>50 – 80 PPM</td>
+                        <td className={`${TD} whitespace-nowrap`}>50 – 80 ppm</td>
                         <td className={TD}>Low tolerance for heat buildup; sensitive hardware protection.</td>
                       </tr>
                       <tr className={TR}>
                         <td className={`${TD} font-bold text-text`}>Offices / Public Halls (e.g., Barangay Hall)</td>
                         <td className={`${TD} whitespace-nowrap`}>50°C – 55°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>150 – 200 PPM</td>
+                        <td className={`${TD} whitespace-nowrap`}>150 – 200 ppm</td>
                         <td className={TD}>Balanced for regular foot traffic and ambient dust.</td>
                       </tr>
                       <tr className={TR}>
                         <td className={`${TD} font-bold text-text`}>Garages & Utility Areas</td>
                         <td className={`${TD} whitespace-nowrap`}>58°C – 60°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>250 – 300 PPM</td>
+                        <td className={`${TD} whitespace-nowrap`}>250 – 300 ppm</td>
                         <td className={TD}>Tolerates vehicle exhaust surges and utility equipment heat.</td>
                       </tr>
                     </tbody>
@@ -581,13 +575,13 @@ const handleConnectTelegram = async () => {
                   <li className="flex gap-2">
                     <span className="text-primary shrink-0 mt-0.5">•</span>
                     <div>
-                      <strong className="text-text">Ventilation & Airflow:</strong> Fans or AC returns can disperse smoke plumes away from ceiling sensors.
+                      <strong className="text-text">Ventilation & Airflow:</strong> Fans or AC returns can carry smoke and CO away from the device.
                     </div>
                   </li>
                   <li className="flex gap-2">
                     <span className="text-primary shrink-0 mt-0.5">•</span>
                     <div>
-                      <strong className="text-text">Ceiling Height:</strong> High/vaulted ceilings create thermal lag and smoke dilution.
+                      <strong className="text-text">Ceiling Height:</strong> High/vaulted ceilings delay heat build-up and dilute smoke and CO at the device.
                     </div>
                   </li>
                 </ul>

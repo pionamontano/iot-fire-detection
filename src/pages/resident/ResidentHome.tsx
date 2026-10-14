@@ -11,7 +11,8 @@ import {
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { ResidentHomeSkeleton } from '../../components/SkeletonLoaders';
-import { PILL_OK, PILL_WARN, PILL_OFF } from '../../components/ui';
+import { BTN_SECONDARY, PILL_OK, PILL_WARN, PILL_OFF } from '../../components/ui';
+import { PageHeader } from '../../components/PageHeader';
 import { TABLE_CARD, TABLE_TOOLBAR, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
 import { resolveDeviceLocation, markerOpacity, displayAddress, isValidCoordinate } from '../../lib/location';
 import { DEVICE_STATUS, getConnectivityStatus, formatAgo } from '../../lib/deviceStatus';
@@ -38,7 +39,7 @@ const RECENT_ALERT_ROWS = 5;
 
 // One card / heading style for every section on this page (same as the other resident pages).
 const CARD = 'bg-white rounded-lg border border-border p-5 sm:p-6';
-const CARD_TITLE = 'text-lg font-black tracking-tight text-text';
+const CARD_TITLE = 'text-lg font-bold tracking-[-0.01em] text-text';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -530,30 +531,17 @@ export const ResidentHome = () => {
 
   return (
     <div className="flex flex-col gap-6 pb-12">
-      {/* Header (same layout as the other resident pages) */}
-      <div className="flex flex-wrap justify-between items-start gap-4">
-        <div className="flex flex-col gap-1 min-w-0">
-          <div className="flex items-center gap-2 text-primary">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Overview</span>
-          </div>
-          <h1 className="text-3xl font-black tracking-tight text-text">Dashboard</h1>
-          <p className="text-sm text-text-body mt-1">
-            Status and readings from your device <span className="font-bold text-text">{device.device_code}</span>{device.label ? ` (${device.label})` : ''}.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      <PageHeader
+        title="Dashboard"
+        description={<>Status and readings from your device <span className="font-bold text-text">{device.device_code}</span>{device.label ? ` (${device.label})` : ''}.</>}
+        actions={<>
           <span className="text-xs text-text-faint hidden sm:inline">Updated {refreshedLabel}</span>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-2 px-4 py-2 border border-border bg-surface-card text-text-body text-[10px] font-bold uppercase tracking-widest rounded hover:bg-surface transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
-      </div>
+          <button type="button" onClick={handleRefresh} disabled={refreshing} className={BTN_SECONDARY}>
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+        </>}
+      />
 
       {/* What needs attention right now */}
       {openFire && (
