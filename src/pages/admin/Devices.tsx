@@ -8,8 +8,9 @@ import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device, FirmwareRelease, AlertEvent } from '../../lib/supabase';
 import { isValidCoordinate, displayAddress } from '../../lib/location';
-import { Cpu, ChevronRight, ChevronLeft, ChevronDown, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket, MapPin, ShieldCheck, CheckCircle2, Plus, Search, Filter, Map as MapIcon } from 'lucide-react';
+import { Cpu, ChevronDown, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket, MapPin, ShieldCheck, CheckCircle2, Plus, Search, Filter, Map as MapIcon } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE_TOOLBAR, TABLE_TITLE, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager } from '../../components/Table';
 import { StatusBadge } from '../../components/StatusBadge';
 import { getDeviceStatus, getStatusNote } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
@@ -475,9 +476,9 @@ export const Devices = () => {
       )}
 
       {/* ─── Device table ─── */}
-      <div className="bg-white border border-[#E5E2E1] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-[#E5E2E1]">
-          <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.02em]">
+      <div className={TABLE_CARD}>
+        <div className={TABLE_TOOLBAR}>
+          <h3 className={TABLE_TITLE}>
             All Devices <span className="text-[#A1A1AA] font-medium">({devices.length})</span>
           </h3>
           <div className="flex flex-wrap items-center gap-3">
@@ -524,12 +525,12 @@ export const Devices = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <TableScroll>
+          <table className={TABLE}>
             <thead>
-              <tr className="bg-[#F6F3F2] border-b border-[#E5E2E1]">
+              <tr className={THEAD_ROW}>
                 {['Device', 'Resident', 'Install Location', 'Status', 'Firmware', 'Registered', ''].map((h, i) => (
-                  <th key={i} className="text-left px-5 py-3 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap">{h}</th>
+                  <th key={i} className={TH}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -537,16 +538,11 @@ export const Devices = () => {
               {loading ? (
                 <TableBodySkeleton cols={7} rows={5} />
               ) : pageDevices.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-14">
-                    <Cpu className="w-10 h-10 mx-auto mb-3 text-[#E5E2E1]" />
-                    <p className="font-medium text-sm text-[#5B403D]">
-                      {devices.length === 0
-                        ? 'No devices registered yet. Use Register Device to add the first one.'
-                        : 'No devices match this search or filter.'}
-                    </p>
-                  </td>
-                </tr>
+                <TableEmpty colSpan={7} icon={<Cpu className="w-10 h-10" />}>
+                  {devices.length === 0
+                    ? 'No devices registered yet. Use Register Device to add the first one.'
+                    : 'No devices match this search or filter.'}
+                </TableEmpty>
               ) : pageDevices.map(device => {
                 const status = getDeviceStatus(device, activeAlerts, now);
                 const note = getStatusNote(device, status, now);
@@ -555,20 +551,20 @@ export const Devices = () => {
                   <tr
                     key={device.id}
                     onClick={() => openEditDevice(device)}
-                    className="border-b border-[#E5E2E1] last:border-0 hover:bg-[#FCF9F8] transition-colors cursor-pointer"
+                    className={`${TR} cursor-pointer`}
                   >
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       <span className="block font-mono font-semibold text-xs text-[#1C1B1B] whitespace-nowrap">{device.device_code}</span>
                       {device.label && device.label !== device.device_code && (
                         <span className="block text-[11px] text-[#5B403D] max-w-[180px] leading-tight mt-0.5">{device.label}</span>
                       )}
                     </td>
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       {resident
                         ? <span className="text-xs font-bold text-[#1C1B1B] whitespace-nowrap">{resident}</span>
                         : <span className="text-xs text-[#A1A1AA]">Not linked</span>}
                     </td>
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       <span className="block text-xs text-[#5B403D] max-w-[220px] leading-tight">{displayAddress(device.location_desc)}</span>
                       <div className="mt-1">
                         {locationState(device) === 'verified'
@@ -576,7 +572,7 @@ export const Devices = () => {
                           : <LocationStateBadge state={locationState(device)} />}
                       </div>
                     </td>
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       <div className="flex flex-col gap-1 items-start">
                         <StatusBadge status={status} />
                         {note && <span className="text-[10px] text-[#71717A] whitespace-nowrap">{note}</span>}
@@ -587,7 +583,7 @@ export const Devices = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-4 align-top whitespace-nowrap">
+                    <td className={`${TD} whitespace-nowrap`}>
                       <span className="block font-mono text-xs text-[#1C1B1B]">{device.firmware_version_reported ? `v${device.firmware_version_reported}` : '—'}</span>
                       {isOutdated(device) ? (
                         <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-[rgba(245,158,11,0.15)] text-[#B45309] text-[9px] font-bold uppercase tracking-wide">Outdated</span>
@@ -595,10 +591,10 @@ export const Devices = () => {
                         <span className="block text-[10px] text-[#71717A] mt-0.5">Target v{device.firmware_version}</span>
                       ) : null}
                     </td>
-                    <td className="px-5 py-4 align-top whitespace-nowrap">
+                    <td className={`${TD} whitespace-nowrap`}>
                       <span className="text-xs text-[#5B403D]" title={new Date(device.created_at).toLocaleString()}>{timeAgo(device.created_at)}</span>
                     </td>
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       <div className="flex items-center gap-3 text-[#A1A1AA]">
                         <Link
                           to={`/admin/map?device=${device.id}`}
@@ -623,24 +619,9 @@ export const Devices = () => {
               })}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
 
-        {filteredDevices.length > PAGE_SIZE && (
-          <div className="p-4 border-t border-[#E5E2E1] flex items-center justify-between text-xs">
-            <span className="text-[#A1A1AA] font-medium">
-              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(filteredDevices.length, currentPage * PAGE_SIZE)} of {filteredDevices.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 1} aria-label="Previous page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="font-bold text-[#1C1B1B]">{currentPage} / {totalPages}</span>
-              <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage === totalPages} aria-label="Next page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        <TablePager page={currentPage} pageSize={PAGE_SIZE} total={filteredDevices.length} onPageChange={setPage} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { Device } from '../../lib/supabase';
 import { Thermometer, Wind, MessageSquare, CheckCircle2, HelpCircle, AlertTriangle, Save, Send, X } from 'lucide-react';
 import { AlertSettingsSkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll } from '../../components/Table';
 import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
 import { startTelegramLink } from '../../lib/telegramLink';
 import { Bell, BellOff } from 'lucide-react';
@@ -520,49 +521,51 @@ const handleConnectTelegram = async () => {
             <div className="p-6 flex flex-col gap-8">
 
               {/* Reference Table */}
-              <div className="overflow-x-auto border border-[#E5E2E1] rounded-lg shadow-sm">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-[#F4F4F5] text-[#18181B] border-b border-[#E5E2E1]">
-                      <th className="p-3 font-bold border-r border-[#E5E2E1]">Room / Environment</th>
-                      <th className="p-3 font-bold border-r border-[#E5E2E1]">Recommended Temp (°C)</th>
-                      <th className="p-3 font-bold border-r border-[#E5E2E1]">Recommended Smoke (PPM)</th>
-                      <th className="p-3 font-bold">Considerations</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-[#52525B]">
-                    <tr className="border-b border-[#E5E2E1] hover:bg-[#FCF9F8]">
-                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Bedrooms & Living Areas</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">50°C – 54°C</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">80 – 120 PPM</td>
-                      <td className="p-3">Life-safety priority; high sensitivity for early sleep evacuation.</td>
-                    </tr>
-                    <tr className="border-b border-[#E5E2E1] hover:bg-[#FCF9F8]">
-                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Kitchens & Dining</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">58°C – 65°C</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">250 – 350 PPM</td>
-                      <td className="p-3">High ambient heat & cooking fumes; prevents false alarms.</td>
-                    </tr>
-                    <tr className="border-b border-[#E5E2E1] hover:bg-[#FCF9F8]">
-                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Server / Equipment Closets</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">40°C – 45°C</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">50 – 80 PPM</td>
-                      <td className="p-3">Low tolerance for heat buildup; sensitive hardware protection.</td>
-                    </tr>
-                    <tr className="border-b border-[#E5E2E1] hover:bg-[#FCF9F8]">
-                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Offices / Public Halls (e.g., Barangay Hall)</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">50°C – 55°C</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">150 – 200 PPM</td>
-                      <td className="p-3">Balanced for regular foot traffic and ambient dust.</td>
-                    </tr>
-                    <tr className="hover:bg-[#FCF9F8]">
-                      <td className="p-3 font-bold text-[#18181B] border-r border-[#E5E2E1]">Garages & Utility Areas</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">58°C – 60°C</td>
-                      <td className="p-3 border-r border-[#E5E2E1]">250 – 300 PPM</td>
-                      <td className="p-3">Tolerates vehicle exhaust surges and utility equipment heat.</td>
-                    </tr>
-                  </tbody>
-                </table>
+              <div className={TABLE_CARD}>
+                <TableScroll>
+                  <table className={TABLE}>
+                    <thead>
+                      <tr className={THEAD_ROW}>
+                        <th className={TH}>Room / Environment</th>
+                        <th className={TH}>Recommended Temp (°C)</th>
+                        <th className={TH}>Recommended Smoke (PPM)</th>
+                        <th className={TH}>Considerations</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[#52525B]">
+                      <tr className={TR}>
+                        <td className={`${TD} font-bold text-[#18181B]`}>Bedrooms & Living Areas</td>
+                        <td className={`${TD} whitespace-nowrap`}>50°C – 54°C</td>
+                        <td className={`${TD} whitespace-nowrap`}>80 – 120 PPM</td>
+                        <td className={TD}>Life-safety priority; high sensitivity for early sleep evacuation.</td>
+                      </tr>
+                      <tr className={TR}>
+                        <td className={`${TD} font-bold text-[#18181B]`}>Kitchens & Dining</td>
+                        <td className={`${TD} whitespace-nowrap`}>58°C – 65°C</td>
+                        <td className={`${TD} whitespace-nowrap`}>250 – 350 PPM</td>
+                        <td className={TD}>High ambient heat & cooking fumes; prevents false alarms.</td>
+                      </tr>
+                      <tr className={TR}>
+                        <td className={`${TD} font-bold text-[#18181B]`}>Server / Equipment Closets</td>
+                        <td className={`${TD} whitespace-nowrap`}>40°C – 45°C</td>
+                        <td className={`${TD} whitespace-nowrap`}>50 – 80 PPM</td>
+                        <td className={TD}>Low tolerance for heat buildup; sensitive hardware protection.</td>
+                      </tr>
+                      <tr className={TR}>
+                        <td className={`${TD} font-bold text-[#18181B]`}>Offices / Public Halls (e.g., Barangay Hall)</td>
+                        <td className={`${TD} whitespace-nowrap`}>50°C – 55°C</td>
+                        <td className={`${TD} whitespace-nowrap`}>150 – 200 PPM</td>
+                        <td className={TD}>Balanced for regular foot traffic and ambient dust.</td>
+                      </tr>
+                      <tr className={TR}>
+                        <td className={`${TD} font-bold text-[#18181B]`}>Garages & Utility Areas</td>
+                        <td className={`${TD} whitespace-nowrap`}>58°C – 60°C</td>
+                        <td className={`${TD} whitespace-nowrap`}>250 – 300 PPM</td>
+                        <td className={TD}>Tolerates vehicle exhaust surges and utility equipment heat.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </TableScroll>
               </div>
 
               {/* Environmental Factors */}

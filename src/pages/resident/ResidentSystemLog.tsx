@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { SystemLogSkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
 import type { AlertEvent } from '../../lib/supabase';
 import { FileText, RefreshCw, Flame, ThermometerSun } from 'lucide-react';
 
@@ -105,24 +106,24 @@ export const ResidentSystemLog = () => {
       </div>
 
       {/* Alert Table */}
-      <div className="bg-white border border-[#E4E4E7] rounded-lg overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-[#FCF9F8] border-b border-[#E4E4E7]">
-              <tr>
-                <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Event</th>
-                <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Triggered</th>
-                <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Temp</th>
-                <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Smoke</th>
-                <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Notifications</th>
-                <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Resolved</th>
+      <div className={TABLE_CARD}>
+        <TableScroll>
+          <table className={TABLE}>
+            <thead>
+              <tr className={THEAD_ROW}>
+                <th className={TH}>Event</th>
+                <th className={TH}>Status</th>
+                <th className={TH}>Triggered</th>
+                <th className={TH}>Temp</th>
+                <th className={TH}>Smoke</th>
+                <th className={TH}>Notifications</th>
+                <th className={TH}>Resolved</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#F4F4F5]">
+            <tbody>
               {filtered.length > 0 ? filtered.map(alert => (
-                <tr key={alert.id} className="hover:bg-[#F9FAFB] transition-colors">
-                  <td className="px-6 py-4">
+                <tr key={alert.id} className={TR}>
+                  <td className={TD}>
                     <div className="flex items-center gap-2">
                       {alert.alert_tier === 2 ? (
                         <Flame className="w-4 h-4 text-[#DC2626]" />
@@ -135,17 +136,17 @@ export const ResidentSystemLog = () => {
                     </div>
                     <span className="text-[9px] text-[#A1A1AA] font-mono ml-6">{alert.id.substring(0, 8)}</span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className={TD}>
                     <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${alert.resolved_at ? 'bg-[#E4E4E7] text-[#52525B]' : 'bg-[#DC2626] text-white'}`}>
                       {alert.resolved_at ? 'RESOLVED' : 'ACTIVE'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-xs text-[#52525B]">
+                  <td className={`${TD} text-xs text-[#52525B]`}>
                     {new Date(alert.triggered_at).toLocaleString()}
                   </td>
-                  <td className="px-6 py-4 text-xs font-bold text-[#DC2626]">{alert.temp_celsius?.toFixed(1)}°C</td>
-                  <td className="px-6 py-4 text-xs font-bold text-[#18181B]">{alert.co_ppm?.toFixed(0)} PPM</td>
-                  <td className="px-6 py-4">
+                  <td className={`${TD} text-xs font-bold text-[#DC2626]`}>{alert.temp_celsius?.toFixed(1)}°C</td>
+                  <td className={`${TD} text-xs font-bold text-[#18181B]`}>{alert.co_ppm?.toFixed(0)} PPM</td>
+                  <td className={TD}>
                     <div className="flex gap-1">
                       {alert.sms_sent_owner && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#E0F2FE] text-[#00799C]">SMS</span>}
                       {alert.sms_sent_bfp && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#FEE2E2] text-[#DC2626]">BFP</span>}
@@ -153,23 +154,18 @@ export const ResidentSystemLog = () => {
                       {!alert.sms_sent_owner && !alert.sms_sent_bfp && !alert.telegram_sent && <span className="text-[8px] text-[#A1A1AA]">—</span>}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-xs text-[#52525B]">
+                  <td className={`${TD} text-xs text-[#52525B]`}>
                     {alert.resolved_at ? new Date(alert.resolved_at).toLocaleString() : '—'}
                   </td>
                 </tr>
               )) : (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
-                    <FileText className="w-12 h-12 mx-auto mb-3 text-[#E4E4E7]" />
-                    <p className="font-medium text-[#A1A1AA]">
-                      {filter === 'all' ? 'No alert events recorded.' : `No ${filter} alerts.`}
-                    </p>
-                  </td>
-                </tr>
+                <TableEmpty colSpan={7} icon={<FileText className="w-10 h-10" />}>
+                  {filter === 'all' ? 'No alert events recorded.' : `No ${filter} alerts.`}
+                </TableEmpty>
               )}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       </div>
 
       <p className="text-xs text-[#A1A1AA]">Showing {filtered.length} of {alerts.length} events (max 50)</p>

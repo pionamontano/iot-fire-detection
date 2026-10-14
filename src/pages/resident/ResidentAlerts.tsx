@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Filter } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
 
 type ResidentAlertEvent = {
   id: string;
@@ -131,51 +132,43 @@ export const ResidentAlerts = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-[#E4E4E7] rounded-lg overflow-hidden flex flex-col shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
+      <div className={TABLE_CARD}>
+        <TableScroll>
+          <table className={TABLE}>
             <thead>
-              <tr className="bg-[#F8F7F7] border-b border-[#E4E4E7]">
-                <th className="px-4 py-3 font-bold text-xs text-[#52525B] uppercase tracking-wider">Timestamp</th>
-                <th className="px-4 py-3 font-bold text-xs text-[#52525B] uppercase tracking-wider">Tier</th>
-                <th className="px-4 py-3 font-bold text-xs text-[#52525B] uppercase tracking-wider text-right">CO</th>
-                <th className="px-4 py-3 font-bold text-xs text-[#52525B] uppercase tracking-wider text-right">Temp</th>
+              <tr className={THEAD_ROW}>
+                <th className={TH}>Timestamp</th>
+                <th className={TH}>Tier</th>
+                <th className={`${TH} !text-right`}>CO</th>
+                <th className={`${TH} !text-right`}>Temp</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <TableBodySkeleton cols={4} rows={3} />
               ) : !profile?.device_id ? (
-                <tr>
-                  <td colSpan={4} className="text-center py-12">
-                    <p className="text-[#A1A1AA] text-sm">No device linked to this account.</p>
-                  </td>
-                </tr>
+                <TableEmpty colSpan={4}>No device linked to this account.</TableEmpty>
               ) : logs.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="text-center py-12">
-                    <p className="text-[#A1A1AA] text-sm">No alerts found for the selected filters.</p>
-                  </td>
-                </tr>
+                <TableEmpty colSpan={4}>No alerts found for the selected filters.</TableEmpty>
               ) : (
                 logs.map(log => {
                   const d = new Date(log.triggered_at);
                   const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                   const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
                   return (
-                    <tr key={log.id} className="border-b border-[#E4E4E7] last:border-0 hover:bg-[#FCF9F8] transition-colors">
-                      <td className="px-4 py-3">
+                    <tr key={log.id} className={TR}>
+                      <td className={TD}>
                         <div className="flex flex-col">
                           <span className="font-mono text-xs font-medium text-[#18181B]">{dateStr}, {timeStr}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={TD}>
                         {getTierBadge(log.alert_tier)}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className={`${TD} text-right`}>
                         <span className="font-mono text-sm text-[#18181B]">{Math.round(log.co_ppm)} ppm</span>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className={`${TD} text-right`}>
                         <span className="font-mono text-sm text-[#18181B]">{log.temp_celsius.toFixed(1)}°C</span>
                       </td>
                     </tr>
@@ -184,7 +177,7 @@ export const ResidentAlerts = () => {
               )}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       </div>
     </div>
   );

@@ -17,10 +17,9 @@ import {
   Search,
   X,
   Map as MapIcon,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE_TITLE, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager } from '../../components/Table';
 import { getDeviceStatus as getSharedDeviceStatus, getStatusNote, DEVICE_STATUS, DEVICE_STATUS_ORDER } from '../../lib/deviceStatus';
 import type { DeviceStatus } from '../../lib/deviceStatus';
 import { StatusBadge } from '../../components/StatusBadge';
@@ -203,12 +202,7 @@ export const Alerts = () => {
     (!q || [d.device_code, d.label, d.location_desc, residentNameByDevice[d.id]]
       .some(v => v?.toLowerCase().includes(q)))
   );
-  const totalPages = Math.ceil(filteredDevices.length / itemsPerPage) || 1;
   const paginatedDevices = filteredDevices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  const TH = 'text-left px-5 py-3 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap';
-  const rangeStart = (currentPage - 1) * itemsPerPage + 1;
-  const rangeEnd = Math.min(filteredDevices.length, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-8">
@@ -240,12 +234,12 @@ export const Alerts = () => {
       />
 
       {/* ─── Device table (full width, same layout as Devices) ─── */}
-      <div className="bg-white border border-[#E5E2E1] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden">
-        <div className="flex flex-col gap-4 p-5 border-b border-[#E5E2E1]">
+      <div className={TABLE_CARD}>
+        <div className="flex flex-col gap-4 p-5 border-b border-border">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <List className="w-5 h-5 text-[#DC2626]" />
-              <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.02em] whitespace-nowrap">
+              <h3 className={`${TABLE_TITLE} whitespace-nowrap`}>
                 All Connected Devices <span className="text-[#A1A1AA] font-medium">({devices.length})</span>
               </h3>
             </div>
@@ -292,10 +286,10 @@ export const Alerts = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <TableScroll>
+          <table className={TABLE}>
             <thead>
-              <tr className="bg-[#F6F3F2] border-b border-[#E5E2E1]">
+              <tr className={THEAD_ROW}>
                 <th className={TH}>Device</th>
                 <th className={TH}>Resident</th>
                 <th className={TH}>Install Location</th>
@@ -307,9 +301,8 @@ export const Alerts = () => {
               {loading ? (
                 <TableBodySkeleton cols={5} rows={5} />
               ) : paginatedDevices.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center py-14">
-                    <p className="font-medium text-sm text-[#5B403D]">
+                <TableEmpty colSpan={5}>
+                    <p>
                       {q ? `No devices match “${searchQuery}”.` : statusFilter !== 'all' ? 'No devices with this status.' : 'No devices registered yet.'}
                     </p>
                     {/* Registration lives on the Devices page only; this is just a pointer for an empty fleet. */}
@@ -318,8 +311,7 @@ export const Alerts = () => {
                         Register a device on the Devices page
                       </Link>
                     )}
-                  </td>
-                </tr>
+                </TableEmpty>
               ) : (
                 paginatedDevices.map((device) => {
                   const note = getStatusNote(device, device.status, now);
@@ -329,25 +321,25 @@ export const Alerts = () => {
                     <tr
                       key={device.id}
                       data-device-id={device.id}
-                      className={`border-b border-[#E5E2E1] last:border-0 hover:bg-[#FCF9F8] transition-colors ${isHighlighted ? 'bg-[#FFF5F2] outline outline-2 -outline-offset-2 outline-primary/40' : ''}`}
+                      className={`${TR} ${isHighlighted ? 'bg-[#FFF5F2] outline outline-2 -outline-offset-2 outline-primary/40' : ''}`}
                     >
-                      <td className="px-5 py-4 align-top">
+                      <td className={TD}>
                         <span className="block font-mono font-semibold text-xs text-[#1C1B1B] whitespace-nowrap">{device.device_code}</span>
                         {device.label && device.label !== device.device_code && (
                           <span className="block text-[11px] text-[#5B403D] max-w-[220px] leading-tight mt-0.5">{device.label}</span>
                         )}
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className={TD}>
                         {resident
                           ? <span className="text-xs font-bold text-[#1C1B1B] whitespace-nowrap">{resident}</span>
                           : <span className="text-xs text-[#A1A1AA]">Not linked</span>}
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className={TD}>
                         <span className="block text-xs text-[#5B403D] max-w-[260px] leading-tight">
                           {displayAddress(device.location_desc)}
                         </span>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className={TD}>
                         <div className="flex flex-col gap-1 items-start">
                           <StatusBadge status={device.status} />
                           {note && <span className="text-[10px] text-[#71717A] whitespace-nowrap">{note}</span>}
@@ -358,7 +350,7 @@ export const Alerts = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className={TD}>
                         <div className="flex items-center gap-3 text-[#A1A1AA]">
                           <Link to={`/admin/map?device=${device.id}`} className="hover:text-[#1C1B1B] transition-colors" title="Show on map"><MapIcon className="w-4 h-4" /></Link>
                           <Link to={`/admin/devices?edit=${device.id}`} className="hover:text-[#AF101A] transition-colors" title="Edit device (name, thresholds, location, firmware)"><Pencil className="w-4 h-4" /></Link>
@@ -374,25 +366,9 @@ export const Alerts = () => {
               )}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
 
-        {/* Same pager as the Devices table: only when there's more than one page. */}
-        {filteredDevices.length > itemsPerPage && (
-          <div className="p-4 border-t border-[#E5E2E1] flex items-center justify-between text-xs">
-            <span className="text-[#A1A1AA] font-medium">
-              Showing {rangeStart}–{rangeEnd} of {filteredDevices.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} aria-label="Previous page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="font-bold text-[#1C1B1B]">{currentPage} / {totalPages}</span>
-              <button type="button" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} aria-label="Next page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        <TablePager page={currentPage} pageSize={itemsPerPage} total={filteredDevices.length} onPageChange={setCurrentPage} />
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ import type { SupportRequest } from '../../lib/supabase';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import { Loader2, CheckCircle, X, Mail, Phone } from 'lucide-react';
+import { TableBodySkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return 'N/A';
@@ -134,96 +136,89 @@ export const SupportRequests = () => {
             </button>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-[#E5E2E1] overflow-hidden">
-            <div className="overflow-x-auto">
-              {loading ? (
-                <div className="flex justify-center items-center h-64">
-                  <Loader2 className="w-8 h-8 text-[#D32F2F] animate-spin" />
-                </div>
-              ) : (
-                <table className="min-w-full divide-y divide-[#E5E2E1]">
-                  <thead className="bg-[#FCF9F8]">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-[#534341] uppercase tracking-wider">Requester</th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-[#534341] uppercase tracking-wider">Category</th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-[#534341] uppercase tracking-wider">Message</th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-[#534341] uppercase tracking-wider">Contact</th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-[#534341] uppercase tracking-wider">
-                        {activeTab === 'open' ? 'Submitted' : 'Resolved'}
-                      </th>
+          <div className={TABLE_CARD}>
+            <TableScroll>
+              <table className={TABLE}>
+                <thead>
+                  <tr className={THEAD_ROW}>
+                    <th className={TH}>Requester</th>
+                    <th className={TH}>Category</th>
+                    <th className={TH}>Message</th>
+                    <th className={TH}>Contact</th>
+                    <th className={TH}>
+                      {activeTab === 'open' ? 'Submitted' : 'Resolved'}
+                    </th>
+                    {activeTab === 'open' ? (
+                      <th className={`${TH} !text-right`}>Actions</th>
+                    ) : (
+                      <th className={TH}>Resolution Notes</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <TableBodySkeleton cols={6} rows={5} />
+                  ) : visibleRequests.map((req) => (
+                    <tr key={req.id} className={TR}>
+                      <td className={`${TD} whitespace-nowrap`}>
+                        <div className="flex items-center">
+                          <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center font-bold shrink-0">
+                            {req.full_name.charAt(0)}
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-bold text-[#231918]">{req.full_name}</div>
+                            <div className="text-xs text-[#8D7F7D]">{getRoleLabel(req.role_at_request)}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className={`${TD} whitespace-nowrap`}>
+                        <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border bg-blue-50 text-blue-800 border-blue-200">
+                          {req.category}
+                        </span>
+                      </td>
+                      <td className={`${TD} max-w-xs`}>
+                        <p className="text-sm text-[#534341] line-clamp-3">{req.message}</p>
+                      </td>
+                      <td className={`${TD} whitespace-nowrap`}>
+                        <div className="text-xs text-[#534341] space-y-1">
+                          {req.contact_email && (
+                            <div className="flex items-center gap-1"><Mail className="w-3 h-3 text-[#8D7F7D]" />{req.contact_email}</div>
+                          )}
+                          {req.contact_phone && (
+                            <div className="flex items-center gap-1"><Phone className="w-3 h-3 text-[#8D7F7D]" />{req.contact_phone}</div>
+                          )}
+                        </div>
+                      </td>
+                      <td className={`${TD} whitespace-nowrap text-sm text-[#8D7F7D]`}>
+                        {formatDate(activeTab === 'open' ? req.created_at : req.reviewed_at)}
+                      </td>
                       {activeTab === 'open' ? (
-                        <th className="px-6 py-4 text-right text-xs font-bold text-[#534341] uppercase tracking-wider">Actions</th>
+                        <td className={`${TD} whitespace-nowrap text-right text-sm font-medium`}>
+                          <button
+                            onClick={() => {
+                              setSelectedRequest(req);
+                              setShowResolveModal(true);
+                            }}
+                            className="text-[#047857] hover:text-[#065F46] bg-[#ECFDF5] px-3 py-1.5 rounded font-bold transition-colors"
+                          >
+                            Mark Resolved
+                          </button>
+                        </td>
                       ) : (
-                        <th className="px-6 py-4 text-left text-xs font-bold text-[#534341] uppercase tracking-wider">Resolution Notes</th>
+                        <td className={`${TD} max-w-xs`}>
+                          <p className="text-sm text-[#534341]">{req.admin_notes || 'No notes'}</p>
+                        </td>
                       )}
                     </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-[#E5E2E1]">
-                    {visibleRequests.map((req) => (
-                      <tr key={req.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center font-bold shrink-0">
-                              {req.full_name.charAt(0)}
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-bold text-[#231918]">{req.full_name}</div>
-                              <div className="text-xs text-[#8D7F7D]">{getRoleLabel(req.role_at_request)}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border bg-blue-50 text-blue-800 border-blue-200">
-                            {req.category}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 max-w-xs">
-                          <p className="text-sm text-[#534341] line-clamp-3">{req.message}</p>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-xs text-[#534341] space-y-1">
-                            {req.contact_email && (
-                              <div className="flex items-center gap-1"><Mail className="w-3 h-3 text-[#8D7F7D]" />{req.contact_email}</div>
-                            )}
-                            {req.contact_phone && (
-                              <div className="flex items-center gap-1"><Phone className="w-3 h-3 text-[#8D7F7D]" />{req.contact_phone}</div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#8D7F7D]">
-                          {formatDate(activeTab === 'open' ? req.created_at : req.reviewed_at)}
-                        </td>
-                        {activeTab === 'open' ? (
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button
-                              onClick={() => {
-                                setSelectedRequest(req);
-                                setShowResolveModal(true);
-                              }}
-                              className="text-[#047857] hover:text-[#065F46] bg-[#ECFDF5] px-3 py-1.5 rounded font-bold transition-colors"
-                            >
-                              Mark Resolved
-                            </button>
-                          </td>
-                        ) : (
-                          <td className="px-6 py-4 max-w-xs">
-                            <p className="text-sm text-[#534341]">{req.admin_notes || 'No notes'}</p>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                    {visibleRequests.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-[#534341]">
-                          <CheckCircle className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                          <p className="font-medium">No {activeTab} support requests</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                  ))}
+                  {!loading && visibleRequests.length === 0 && (
+                    <TableEmpty colSpan={6} icon={<CheckCircle className="w-10 h-10" />}>
+                      No {activeTab} support requests
+                    </TableEmpty>
+                  )}
+                </tbody>
+              </table>
+            </TableScroll>
           </div>
         </div>
       </div>

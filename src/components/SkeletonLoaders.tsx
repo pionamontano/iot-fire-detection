@@ -257,9 +257,9 @@ export const TableRowsSkeleton = ({ cols = 5, rows = 5 }: { cols?: number; rows?
 export const TableBodySkeleton = ({ cols = 5, rows = 5 }: { cols?: number; rows?: number }) => (
   <>
     {[...Array(rows)].map((_, rowIdx) => (
-      <tr key={rowIdx} className="border-b border-[#E5E2E1] last:border-0">
+      <tr key={rowIdx} className="border-b border-border last:border-0">
         {[...Array(cols)].map((_, colIdx) => (
-          <td key={colIdx} className="px-6 py-4">
+          <td key={colIdx} className="px-5 py-4">
             <Skeleton className={`h-4 ${colIdx === 0 ? 'w-24' : colIdx === cols - 1 ? 'w-16' : 'w-full max-w-[160px]'}`} />
           </td>
         ))}

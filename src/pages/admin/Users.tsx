@@ -12,6 +12,7 @@ import {
   Search, X, AlertCircle, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD } from '../../components/Table';
 
 // One placeholder for every missing value on this page.
 const EMPTY = '—';
@@ -32,8 +33,6 @@ const DEFAULT_REJECT_NOTE = 'Rejected';
 
 // ─── Shared styles (theme tokens from index.css, same as Dashboard) ───
 
-const CARD = 'bg-surface-card border border-border rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04)]';
-const TH = 'px-4 first:pl-6 last:pr-6 py-3 text-text-body font-black text-[10px] uppercase tracking-[0.1em]';
 const LABEL = 'block text-sm font-bold text-text mb-1';
 const FIELD = 'w-full h-10 px-3 border border-border rounded-lg bg-surface-card text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary';
 const BTN = 'h-10 px-4 rounded-lg font-bold text-sm transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-50';
@@ -288,26 +287,26 @@ function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
   empty: React.ReactNode;
 }) {
   if (rows.length === 0) {
-    return <div className="px-6 py-12 text-center text-text-body">{empty}</div>;
+    return <div className="px-5 py-14 text-center font-medium text-sm text-text-body">{empty}</div>;
   }
   return (
     <>
       <div className="hidden 2xl:block overflow-x-auto">
-      <table className="min-w-full divide-y divide-border">
-        <thead className="bg-surface">
-          <tr>
-            {[identity, ...columns].map(c => <th key={c.header} className={`${TH} text-left`}>{c.header}</th>)}
-            {actions && <th className={`${TH} text-right`}>Actions</th>}
+      <table className={TABLE}>
+        <thead>
+          <tr className={THEAD_ROW}>
+            {[identity, ...columns].map(c => <th key={c.header} className={TH}>{c.header}</th>)}
+            {actions && <th className={`${TH} !text-right`}>Actions</th>}
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody>
           {rows.map(row => (
-            <tr key={rowKey(row)} className="hover:bg-surface/60 transition-colors">
+            <tr key={rowKey(row)} className={TR}>
               {[identity, ...columns].map(c => (
-                <td key={c.header} className={`px-4 first:pl-6 py-4 text-sm text-text ${c.wrap ? 'max-w-xs' : 'whitespace-nowrap'}`}>{c.cell(row)}</td>
+                <td key={c.header} className={`${TD} text-text ${c.wrap ? 'max-w-xs' : 'whitespace-nowrap'}`}>{c.cell(row)}</td>
               ))}
               {actions && (
-                <td className="pl-4 pr-6 py-4 whitespace-nowrap text-right">
+                <td className={`${TD} whitespace-nowrap text-right`}>
                   <div className="inline-flex items-center gap-2">{actions(row) ?? <Empty />}</div>
                 </td>
               )}
@@ -827,8 +826,8 @@ export const Users = () => {
             ))}
           </div>
 
-          <div className={`${CARD} overflow-hidden`}>
-            <div className="p-3 sm:p-4 border-b border-border bg-surface flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className={TABLE_CARD}>
+            <div className="p-3 sm:p-5 border-b border-border flex flex-col lg:flex-row lg:items-center gap-3">
               <div className="relative w-full lg:max-w-sm">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-faint pointer-events-none" />
                 <input

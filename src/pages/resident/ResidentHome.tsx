@@ -11,6 +11,7 @@ import {
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { ResidentHomeSkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE_TOOLBAR, TABLE, THEAD_ROW, TH, TR, TD, TableScroll } from '../../components/Table';
 import { resolveDeviceLocation, markerOpacity, displayAddress, isValidCoordinate } from '../../lib/location';
 import { formatLastSeen } from '../../lib/deviceStatus';
 import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
@@ -549,8 +550,8 @@ export const ResidentHome = () => {
           </div>
 
           {/* Recent Activity Log */}
-          <div className="bg-white rounded-lg border border-[#E4E4E7] overflow-hidden">
-            <div className="flex justify-between items-center p-6 border-b border-[#F4F4F5]">
+          <div className={TABLE_CARD}>
+            <div className={TABLE_TOOLBAR}>
               <h2 className="text-lg font-black tracking-tight text-[#18181B]">Recent Activity Log</h2>
               <button
                 onClick={handleRefresh}
@@ -561,53 +562,59 @@ export const ResidentHome = () => {
                 REFRESH
               </button>
             </div>
-            <table className="w-full text-left">
-              <thead className="bg-[#FCF9F8] border-b border-[#E4E4E7]">
-                <tr>
-                  <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">EVENT TYPE</th>
-                  <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">STATUS</th>
-                  <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">TIMESTAMP</th>
-                  <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">DETAILS</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#F4F4F5]">
-                {activeAlerts.length > 0 ? activeAlerts.map(alert => (
-                  <tr key={alert.id} className="hover:bg-[#F9FAFB]">
-                    <td className="px-6 py-4 flex items-center gap-3">
-                      <AlertTriangle size={16} className="text-[#DC2626]" />
-                      <span className="text-sm font-bold text-[#18181B]">{alert.alert_tier === 2 ? 'Fire Alert' : 'High Temp Warning'}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${alert.resolved_at ? 'bg-[#E4E4E7] text-[#52525B]' : 'bg-[#DC2626] text-white'}`}>
-                        {alert.resolved_at ? 'RESOLVED' : 'ACTIVE'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-xs text-[#52525B]">
-                      {new Date(alert.triggered_at).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-[#18181B]">
-                      {alert.temp_celsius?.toFixed(1)}°C / {alert.co_ppm?.toFixed(0)} PPM detected
-                    </td>
+            <TableScroll>
+              <table className={TABLE}>
+                <thead>
+                  <tr className={THEAD_ROW}>
+                    <th className={TH}>Event Type</th>
+                    <th className={TH}>Status</th>
+                    <th className={TH}>Timestamp</th>
+                    <th className={TH}>Details</th>
                   </tr>
-                )) : (
-                  <tr>
-                    <td className="px-6 py-4 flex items-center gap-3">
-                      <Activity size={16} className="text-[#00799C]" />
-                      <span className="text-sm font-bold text-[#18181B]">System Nominal</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-[9px] font-bold px-2 py-1 rounded uppercase bg-[#E0F2FE] text-[#00799C]">CLEAR</span>
-                    </td>
-                    <td className="px-6 py-4 text-xs text-[#52525B]">
-                      {new Date().toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-[#18181B]">
-                      No alerts triggered. All readings within safe parameters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {activeAlerts.length > 0 ? activeAlerts.map(alert => (
+                    <tr key={alert.id} className={TR}>
+                      <td className={TD}>
+                        <div className="flex items-center gap-3">
+                          <AlertTriangle size={16} className="text-[#DC2626]" />
+                          <span className="text-sm font-bold text-[#18181B]">{alert.alert_tier === 2 ? 'Fire Alert' : 'High Temp Warning'}</span>
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${alert.resolved_at ? 'bg-[#E4E4E7] text-[#52525B]' : 'bg-[#DC2626] text-white'}`}>
+                          {alert.resolved_at ? 'RESOLVED' : 'ACTIVE'}
+                        </span>
+                      </td>
+                      <td className={`${TD} text-xs text-[#52525B]`}>
+                        {new Date(alert.triggered_at).toLocaleString()}
+                      </td>
+                      <td className={`${TD} text-xs text-[#18181B]`}>
+                        {alert.temp_celsius?.toFixed(1)}°C / {alert.co_ppm?.toFixed(0)} PPM detected
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr className={TR}>
+                      <td className={TD}>
+                        <div className="flex items-center gap-3">
+                          <Activity size={16} className="text-[#00799C]" />
+                          <span className="text-sm font-bold text-[#18181B]">System Nominal</span>
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <span className="text-[9px] font-bold px-2 py-1 rounded uppercase bg-[#E0F2FE] text-[#00799C]">CLEAR</span>
+                      </td>
+                      <td className={`${TD} text-xs text-[#52525B]`}>
+                        {new Date().toLocaleString()}
+                      </td>
+                      <td className={`${TD} text-xs text-[#18181B]`}>
+                        No alerts triggered. All readings within safe parameters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </TableScroll>
           </div>
 
         </div>
