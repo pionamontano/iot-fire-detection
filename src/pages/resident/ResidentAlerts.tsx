@@ -1,140 +1,176 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import type { AlertEvent } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Filter } from 'lucide-react';
+import { Filter, FileText, Flame, RefreshCw, ThermometerSun } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
 import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { usePagedRows } from '../../hooks/usePagedRows';
 
-type ResidentAlertEvent = {
-  id: string;
-  triggered_at: string;
-  alert_tier: number;
-  co_ppm: number;
-  temp_celsius: number;
+// The resident's one alert page (it replaced the separate resident System
+// Log): every alert their device raised, filtered by date range, tier and
+// open/resolved, with readings, notifications sent and when it was resolved.
+
+type TierFilter = 'all' | '1' | '2';
+type StatusFilter = 'all' | 'active' | 'resolved';
+
+// Safety cap on one fetch; a single device rarely gets anywhere near it.
+const FETCH_LIMIT = 500;
+
+// yyyy-mm-dd in the viewer's own timezone (toISOString would give the UTC
+// date, which in the Philippines is still "yesterday" until 8 a.m.).
+const localDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const daysAgo = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return localDate(d);
 };
+
+const FIELD = 'w-full bg-[#FCF9F8] border border-[#E4E4E7] rounded px-3 py-2 text-sm text-[#18181B] focus:border-[#B91C1C] focus:ring-1 focus:ring-[#B91C1C]/30 outline-none';
+const LABEL = 'text-xs font-bold text-[#52525B] uppercase tracking-wider';
 
 export const ResidentAlerts = () => {
   const { profile } = useAuth();
-  const [logs, setLogs] = useState<ResidentAlertEvent[]>([]);
+  const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Filters
-  const [fromDate, setFromDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().split('T')[0];
-  });
-  const [toDate, setToDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [tierFilter, setTierFilter] = useState<string>('All');
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  const fetchLogs = useCallback(async () => {
-    if (!profile?.device_id) return;
-    setLoading(true);
+  const [fromDate, setFromDate] = useState(() => daysAgo(30));
+  const [toDate, setToDate] = useState(() => localDate(new Date()));
+  const [tierFilter, setTierFilter] = useState<TierFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-    try {
-      let query = supabase
-        .from('alert_events')
-        .select('*')
-        .eq('device_id', profile.device_id)
-        .order('triggered_at', { ascending: false });
+  const deviceId = profile?.device_id;
+  const profileLoaded = !!profile;
+  // Only the newest request may set results (dates can change faster than a fetch returns).
+  const requestId = useRef(0);
 
-      // Apply date filters
-      if (fromDate) {
-        query = query.gte('triggered_at', `${fromDate}T00:00:00Z`);
-      }
-      if (toDate) {
-        query = query.lte('triggered_at', `${toDate}T23:59:59Z`);
-      }
-      
-      // Apply tier filter
-      if (tierFilter === 'Tier 1 Warning') {
-        query = query.eq('alert_tier', 1);
-      } else if (tierFilter === 'Tier 2 Alert') {
-        query = query.eq('alert_tier', 2);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setLogs(data || []);
-    } catch (error) {
-      console.error("Error fetching resident logs:", error);
-    } finally {
-      setLoading(false);
+  const fetchAlerts = useCallback(async () => {
+    if (!deviceId) return;
+    const id = ++requestId.current;
+    let query = supabase
+      .from('alert_events')
+      .select('*')
+      .eq('device_id', deviceId)
+      .order('triggered_at', { ascending: false })
+      .limit(FETCH_LIMIT);
+    // Whole local days: from 00:00 on the From date to the end of the To date.
+    if (fromDate) query = query.gte('triggered_at', new Date(`${fromDate}T00:00:00`).toISOString());
+    if (toDate) {
+      const end = new Date(`${toDate}T00:00:00`);
+      end.setDate(end.getDate() + 1);
+      query = query.lt('triggered_at', end.toISOString());
     }
-  }, [profile?.device_id, fromDate, toDate, tierFilter]);
+    if (tierFilter !== 'all') query = query.eq('alert_tier', Number(tierFilter));
+
+    const { data, error } = await query;
+    if (id !== requestId.current) return;
+    if (error) console.error('Error fetching alert history:', error);
+    setLoadFailed(!!error);
+    setAlerts((data as AlertEvent[]) || []);
+  }, [deviceId, fromDate, toDate, tierFilter]);
 
   useEffect(() => {
-    if (profile?.device_id) {
-      fetchLogs();
-    } else {
-      setLoading(false);
+    if (!deviceId) {
+      if (profileLoaded) setLoading(false);
+      return;
     }
-  }, [profile?.device_id, fromDate, toDate, tierFilter, fetchLogs]);
+    setLoading(true);
+    fetchAlerts().finally(() => setLoading(false));
+  }, [deviceId, profileLoaded, fetchAlerts]);
 
-  const { page, setPage, pageRows } = usePagedRows(logs, `${fromDate}|${toDate}|${tierFilter}`);
-
-  const getTierBadge = (tier: number) => {
-    if (tier === 1) {
-      return (
-        <span className="inline-flex items-center px-2 py-1 rounded bg-[#FEF3C7] text-[#92400E] font-bold text-[10px] uppercase tracking-wider">
-          Tier 1 Warning
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center px-2 py-1 rounded bg-[#FEE2E2] text-[#DC2626] font-bold text-[10px] uppercase tracking-wider">
-        Tier 2 Alert
-      </span>
-    );
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    await fetchAlerts();
+    setRefreshing(false);
   };
+
+  const activeCount = alerts.filter(a => !a.resolved_at).length;
+  const resolvedCount = alerts.length - activeCount;
+  const filtered = alerts.filter(a =>
+    statusFilter === 'all' || (statusFilter === 'active' ? !a.resolved_at : !!a.resolved_at)
+  );
+  const { page, setPage, pageRows } = usePagedRows(filtered, `${fromDate}|${toDate}|${tierFilter}|${statusFilter}`);
+
+  const statusChips: { value: StatusFilter; label: string; count: number }[] = [
+    { value: 'all', label: 'All', count: alerts.length },
+    { value: 'active', label: 'Active', count: activeCount },
+    { value: 'resolved', label: 'Resolved', count: resolvedCount },
+  ];
 
   return (
     <div className="flex flex-col gap-6 pb-12">
       {/* Header (same layout as the other resident pages) */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-[#DC2626]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Alerts</span>
+      <div className="flex flex-wrap justify-between items-start gap-4">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-[#DC2626]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Alerts</span>
+          </div>
+          <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Alert History</h1>
+          <p className="text-sm text-[#52525B] mt-1">Every fire alert and warning your device raised, and whether it has been resolved.</p>
         </div>
-        <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Alert History</h1>
-        <p className="text-sm text-[#52525B] mt-1">Fire alerts and warnings your device detected, by date range and tier.</p>
+        {deviceId && (
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            className="flex items-center gap-2 px-4 py-2 bg-[#18181B] text-white text-[10px] font-bold uppercase tracking-widest rounded hover:bg-black transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        )}
       </div>
 
       {/* Filters */}
-      <div className="bg-white border border-[#E4E4E7] rounded-lg p-4 flex flex-col sm:flex-row gap-4 items-end">
-        <div className="flex flex-col gap-1.5 w-full sm:w-auto">
-          <label className="text-xs font-bold text-[#52525B] uppercase tracking-wider">From date</label>
-          <input 
-            type="date" 
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="w-full bg-[#FCF9F8] border border-[#E4E4E7] rounded px-3 py-2 text-sm text-[#18181B] focus:border-[#B91C1C] focus:ring-1 focus:ring-[#B91C1C]/30 outline-none"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5 w-full sm:w-auto">
-          <label className="text-xs font-bold text-[#52525B] uppercase tracking-wider">To date</label>
-          <input 
-            type="date" 
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="w-full bg-[#FCF9F8] border border-[#E4E4E7] rounded px-3 py-2 text-sm text-[#18181B] focus:border-[#B91C1C] focus:ring-1 focus:ring-[#B91C1C]/30 outline-none"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5 w-full sm:w-auto flex-1">
-          <label className="text-xs font-bold text-[#52525B] uppercase tracking-wider">Tier</label>
-          <div className="relative">
-            <select 
-              value={tierFilter}
-              onChange={(e) => setTierFilter(e.target.value)}
-              className="w-full bg-[#FCF9F8] border border-[#E4E4E7] rounded px-3 py-2 text-sm text-[#18181B] focus:border-[#B91C1C] focus:ring-1 focus:ring-[#B91C1C]/30 outline-none appearance-none"
-            >
-              <option value="All">All</option>
-              <option value="Tier 1 Warning">Tier 1 Warning</option>
-              <option value="Tier 2 Alert">Tier 2 Alert</option>
-            </select>
-            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA] pointer-events-none" />
+      <div className="bg-white border border-[#E4E4E7] rounded-lg p-4 flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex flex-col gap-1.5 w-full sm:w-auto">
+            <label htmlFor="alerts-from" className={LABEL}>From date</label>
+            <input id="alerts-from" type="date" value={fromDate} max={toDate || undefined} onChange={e => setFromDate(e.target.value)} className={FIELD} />
           </div>
+          <div className="flex flex-col gap-1.5 w-full sm:w-auto">
+            <label htmlFor="alerts-to" className={LABEL}>To date</label>
+            <input id="alerts-to" type="date" value={toDate} min={fromDate || undefined} onChange={e => setToDate(e.target.value)} className={FIELD} />
+          </div>
+          <div className="flex flex-col gap-1.5 w-full sm:w-auto flex-1">
+            <label htmlFor="alerts-tier" className={LABEL}>Tier</label>
+            <div className="relative">
+              <select id="alerts-tier" value={tierFilter} onChange={e => setTierFilter(e.target.value as TierFilter)} className={`${FIELD} appearance-none`}>
+                <option value="all">All tiers</option>
+                <option value="1">Tier 1 Warning</option>
+                <option value="2">Tier 2 Alert</option>
+              </select>
+              <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA] pointer-events-none" />
+            </div>
+          </div>
+        </div>
+
+        <div role="radiogroup" aria-label="Filter by status" className="flex flex-wrap gap-2">
+          {statusChips.map(c => {
+            const selected = statusFilter === c.value;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setStatusFilter(c.value)}
+                className={`h-8 px-3 rounded-full border text-xs whitespace-nowrap inline-flex items-center gap-2 transition-colors ${
+                  selected
+                    ? 'bg-primary border-primary text-white font-bold'
+                    : 'bg-white border-[#E5E2E1] text-[#5B403D] font-semibold hover:border-[#A1A1AA] hover:text-[#1C1B1B]'
+                }`}
+              >
+                {c.label}
+                <span className={`font-bold tabular-nums ${selected ? 'text-white/80' : 'text-[#A1A1AA]'}`}>{c.count}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -144,49 +180,69 @@ export const ResidentAlerts = () => {
           <table className={TABLE}>
             <thead>
               <tr className={THEAD_ROW}>
-                <th className={TH}>Timestamp</th>
-                <th className={TH}>Tier</th>
-                <th className={`${TH} !text-right`}>CO</th>
+                <th className={TH}>Event</th>
+                <th className={TH}>Status</th>
+                <th className={TH}>Triggered</th>
                 <th className={`${TH} !text-right`}>Temp</th>
+                <th className={`${TH} !text-right`}>CO</th>
+                <th className={TH}>Notifications</th>
+                <th className={TH}>Resolved</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableBodySkeleton cols={4} rows={3} />
-              ) : !profile?.device_id ? (
-                <TableEmpty colSpan={4}>No device linked to this account.</TableEmpty>
-              ) : logs.length === 0 ? (
-                <TableEmpty colSpan={4}>No alerts found for the selected filters.</TableEmpty>
-              ) : (
-                pageRows.map(log => {
-                  const d = new Date(log.triggered_at);
-                  const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                  const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                  return (
-                    <tr key={log.id} className={TR}>
-                      <td className={TD}>
-                        <div className="flex flex-col">
-                          <span className="font-mono text-xs font-medium text-[#18181B]">{dateStr}, {timeStr}</span>
-                        </div>
-                      </td>
-                      <td className={TD}>
-                        {getTierBadge(log.alert_tier)}
-                      </td>
-                      <td className={`${TD} text-right`}>
-                        <span className="font-mono text-sm text-[#18181B]">{Math.round(log.co_ppm)} ppm</span>
-                      </td>
-                      <td className={`${TD} text-right`}>
-                        <span className="font-mono text-sm text-[#18181B]">{log.temp_celsius.toFixed(1)}°C</span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+                <TableBodySkeleton cols={7} rows={5} />
+              ) : !deviceId ? (
+                <TableEmpty colSpan={7}>No device linked to this account.</TableEmpty>
+              ) : loadFailed ? (
+                <TableEmpty colSpan={7}>Couldn't load your alerts. Check your connection and press Refresh.</TableEmpty>
+              ) : filtered.length === 0 ? (
+                <TableEmpty colSpan={7} icon={<FileText className="w-10 h-10" />}>
+                  {alerts.length === 0 ? 'No alerts in this date range.' : `No ${statusFilter} alerts in this date range.`}
+                </TableEmpty>
+              ) : pageRows.map(alert => (
+                <tr key={alert.id} className={TR}>
+                  <td className={TD}>
+                    <div className="flex items-center gap-2">
+                      {alert.alert_tier === 2
+                        ? <Flame className="w-4 h-4 text-[#DC2626] shrink-0" />
+                        : <ThermometerSun className="w-4 h-4 text-[#F59E0B] shrink-0" />}
+                      <span className="text-sm font-bold text-[#18181B] whitespace-nowrap">
+                        {alert.alert_tier === 2 ? 'Tier 2 Alert' : 'Tier 1 Warning'}
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-[#A1A1AA] font-mono ml-6">{alert.id.substring(0, 8)}</span>
+                  </td>
+                  <td className={TD}>
+                    <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${alert.resolved_at ? 'bg-[#E4E4E7] text-[#52525B]' : 'bg-[#DC2626] text-white'}`}>
+                      {alert.resolved_at ? 'Resolved' : 'Active'}
+                    </span>
+                  </td>
+                  <td className={`${TD} text-xs text-[#52525B] whitespace-nowrap`}>{new Date(alert.triggered_at).toLocaleString()}</td>
+                  <td className={`${TD} text-right font-mono text-xs font-bold text-[#18181B] whitespace-nowrap`}>{alert.temp_celsius?.toFixed(1)}°C</td>
+                  <td className={`${TD} text-right font-mono text-xs font-bold text-[#18181B] whitespace-nowrap`}>{alert.co_ppm?.toFixed(0)} ppm</td>
+                  <td className={TD}>
+                    <div className="flex gap-1">
+                      {alert.sms_sent_owner && <span title="SMS sent to you" className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#E0F2FE] text-[#00799C]">SMS</span>}
+                      {alert.sms_sent_bfp && <span title="Bureau of Fire Protection notified" className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#FEE2E2] text-[#DC2626]">BFP</span>}
+                      {alert.telegram_sent && <span title="Telegram message sent" className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#E4E4E7] text-[#52525B]">TG</span>}
+                      {!alert.sms_sent_owner && !alert.sms_sent_bfp && !alert.telegram_sent && <span className="text-xs text-[#A1A1AA]">—</span>}
+                    </div>
+                  </td>
+                  <td className={`${TD} text-xs text-[#52525B] whitespace-nowrap`}>
+                    {alert.resolved_at ? new Date(alert.resolved_at).toLocaleString() : '—'}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </TableScroll>
-        <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={logs.length} onPageChange={setPage} />
+        <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={filtered.length} onPageChange={setPage} />
       </div>
+
+      {alerts.length === FETCH_LIMIT && (
+        <p className="text-xs text-[#A1A1AA]">Only the {FETCH_LIMIT} most recent alerts in this range are shown. Narrow the dates to see older ones.</p>
+      )}
     </div>
   );
 };

@@ -205,7 +205,7 @@ Roles are exactly those in `profiles.role` CHECK (`20260717000000_init.sql:29`):
 | Aspect | Detail | Evidence |
 |---|---|---|
 | Purpose | Monitor own device, edit its thresholds, review location-drift prompts, manage own contact | |
-| UI pages | `/setup` (mandatory first), `/home`, `/home/alerts`, `/home/settings`, `/home/devices`, `/home/logs`, `/account` | `App.tsx:87-95` |
+| UI pages | `/setup` (mandatory first), `/home`, `/home/alerts`, `/home/settings`, `/home/devices`, `/account` (`/home/logs` redirects to `/home/alerts`) | `App.tsx:87-95` |
 | Backend authority | Read own device (`devices_safe`/column grants), own `sensor_readings`/`alert_events` (`device_id = own`); `update_own_device_alert_settings()` (CO 0–1000, temp 0–100; approved resident only); `resolve_address_discrepancy()` (own rows; approval overwrites the device's registered address and coordinates); self-update of own profile (non-protected columns); `link-device` Edge Function | `20260917080000`, `20261016000000`, `link-device/index.ts` |
 | Prohibited | Other residents' data; role/status/device_id changes via direct update (trigger resets them) | `protect_profile_fields` init.sql:236-261 |
 | Concerns | `protect_profile_fields` does not cover `is_active`, `setup_complete`, `telegram_chat_id` (KI-10). A resident's approval of a drift prompt changes the *device-wide* registered location used by all subsequent drift checks (design as implemented) | |
@@ -270,7 +270,7 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | FR-RES-003 | Home: device status, current readings, last 24 readings chart, latest 10 alerts, activity log, Realtime refresh | C | Partially Verified | `ResidentHome.tsx:101-143,254-283` | | "System Uptime" hard-coded (KI-01); online = 5 min (KI-03) |
 | FR-RES-004 | Edit CO and temperature thresholds of own device via `update_own_device_alert_settings` (CO 0–1000 ppm, temp 0–100 °C) | C | Verified | `20260917080000`; `ResidentAlertSettings.tsx:141-190` | Out-of-range → rejected | Residents can lower thresholds arbitrarily; no policy limit (Not Specified — Requires Approval) |
 | FR-RES-005 | Review "address discrepancy" prompts; approving copies GPS-derived address+coordinates onto the device's registered location | C | Verified (code) | `ResidentHome.tsx:303-330`; `20261016000000`; `20261018000000` | Approve → `devices.location_desc/latitude/longitude` updated | Changes the location used for all later drift checks; no admin review step |
-| FR-RES-006 | Device information page (recent readings) and System Log of own alerts | C | Partially Verified | `ResidentDeviceInfo.tsx:37-38`; `ResidentSystemLog.tsx` | | |
+| FR-RES-006 | Device information page (recent readings) and Alert History of own alerts | C | Partially Verified | `ResidentDeviceInfo.tsx:37-38`; `ResidentAlerts.tsx` | | |
 | FR-RES-007 | Account page: name/contact edit | C | Partially Verified | `ResidentAccount.tsx:47-70` | | Direct profile update, client-side validation only |
 | FR-RES-008 | Notification preferences: Web Push opt-in; Telegram link-token generation | C | Partially Verified | `ResidentAlertSettings.tsx:71-140`; `create_telegram_link_token` | Push subscribe row appears | Telegram link has no downstream alert use (KI-24) |
 
@@ -522,7 +522,7 @@ Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `supp
 | Resident | `ResidentSetup` | First-run contact number | `profiles` | Save | AuthGuard(resident) | Verified | |
 | Resident | `ResidentHome` | Own device dashboard + link + drift prompt | `devices_safe`, `sensor_readings`, `alert_events`, `address_discrepancies`; Edge/RPC | Link device, refresh, approve/reject drift | same / RLS | Partial | KI-01, KI-03 |
 | Resident | `ResidentAlertSettings` | Thresholds, contact, push, Telegram | `devices_safe`, RPC, `profiles` | Save | same | Verified | KI-24 |
-| Resident | `ResidentDeviceInfo`, `ResidentSystemLog`, `ResidentAlerts` | Device info, log, alert list | `devices_safe`, `sensor_readings`, `alert_events` | Refresh | same | Verified | `ResidentAlerts.tsx` is routed at `/home/alerts` ("Alert History" in the resident sidebar) |
+| Resident | `ResidentDeviceInfo`, `ResidentAlerts` | Device info, alert history | `devices_safe`, `sensor_readings`, `alert_events` | Refresh | same | Verified | `ResidentAlerts.tsx` is routed at `/home/alerts` ("Alert History"); it replaced the resident System Log |
 | Resident | `ResidentAccount` | Name/contact | `profiles`, `devices_safe` | Save | same | Partial | |
 | Shared | `AdminLayout`/`ResponderLayout`/`ResidentLayout`, `HeaderWidgets` (search, bell, user menu), `AdminSupportModal`, `LoadErrorBanner`, `GlobalErrorBoundary`, `LocationBadge` | Shell and helpers | | | | | |
 

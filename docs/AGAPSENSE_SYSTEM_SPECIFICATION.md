@@ -147,7 +147,7 @@ sequenceDiagram
 ### C. Resident Dashboard
 1. **Module Name and Purpose:** Resident Home (`/home`). Real-time device telemetry.
 2. **Intended Roles:** Resident.
-3. **Entry Route:** `src/pages/resident/ResidentHome.tsx` (also `ResidentSetup`, `ResidentAlertSettings`, `ResidentDeviceInfo`, `ResidentSystemLog`, `ResidentAccount`).
+3. **Entry Route:** `src/pages/resident/ResidentHome.tsx` (also `ResidentSetup`, `ResidentAlertSettings`, `ResidentDeviceInfo`, `ResidentAlerts`, `ResidentAccount`).
 4. **Main UI Components:** Live sensor cards (CO, Temp) — replaced by "Initializing sensors..." while `sensor_ready` is false — power card (Mains / Battery), last 24 readings, active alerts list.
 5. **User Actions:** Complete mandatory first-login setup (mobile number), link a device, edit thresholds and contact number, enable Web Push / Telegram link, approve/reject address discrepancies.
 6. **Business Rules:** Can only view data where `device_id` matches their own profile's `device_id`.

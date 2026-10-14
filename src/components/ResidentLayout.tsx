@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, BellRing, Settings, Menu, X, Cpu, FileText, History } from 'lucide-react';
+import { LayoutDashboard, BellRing, Settings, Menu, X, Cpu, History } from 'lucide-react';
 import { NotificationDropdown, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
@@ -23,7 +23,6 @@ export const ResidentLayout = () => {
     { name: 'Alert History', path: '/home/alerts', icon: History },
     { name: 'Alert Settings', path: '/home/settings', icon: BellRing },
     { name: 'Device Information', path: '/home/devices', icon: Cpu },
-    { name: 'System Log', path: '/home/logs', icon: FileText },
   ];
 
   return (
@@ -49,7 +48,7 @@ export const ResidentLayout = () => {
           </div>
 
           {/* Notification Bell */}
-          <NotificationDropdown alertsPath="/home/logs" />
+          <NotificationDropdown alertsPath="/home/alerts" />
 
           {/* User Menu */}
           <UserMenuDropdown settingsPath="/account" onSignOut={() => setShowLogoutModal(true)} />

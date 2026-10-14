@@ -381,47 +381,6 @@ export const DeviceInfoSkeleton = () => (
   </div>
 );
 
-// ─── System Log Skeleton ───
-export const SystemLogSkeleton = () => (
-  <div className="flex flex-col gap-6 pb-12 animate-fade-in">
-    {/* Header */}
-    <div className="flex justify-between items-start">
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-3 w-24" />
-        <Skeleton className="h-8 w-36" />
-        <Skeleton className="h-4 w-60 mt-1" />
-      </div>
-      <Skeleton className="h-9 w-24 rounded" />
-    </div>
-
-    {/* Stats */}
-    <div className="grid grid-cols-2 gap-4">
-      <div className="bg-white border border-[#E4E4E7] rounded-lg p-4 flex flex-col gap-2">
-        <Skeleton className="h-3 w-20" />
-        <Skeleton className="h-8 w-10" />
-      </div>
-      <div className="bg-white border border-[#E4E4E7] rounded-lg p-4 flex flex-col gap-2">
-        <Skeleton className="h-3 w-20" />
-        <Skeleton className="h-8 w-10" />
-      </div>
-    </div>
-
-    {/* Log entries */}
-    <div className="flex flex-col gap-3">
-      {[...Array(6)].map((_, i) => (
-        <div key={i} className="bg-white border border-[#E4E4E7] rounded-lg p-4 flex items-center gap-4">
-          <Skeleton className="h-8 w-8 rounded-full shrink-0" />
-          <div className="flex-1 flex flex-col gap-2">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-3 w-56" />
-          </div>
-          <Skeleton className="h-5 w-16 rounded" />
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
 // ─── Alert Settings Skeleton ───
 export const AlertSettingsSkeleton = () => (
   <div className="flex flex-col gap-8 pb-12 animate-fade-in">

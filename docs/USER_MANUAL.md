@@ -133,7 +133,7 @@ Enter your email and password on the login page.
 
 ## 6. Resident guide
 
-Your menu has five pages plus **Account**: **Dashboard**, **Alert History**, **Alert Settings**, **Device Information**, **System Log**.
+Your menu has four pages plus **Account**: **Dashboard**, **Alert History**, **Alert Settings**, **Device Information**.
 
 ### 6.1 First sign-in setup
 
@@ -161,7 +161,9 @@ Your home screen shows the live state of your device:
 
 ### 6.3 Alert History
 
-Every alert and warning your device has raised, newest first, with its **tier** (*Tier 1 Warning* or *Tier 2 Alert*) and the **CO** and **temperature** readings at that moment. Pick a **From** and **To** date (the last 7 days by default) and a **Tier** to narrow the list. Ten alerts show per page; use the arrows at the bottom of the table to see more.
+Every alert and warning your device has raised, newest first. Each row shows the **tier** (*Tier 1 Warning* or *Tier 2 Alert*), whether it is **Active** or **Resolved**, when it was **triggered**, the **temperature** and **CO** readings at that moment, which **notifications** went out (*SMS* to you, *BFP* for the fire station, *TG* for Telegram), and when it was **resolved**.
+
+To narrow the list, pick a **From** and **To** date (the last 30 days by default), a **Tier**, or one of **All / Active / Resolved** (each shows how many alerts it has). Ten alerts show per page; use the arrows at the bottom of the table to see more. Press **Refresh** to load new alerts. **View all alerts** in the notification bell also opens this page.
 
 ### 6.4 Alert Settings
 
@@ -192,15 +194,11 @@ The device picks up new settings automatically within about **10 minutes**.
 
 Shows your device's details: name, **Location** (use the pencil icon, or **Set pin** / **Move pin** under the map, to change the address and map pin), temperature and CO thresholds, **Last Seen**, **Recent Sensor Readings** (table with time and values), a **map** with the status of your install pin (*not set*, *waiting for confirmation* or *confirmed*), and device specs. Any change you make to the address or pin goes back to an administrator to confirm. If you see *"No device registered to your account"*, your device is not linked yet — contact your administrator.
 
-### 6.6 System Log
-
-The complete **history of alerts** for your device: when each was **triggered**, whether notifications were sent, and when it was **resolved**.
-
-### 6.7 Account
+### 6.6 Account
 
 Update your **Full Name** and **Contact Number**. The page also shows your role, assigned unit and registration date. Use **Logout** from the menu when you are done, especially on shared devices.
 
-### 6.8 What you will receive in a fire (resident)
+### 6.7 What you will receive in a fire (resident)
 
 | Event | You receive |
 |---|---|

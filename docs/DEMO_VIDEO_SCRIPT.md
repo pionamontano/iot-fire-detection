@@ -68,7 +68,7 @@
 | **Resident Home**: live CO and temperature, status card, Power card (Mains/Battery), last 24 readings. | "The resident home page shows live readings streamed in real time, the device status, and whether the node is on mains or backup battery." |
 | Point out the connectivity badge: Online / Reconnecting / Offline. | "A connectivity badge shows whether the device is online, reconnecting, or offline, with the last-seen time." |
 | **Alert Settings**: adjust the CO and temperature thresholds, enable Web Push, link Telegram. | "Residents tune their own alert thresholds, enable push notifications, and link Telegram — and the node picks up the new values within minutes, without re-flashing." |
-| Briefly show **Device Info** and **System Log**. | "Everything the device has reported is available in the log." |
+| Briefly show **Device Info** and **Alert History**. | "Every alert the device has raised is listed here, with what was sent and when it was resolved." |
 
 ---
 

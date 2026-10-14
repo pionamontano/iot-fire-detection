@@ -75,7 +75,7 @@ Per-area: AUTH 10 · ADMIN 7 · RESP 5 · RES 8 · IOT 12 · ALERT 6 · LOC 5 ·
 | FR-RES-003 | Home dashboard | C | `ResidentHome.tsx` | UI | Live readings, alerts | Partially Verified | – | KI-01, KI-03 |
 | FR-RES-004 | Edit own thresholds (RPC) | C | `update_own_device_alert_settings` | DB test | Out-of-range rejected | Verified | L | `20260917080000` |
 | FR-RES-005 | Resolve address-drift prompt | C | `resolve_address_discrepancy` | DB test + UI | Approval copies address & coords | Verified | L | `20261016000000`, `20261018000000` |
-| FR-RES-006 | Device info + system log | C | `ResidentDeviceInfo`, `ResidentSystemLog` | UI | | Partially Verified | – | |
+| FR-RES-006 | Device info + alert history | C | `ResidentDeviceInfo`, `ResidentAlerts` | UI | | Partially Verified | – | |
 | FR-RES-007 | Account edit | C | `ResidentAccount` | UI | | Partially Verified | – | |
 | FR-RES-008 | Push opt-in + Telegram link token | C | `ResidentAlertSettings`, `register-push`, `create_telegram_link_token` | Integration | Subscription row | Partially Verified | – | Linking yields no alerts (KI-24) |
 
