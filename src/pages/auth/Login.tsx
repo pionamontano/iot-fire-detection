@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
-import { Loader2, LogIn, Mail, ShieldAlert } from 'lucide-react';
+import { House, Loader2, LogIn, Mail, ShieldAlert, Siren } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { readFunctionErrorBody } from '../../lib/functionError';
@@ -160,18 +160,19 @@ export const Login = () => {
       <div className="mt-8 pt-8 border-t border-border">
         <p className="text-sm font-semibold text-[#231918] mb-3">New to AgapSense?</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Link to="/register/resident" className={AUTH_BTN_SECONDARY}>Register as resident</Link>
-          <Link to="/register/responder" className={AUTH_BTN_SECONDARY}>Register as responder</Link>
+          <Link to="/register/resident" className={AUTH_BTN_SECONDARY}>
+            <House className="w-4 h-4 text-primary" /> Register as resident
+          </Link>
+          <Link to="/register/responder" className={AUTH_BTN_SECONDARY}>
+            <Siren className="w-4 h-4 text-primary" /> Register as responder
+          </Link>
         </div>
-        <p className="mt-3 text-xs text-text-warm leading-relaxed">
-          Residents monitor their own home device. Responders are BFP personnel who receive fire alerts.
-          New accounts are reviewed by an administrator before first sign-in.
-        </p>
+        <p className="mt-3 text-xs text-[#6B5856]">An administrator approves new accounts before first sign-in.</p>
       </div>
 
-      <p className="mt-8 flex items-start gap-2 text-xs text-text-warm leading-relaxed">
-        <ShieldAlert className="w-4 h-4 shrink-0 mt-px" />
-        For authorized users only. Sign-in attempts are recorded, and repeated failures temporarily lock the account.
+      <p className="mt-6 flex items-start gap-2 text-xs text-[#6B5856]">
+        <ShieldAlert className="w-4 h-4 shrink-0" />
+        Authorized users only. Repeated failed sign-ins lock the account.
       </p>
     </AuthLayout>
   );

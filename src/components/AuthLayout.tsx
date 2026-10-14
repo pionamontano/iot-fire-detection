@@ -1,8 +1,9 @@
-import React, { useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Eye, EyeOff, Lock, Radio, ShieldCheck } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Eye, EyeOff, Info, Lock, Radio, ShieldCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { PROJECT_INFO } from '../lib/projectInfo';
+import { Modal } from './ui';
 
 // Shared shell and form pieces for the signed-out pages (sign in, register,
 // password reset, pending approval, session expired) so they share one
@@ -33,34 +34,52 @@ type AuthLayoutProps = {
 
 const { title: projectTitle, school, program, section, team, area } = PROJECT_INFO;
 
-const TeamList = ({ className = '' }: { className?: string }) => (
-  <ul className={`grid grid-cols-1 min-[360px]:grid-cols-2 gap-x-4 gap-y-0.5 ${className}`}>
-    {team.map((name) => <li key={name}>{name}</li>)}
-  </ul>
-);
+const PROJECT_EYEBROW = ['Capstone project', section].filter(Boolean).join(' · ');
+const DISCLAIMER = `Academic prototype for the ${area}. Not an official Bureau of Fire Protection service.`;
 
-const CapstoneCard = () => (
-  <div className="rounded-xl bg-black/20 ring-1 ring-white/15 p-5">
-    <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-white/60">About this project</p>
-    {projectTitle
-      ? <p className="mt-2 text-sm font-semibold leading-snug">{projectTitle}</p>
-      : <p className="mt-2 text-sm leading-relaxed text-white/85">AgapSense is a student capstone project for homes in the {area}.</p>}
-    {(program || school) && (
-      <p className="mt-2 text-xs leading-relaxed text-white/75">
-        {program}{program && school && <br />}{school}
-      </p>
-    )}
-    {team.length > 0 && (
-      <div className="mt-3 pt-3 border-t border-white/15">
-        <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-white/60">
-          Proponents{section && <span className="normal-case tracking-normal font-semibold"> · {section}</span>}
-        </p>
-        <TeamList className="mt-1.5 text-xs leading-relaxed text-white/85" />
+// Full credits, opened from the compact card (desktop) or footer link (phones).
+const ProjectDialog = ({ onClose }: { onClose: () => void }) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <Modal title="About this project" onClose={onClose}>
+      <div className="space-y-5 text-sm leading-relaxed text-[#534341]">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.1em] text-primary">{PROJECT_EYEBROW}</p>
+          {projectTitle && <p className="mt-1.5 text-base font-bold leading-snug text-[#231918]">{projectTitle}</p>}
+          {(program || school) && <p className="mt-2">{program}{program && school && <br />}{school}</p>}
+        </div>
+        {team.length > 0 && (
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#6B5856]">Proponents</p>
+            <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[#231918]">
+              {team.map((name) => <li key={name}>{name}</li>)}
+            </ul>
+          </div>
+        )}
+        <p className="pt-4 border-t border-border text-xs text-[#6B5856]">{DISCLAIMER}</p>
       </div>
-    )}
-    <p className="mt-3 text-[11px] leading-relaxed text-white/55">
-      Academic prototype for the {area}. Not an official Bureau of Fire Protection service.
+    </Modal>
+  );
+};
+
+const CapstoneCard = ({ onOpen }: { onOpen: () => void }) => (
+  <div className="rounded-xl bg-black/20 ring-1 ring-white/15 p-5">
+    <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-white/80">{PROJECT_EYEBROW}</p>
+    <p className="mt-2 text-sm font-semibold leading-snug line-clamp-3">
+      {projectTitle || `A student capstone project for homes in the ${area}.`}
     </p>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-white underline decoration-white/40 underline-offset-4 hover:decoration-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded"
+    >
+      <Info className="w-4 h-4" /> View project &amp; team
+    </button>
   </div>
 );
 
@@ -77,77 +96,82 @@ const SignalRings = () => (
   </div>
 );
 
-export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: AuthLayoutProps) => (
-  <div className="min-h-dvh bg-surface font-['Inter',_sans-serif] lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-    {/* Brand panel in the app's header red: a short band on phones/tablets, a full-height column on desktop. */}
-    <aside className="relative overflow-hidden bg-gradient-to-br from-primary via-[#A51818] to-[#7F1212] text-white lg:sticky lg:top-0 lg:h-dvh">
-      <SignalRings />
+export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: AuthLayoutProps) => {
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const closeAbout = useCallback(() => setAboutOpen(false), []);
 
-      <div className="relative z-10 flex h-full flex-col lg:overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10 xl:px-16">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
-            <Flame size={16} />
-          </span>
-          <span className="font-extrabold text-xl lg:text-2xl tracking-[-0.03em]">AgapSense</span>
+  return (
+    <div className="min-h-dvh bg-surface font-['Inter',_sans-serif] lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      {/* Brand panel in the app's header red: a short band on phones/tablets, a full-height column on desktop. */}
+      <aside className="relative overflow-hidden bg-gradient-to-br from-primary via-[#A51818] to-[#7F1212] text-white lg:sticky lg:top-0 lg:h-dvh">
+        <SignalRings />
+
+        <div className="relative z-10 flex h-full flex-col lg:overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10 xl:px-16">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
+              <Flame size={16} />
+            </span>
+            <span className="font-extrabold text-xl lg:text-2xl tracking-[-0.03em]">AgapSense</span>
+          </div>
+
+          <div className="lg:my-auto lg:py-8">
+            <h1 className="mt-4 font-black tracking-[-0.03em] text-2xl leading-tight sm:text-3xl lg:mt-0 lg:text-[40px] lg:leading-[1.1] 2xl:text-5xl">
+              Smarter detection,{' '}
+              <br className="hidden lg:block" />
+              <span className="text-[#FFC9B5]">faster response.</span>
+            </h1>
+            <p className="hidden lg:block mt-4 max-w-sm text-base text-white/90">
+              IoT smoke and heat monitoring that alerts residents and BFP responders the moment a fire starts.
+            </p>
+
+            <ul className="hidden lg:[@media(min-height:860px)]:flex flex-col gap-5 mt-10 max-w-sm">
+              {FEATURES.map(({ icon: Icon, title: t, text }) => (
+                <li key={t} className="flex gap-4">
+                  <span className="w-10 h-10 shrink-0 rounded-lg bg-white/15 ring-1 ring-white/20 flex items-center justify-center">
+                    <Icon className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <p className="font-bold text-sm">{t}</p>
+                    <p className="text-sm text-white/85 leading-relaxed">{text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="hidden lg:block max-w-sm">
+            <CapstoneCard onOpen={() => setAboutOpen(true)} />
+          </div>
         </div>
+      </aside>
 
-        <div className="lg:my-auto lg:py-8">
-          <h1 className="mt-5 font-black tracking-[-0.03em] text-[26px] leading-tight sm:text-3xl lg:mt-0 lg:text-[40px] lg:leading-[1.1] 2xl:text-5xl">
-            Smarter detection,{' '}
-            <br className="hidden lg:block" />
-            <span className="text-[#FFC9B5]">faster response.</span>
-          </h1>
-          <p className="mt-2 text-sm text-white/80 sm:text-base lg:mt-4 lg:max-w-sm">
-            IoT smoke and heat monitoring that alerts residents and BFP responders the moment a fire starts.
-          </p>
+      <main className="flex justify-center px-4 py-8 sm:px-8 sm:py-12 lg:items-center lg:min-h-dvh">
+        <div className={`w-full ${wide ? 'max-w-xl' : 'max-w-md'}`}>
+          {backToLogin && <BackToLogin className="mb-6" />}
+          <div className="mb-8">
+            <h2 className="text-2xl sm:text-[28px] font-extrabold tracking-[-0.025em] text-[#231918]">{title}</h2>
+            {subtitle && <p className="mt-2 text-sm leading-relaxed text-[#534341]">{subtitle}</p>}
+          </div>
+          {children}
 
-          <ul className="hidden lg:[@media(min-height:1000px)]:flex flex-col gap-5 mt-10 max-w-sm">
-            {FEATURES.map(({ icon: Icon, title: t, text }) => (
-              <li key={t} className="flex gap-4">
-                <span className="w-10 h-10 shrink-0 rounded-lg bg-white/15 ring-1 ring-white/20 flex items-center justify-center">
-                  <Icon className="w-5 h-5" />
-                </span>
-                <div>
-                  <p className="font-bold text-sm">{t}</p>
-                  <p className="text-sm text-white/75 leading-relaxed">{text}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <footer className="lg:hidden mt-12 pt-6 border-t border-border text-xs leading-relaxed text-[#6B5856]">
+            <p className="font-bold uppercase tracking-[0.1em] text-[11px] text-[#534341]">{PROJECT_EYEBROW}</p>
+            {projectTitle && <p className="mt-1.5 font-semibold text-[#534341]">{projectTitle}</p>}
+            <button
+              type="button"
+              onClick={() => setAboutOpen(true)}
+              className="mt-2 inline-flex items-center gap-1.5 py-1 font-semibold text-primary hover:underline"
+            >
+              <Info className="w-4 h-4" /> View project &amp; team
+            </button>
+          </footer>
         </div>
+      </main>
 
-        <div className="hidden lg:block max-w-sm">
-          <CapstoneCard />
-        </div>
-      </div>
-    </aside>
-
-    <main className="flex justify-center px-4 py-8 sm:px-8 sm:py-12 lg:items-center lg:min-h-dvh">
-      <div className={`w-full ${wide ? 'max-w-xl' : 'max-w-md'}`}>
-        {backToLogin && <BackToLogin className="mb-6" />}
-        <div className="mb-8">
-          <h2 className="text-2xl sm:text-[28px] font-extrabold tracking-[-0.025em] text-[#231918]">{title}</h2>
-          {subtitle && <p className="mt-2 text-sm leading-relaxed text-[#534341]">{subtitle}</p>}
-        </div>
-        {children}
-
-        <footer className="lg:hidden mt-12 pt-6 border-t border-border text-xs leading-relaxed text-text-warm">
-          <p className="font-bold uppercase tracking-[0.1em] text-[11px] text-[#534341]">About this project</p>
-          {projectTitle && <p className="mt-1.5 font-semibold text-[#534341]">{projectTitle}</p>}
-          {program && <p className="mt-1">{program}</p>}
-          {school && <p>{school}</p>}
-          {team.length > 0 && (
-            <>
-              <p className="mt-3 font-semibold text-[#534341]">Proponents{section && ` · ${section}`}</p>
-              <TeamList className="mt-1" />
-            </>
-          )}
-          <p className="mt-3">Academic prototype for the {area}. Not an official Bureau of Fire Protection service.</p>
-        </footer>
-      </div>
-    </main>
-  </div>
-);
+      {aboutOpen && <ProjectDialog onClose={closeAbout} />}
+    </div>
+  );
+};
 
 export const BackToLogin = ({ className = '' }: { className?: string }) => (
   <Link
@@ -193,17 +217,17 @@ export const Field = ({ label, icon: Icon, required, hint, error, children, asid
           {label}
           {required
             ? <span className="text-primary ml-0.5" aria-hidden="true">*</span>
-            : <span className="ml-1.5 text-xs font-normal text-text-warm">(optional)</span>}
+            : <span className="ml-1.5 text-xs font-normal text-[#6B5856]">(optional)</span>}
         </label>
         {aside}
       </div>
       <div className="relative">
-        <Icon className={`absolute left-3.5 w-5 h-5 text-text-warm pointer-events-none ${iconTop ? 'top-3.5' : 'top-1/2 -translate-y-1/2'}`} />
+        <Icon className={`absolute left-3.5 w-5 h-5 text-[#6B5856] pointer-events-none ${iconTop ? 'top-3.5' : 'top-1/2 -translate-y-1/2'}`} />
         {children({ id, describedBy })}
       </div>
       {error
         ? <p id={hintId} className="mt-1.5 text-xs font-semibold text-tier2-border">{error}</p>
-        : hint && <p id={hintId} className="mt-1.5 text-xs text-text-warm leading-relaxed">{hint}</p>}
+        : hint && <p id={hintId} className="mt-1.5 text-xs text-[#6B5856] leading-relaxed">{hint}</p>}
     </div>
   );
 };
@@ -244,7 +268,7 @@ export const PasswordField = ({ label, value, onChange, autoComplete, minLength,
             onClick={() => setVisible((v) => !v)}
             aria-label={visible ? 'Hide password' : 'Show password'}
             aria-pressed={visible}
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-md text-text-warm hover:text-[#534341] transition-colors"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-md text-[#6B5856] hover:text-[#534341] transition-colors"
           >
             {visible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
           </button>
@@ -273,7 +297,7 @@ export const AuthAlert = ({ tone, children, className = '' }: { tone: keyof type
 /** Section heading inside the longer registration forms. */
 export const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <fieldset className="space-y-5">
-    <legend className="text-xs font-bold uppercase tracking-[0.1em] text-text-warm mb-4">{title}</legend>
+    <legend className="text-xs font-bold uppercase tracking-[0.1em] text-[#6B5856] mb-4">{title}</legend>
     {children}
   </fieldset>
 );
