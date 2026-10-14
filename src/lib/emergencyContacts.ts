@@ -1,5 +1,5 @@
 // Who a resident should call in an emergency, shown on the resident Dashboard
-// (fire alert panel and Emergency Contacts card).
+// (Emergency Contacts card).
 //
 // Kept here rather than read from station_settings: that table is still
 // seeded with placeholder values (+639000000000), and Responder Settings

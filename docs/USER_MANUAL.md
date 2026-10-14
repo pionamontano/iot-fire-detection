@@ -148,7 +148,7 @@ The first time you sign in, you must complete a short setup:
 Your home screen answers "is my home OK?" first, then shows the details:
 
 - **Status panel** (top): one of
-  - **Fire alert** (red) — temperature and CO are both over their alert levels. It shows the readings, whether **BFP was notified by SMS**, and how far responders have got (*Waiting for a responder*, *A responder has acknowledged*, *Responders are on the way*). If you see fire or smoke, get everyone out and call **911**.
+  - **Fire alert** (red) — temperature and CO are both over their alert levels. It shows the readings, whether **BFP was notified by SMS**, and how far responders have got (*Waiting for a responder*, *A responder has acknowledged*, *Responders are on the way*). It tells you to check your home now and, if you see fire or smoke, to leave the building and stay at a safe distance until responders arrive.
   - **Warning** (amber) — one reading is over its alert level. Check the room for heat, smoke or a gas source.
   - **All clear** (green) — the device is reporting and readings are within your alert levels.
   - **Reconnecting** (blue) — last report 2 to 15 minutes ago; this usually recovers on its own.

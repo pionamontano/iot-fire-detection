@@ -18,7 +18,7 @@ import type { DeviceStatus } from '../../lib/deviceStatus';
 import { formatEventTime } from '../../lib/alertText';
 import { getPushSubscription } from '../../lib/pushNotifications';
 import { LocationBadge } from '../../components/LocationBadge';
-import { EMERGENCY_HOTLINE, EMERGENCY_CONTACTS, LOCAL_FIRE_STATION, telHref } from '../../lib/emergencyContacts';
+import { EMERGENCY_CONTACTS, telHref } from '../../lib/emergencyContacts';
 
 // The resident's home page, in the order a resident asks: is my home OK right
 // now (status panel), what is the device measuring (readings), will I be told
@@ -565,12 +565,7 @@ export const ResidentHome = () => {
               ({openFire!.temp_celsius?.toFixed(1)} °C, {openFire!.co_ppm?.toFixed(0)} ppm, {formatEventTime(openFire!.triggered_at, now)}).
             </p>
             <p className="font-bold text-tier2-text">
-              If you see fire or smoke, get everyone out and call{' '}
-              <a href={telHref(EMERGENCY_HOTLINE.phone)} className="underline underline-offset-2">{EMERGENCY_HOTLINE.phone}</a>
-              {LOCAL_FIRE_STATION && (<>
-                {' '}or the {LOCAL_FIRE_STATION.name} at{' '}
-                <a href={telHref(LOCAL_FIRE_STATION.phone)} className="underline underline-offset-2 whitespace-nowrap">{LOCAL_FIRE_STATION.phone}</a>
-              </>)}.
+              Check your home now. If you see fire or smoke, leave the building and stay at a safe distance until responders arrive.
             </p>
             {responderLine}
             {offlineDuringAlert}
