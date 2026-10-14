@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { readFunctionError } from '../../lib/functionError';
+import { PHONE_PATTERN, PHONE_ERROR, normalizePhone } from '../../lib/phone';
 import { User, Mail, Phone, MapPin, Signpost, Building2, Map as MapIcon, Cpu, Loader2 } from 'lucide-react';
 import {
   AuthLayout, AuthAlert, Field, FormSection, PasswordField, inputClass,
-  AUTH_BTN_PRIMARY, PHONE_PATTERN, PHONE_ERROR, PASSWORD_MIN,
+  AUTH_BTN_PRIMARY, PASSWORD_MIN,
 } from '../../components/AuthLayout';
 
 export const RegisterResident = () => {
@@ -27,13 +28,24 @@ export const RegisterResident = () => {
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const [contactNumberError, setContactNumberError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
+
+  // The submit button is at the bottom of a long form, so bring a server
+  // error (shown above the form) into view instead of leaving it off-screen.
+  useEffect(() => {
+    if (!error) return;
+    errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    errorRef.current?.focus({ preventScroll: true });
+  }, [error]);
   const navigate = useNavigate();
 
   const update = (field: keyof typeof formData) => (value: string) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    update('contactNumber')(e.target.value.replace(/\D/g, '').slice(0, 11));
+    update('contactNumber')(normalizePhone(e.target.value));
     if (contactNumberError) setContactNumberError(null);
   };
 
@@ -45,11 +57,13 @@ export const RegisterResident = () => {
 
     if (formData.contactNumber && !PHONE_PATTERN.test(formData.contactNumber)) {
       setContactNumberError(PHONE_ERROR);
+      phoneRef.current?.focus();
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
       setConfirmPasswordError('Passwords do not match.');
+      confirmRef.current?.focus();
       return;
     }
 
@@ -65,7 +79,7 @@ export const RegisterResident = () => {
             .map((part) => part.trim())
             .filter(Boolean)
             .join(', '),
-          device_code: formData.deviceCode.trim(),
+          device_code: formData.deviceCode.trim().toUpperCase(),
           requested_role: 'resident',
         }
       });
@@ -90,7 +104,7 @@ export const RegisterResident = () => {
       title="Register as a resident"
       subtitle="Create an account to monitor the AgapSense device in your home and receive its alerts. An administrator reviews new accounts before you can sign in."
     >
-      {error && <AuthAlert tone="error" className="mb-6">{error}</AuthAlert>}
+      {error && <AuthAlert ref={errorRef} tone="error" className="mb-6">{error}</AuthAlert>}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         <FormSection title="Your details">
@@ -128,18 +142,20 @@ export const RegisterResident = () => {
             <Field
               label="Mobile number"
               icon={Phone}
-              hint="For SMS fire alerts. 11 digits, starts with 09."
+              required
+              hint="Where we text you if your device detects a fire."
               error={contactNumberError}
             >
               {({ id, describedBy }) => (
                 <input
+                  ref={phoneRef}
                   id={id}
+                  required
                   type="tel"
-                  inputMode="numeric"
-                  autoComplete="tel-national"
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={formData.contactNumber}
                   onChange={handlePhoneChange}
-                  maxLength={11}
                   aria-invalid={!!contactNumberError || undefined}
                   aria-describedby={describedBy}
                   className={inputClass(!!contactNumberError)}
@@ -227,9 +243,10 @@ export const RegisterResident = () => {
                 id={id}
                 type="text"
                 autoComplete="off"
+                autoCapitalize="characters"
                 spellCheck={false}
                 value={formData.deviceCode}
-                onChange={(e) => update('deviceCode')(e.target.value)}
+                onChange={(e) => update('deviceCode')(e.target.value.toUpperCase())}
                 aria-describedby={describedBy}
                 className={inputClass()}
                 placeholder="e.g. AGS-001"
@@ -250,6 +267,7 @@ export const RegisterResident = () => {
             />
             <PasswordField
               label="Confirm password"
+              inputRef={confirmRef}
               value={formData.confirmPassword}
               onChange={(v) => { update('confirmPassword')(v); if (confirmPasswordError) setConfirmPasswordError(null); }}
               autoComplete="new-password"

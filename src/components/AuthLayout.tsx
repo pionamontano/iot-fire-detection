@@ -307,10 +307,18 @@ const ALERT_TONES = {
   warning: { box: 'bg-tier1-bg border-tier1-border/40 text-tier1-text', icon: AlertTriangle },
 } as const;
 
-export const AuthAlert = ({ tone, children, className = '' }: { tone: keyof typeof ALERT_TONES; children: React.ReactNode; className?: string }) => {
+type AuthAlertProps = {
+  tone: keyof typeof ALERT_TONES;
+  children: React.ReactNode;
+  className?: string;
+  /** Lets a form scroll to and focus the alert (it is focusable via tabIndex -1). */
+  ref?: React.Ref<HTMLDivElement>;
+};
+
+export const AuthAlert = ({ tone, children, className = '', ref }: AuthAlertProps) => {
   const { box, icon: Icon } = ALERT_TONES[tone];
   return (
-    <div role={tone === 'error' ? 'alert' : 'status'} className={`p-4 border rounded-lg flex items-start gap-3 text-sm leading-relaxed ${box} ${className}`}>
+    <div ref={ref} tabIndex={ref ? -1 : undefined} role={tone === 'error' ? 'alert' : 'status'} className={`p-4 border rounded-lg flex items-start gap-3 text-sm leading-relaxed scroll-mt-6 focus:outline-none ${box} ${className}`}>
       <Icon className="w-5 h-5 shrink-0 mt-0.5" />
       <div className="min-w-0">{children}</div>
     </div>
@@ -325,7 +333,5 @@ export const FormSection = ({ title, children }: { title: string; children: Reac
   </fieldset>
 );
 
-// Same rule the register Edge Function enforces.
-export const PHONE_PATTERN = /^09\d{9}$/;
-export const PHONE_ERROR = 'Enter an 11-digit mobile number that starts with 09.';
+// Same minimum the register Edge Function enforces.
 export const PASSWORD_MIN = 6;

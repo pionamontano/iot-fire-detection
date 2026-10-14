@@ -3,6 +3,8 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import type { Role } from '../lib/supabase';
+import { LogOut } from 'lucide-react';
+import { AuthLayout, AuthAlert, AUTH_BTN_SECONDARY } from './AuthLayout';
 
 interface AuthGuardProps {
   allowedRoles?: Role[];
@@ -29,26 +31,24 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Signed in but not allowed in yet: same layout as the sign-in pages.
+  const signOutButton = (
+    <button type="button" onClick={() => signOut()} className={AUTH_BTN_SECONDARY}>
+      <LogOut className="w-4 h-4" /> Sign out
+    </button>
+  );
+
   if (!profile) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-bg-light p-4">
-        <div className="bg-white p-6 rounded-lg shadow-md max-w-md w-full text-center">
-          <div className="text-red-500 mb-4">
-            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Profile Missing or Error</h2>
-          <p className="text-gray-600 mb-6">
-            We authenticated your account, but couldn't load your profile. 
-            Did you insert your user into the <code>profiles</code> table in the Supabase Dashboard?
-          </p>
-          <button 
-            onClick={() => signOut()} 
-            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary-hover transition-colors"
-          >
-            Sign Out & Try Again
-          </button>
+      <AuthLayout title="We couldn't load your account">
+        <div className="space-y-6">
+          <AuthAlert tone="error">
+            You're signed in, but your account details couldn't be loaded. Sign out and try again.
+            If it keeps happening, contact your AgapSense administrator.
+          </AuthAlert>
+          {signOutButton}
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
@@ -57,46 +57,41 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ allowedRoles }) => {
   // the account was deactivated.
   if (profile.is_active === false) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FCF9F8] p-4 font-['Inter',_sans-serif]">
-        <div className="bg-white p-8 rounded-xl shadow-[0_24px_48px_rgba(0,0,0,0.08)] border border-[#E5E2E1] max-w-md w-full text-center">
-          <h2 className="text-2xl font-black text-[#231918] mb-2">Account Deactivated</h2>
-          <p className="text-[#534341] text-sm mb-6 leading-relaxed">
-            Your account has been deactivated by an administrator. Please contact your system administrator if you think this is a mistake.
-          </p>
-          <button
-            onClick={() => signOut()}
-            className="w-full py-3 bg-primary text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-sm hover:bg-primary-dark transition-colors"
-          >
-            Sign Out
-          </button>
+      <AuthLayout title="Account deactivated">
+        <div className="space-y-6">
+          <AuthAlert tone="error">
+            An administrator has deactivated your account. If you think this is a mistake,
+            contact your AgapSense administrator.
+          </AuthAlert>
+          {signOutButton}
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
   if (profile.status !== 'approved') {
+    const pending = profile.status === 'pending';
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FCF9F8] p-4 font-['Inter',_sans-serif]">
-        <div className="bg-white p-8 rounded-xl shadow-[0_24px_48px_rgba(0,0,0,0.08)] border border-[#E5E2E1] max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-[#FEF3C7] rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-[#D97706]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-black text-[#231918] mb-2">Account {profile.status === 'pending' ? 'Pending' : 'Rejected'}</h2>
-          <p className="text-[#534341] text-sm mb-6 leading-relaxed">
-            {profile.status === 'pending' 
-              ? "Your registration is currently under review by an administrator. You will be able to access the system once approved."
-              : "Your registration request has been rejected. Please contact your system administrator for more details."}
-          </p>
-          <button 
-            onClick={() => signOut()} 
-            className="w-full py-3 bg-primary text-white font-bold text-sm tracking-[0.1em] uppercase rounded-lg shadow-sm hover:bg-primary-dark transition-colors"
-          >
-            Sign Out
-          </button>
+      <AuthLayout
+        title={pending ? 'Registration under review' : 'Registration not approved'}
+        subtitle={pending
+          ? 'Thanks for registering. An administrator is reviewing your details.'
+          : undefined}
+      >
+        <div className="space-y-6">
+          {pending ? (
+            <AuthAlert tone="warning">
+              Your account is <strong>waiting for approval</strong>. You'll be able to use AgapSense
+              once an administrator approves it. Try signing in again later.
+            </AuthAlert>
+          ) : (
+            <AuthAlert tone="error">
+              Your registration was not approved. Contact your AgapSense administrator for details.
+            </AuthAlert>
+          )}
+          {signOutButton}
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
