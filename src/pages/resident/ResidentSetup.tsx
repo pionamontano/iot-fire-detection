@@ -92,40 +92,40 @@ export const ResidentSetup = () => {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#FCF9F8] px-4 py-8 font-['Inter',_sans-serif]">
+    <div className="min-h-screen w-full flex items-center justify-center bg-surface px-4 py-8 font-['Inter',_sans-serif]">
       <div className={`${step === 'location' ? 'max-w-xl' : 'max-w-md'} w-full flex flex-col gap-6`}>
         <div className="text-center flex flex-col gap-2">
-          <span className="text-[#857371] text-xs font-bold tracking-[0.1em] uppercase">
+          <span className="text-text-warm text-xs font-bold tracking-[0.1em] uppercase">
             Setup ({step === 'contact' ? 1 : 2} of {totalSteps})
           </span>
           {step === 'contact' ? (
             <>
-              <h2 className="text-[#231918] font-black text-2xl tracking-tight">
+              <h2 className="text-text font-black text-2xl tracking-tight">
                 Set up your alert contact
               </h2>
-              <p className="text-[#534341] text-sm leading-5">
+              <p className="text-text-body text-sm leading-5">
                 Bantay Apoy sends SMS alerts directly to your phone during a fire event. Enter the mobile number you want to receive these alerts on.
               </p>
             </>
           ) : (
             <>
-              <h2 className="text-[#231918] font-black text-2xl tracking-tight">
+              <h2 className="text-text font-black text-2xl tracking-tight">
                 Where is your device installed?
               </h2>
-              <p className="text-[#534341] text-sm leading-5">
+              <p className="text-text-body text-sm leading-5">
                 Enter the address and place the pin on the building where the device is installed. Responders use it when the device has no GPS signal.
               </p>
             </>
           )}
         </div>
 
-        <div className="bg-white p-8 rounded-xl shadow-[0_24px_48px_rgba(0,0,0,0.08)] border border-[#E5E2E1]">
+        <div className="bg-white p-8 rounded-xl shadow-[0_24px_48px_rgba(0,0,0,0.08)] border border-border">
           {success ? (
             <div className="flex flex-col items-center justify-center gap-4 py-8">
-              <div className="w-16 h-16 bg-[#E0F2FE] rounded-full flex items-center justify-center">
-                <CheckCircle2 className="w-8 h-8 text-[#00799C]" />
+              <div className="w-16 h-16 bg-teal-light/10 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-teal-light" />
               </div>
-              <p className="text-[#00799C] font-bold text-center">
+              <p className="text-teal-light font-bold text-center">
                 Setup saved. Taking you to your dashboard...
               </p>
             </div>
@@ -141,7 +141,7 @@ export const ResidentSetup = () => {
               <button
                 type="button"
                 onClick={finish}
-                className="text-[#534341] text-xs font-bold uppercase tracking-[0.1em] hover:underline"
+                className="text-text-body text-xs font-bold uppercase tracking-[0.1em] hover:underline"
               >
                 Skip for now — set it later in Device Info
               </button>
@@ -149,7 +149,7 @@ export const ResidentSetup = () => {
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
               <div className="flex flex-col gap-2">
-                <label className="text-[#857371] text-xs font-bold tracking-[0.1em] uppercase">
+                <label className="text-text-warm text-xs font-bold tracking-[0.1em] uppercase">
                   Mobile number
                 </label>
                 <input
@@ -159,15 +159,15 @@ export const ResidentSetup = () => {
                   value={mobile}
                   onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))}
                   placeholder="09XXXXXXXXX"
-                  className="w-full bg-[#FCF9F8] border border-[#E5E2E1] rounded-md px-4 py-3 text-base text-[#231918] placeholder-[rgba(83,67,65,0.5)] focus:outline-none focus:ring-2 focus:ring-[#D32F2F]/30 focus:border-[#D32F2F] transition-all"
+                  className="w-full bg-surface border border-border rounded-md px-4 py-3 text-base text-text placeholder-[rgba(83,67,65,0.5)] focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all"
                 />
-                <span className="text-[10px] text-[#A1A1AA]">
+                <span className="text-[10px] text-text-faint">
                   Philippine number only — e.g. 09171234567
                 </span>
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-[#857371] text-xs font-bold tracking-[0.1em] uppercase">
+                <label className="text-text-warm text-xs font-bold tracking-[0.1em] uppercase">
                   Confirm mobile number
                 </label>
                 <input
@@ -177,12 +177,12 @@ export const ResidentSetup = () => {
                   value={confirmMobile}
                   onChange={(e) => setConfirmMobile(e.target.value.replace(/\D/g, ''))}
                   placeholder="Re-enter your number"
-                  className={`w-full bg-[#FCF9F8] border rounded-md px-4 py-3 text-base text-[#231918] placeholder-[rgba(83,67,65,0.5)] focus:outline-none focus:ring-2 transition-all ${
-                    error ? 'border-[#D32F2F] focus:ring-[#D32F2F]/30' : 'border-[#E5E2E1] focus:border-[#D32F2F] focus:ring-[#D32F2F]/30'
+                  className={`w-full bg-surface border rounded-md px-4 py-3 text-base text-text placeholder-[rgba(83,67,65,0.5)] focus:outline-none focus:ring-2 transition-all ${
+                    error ? 'border-accent focus:ring-accent/30' : 'border-border focus:border-accent focus:ring-accent/30'
                   }`}
                 />
                 {error && (
-                  <span className="text-[#D32F2F] text-[11px] font-bold mt-1">
+                  <span className="text-accent text-[11px] font-bold mt-1">
                     {error}
                   </span>
                 )}

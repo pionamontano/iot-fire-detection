@@ -90,54 +90,54 @@ export const ResidentAccount = () => {
     <div className="flex flex-col gap-8 pb-12">
       {/* Header */}
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-[#DC2626]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
+        <div className="flex items-center gap-2 text-primary">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary" />
           <span className="text-[10px] font-bold uppercase tracking-[0.1em]">User Profile</span>
         </div>
-        <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Account Settings</h1>
-        <p className="text-sm text-[#52525B] mt-1">Manage your personal information and contact details.</p>
+        <h1 className="text-3xl font-black tracking-tight text-text">Account Settings</h1>
+        <p className="text-sm text-text-body mt-1">Manage your personal information and contact details.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Form */}
-        <div className="lg:col-span-2 bg-white border border-[#E4E4E7] rounded-lg p-8">
-          <h2 className="text-lg font-black tracking-tight text-[#18181B] mb-6">Personal Details</h2>
+        <div className="lg:col-span-2 bg-white border border-border rounded-lg p-8">
+          <h2 className="text-lg font-black tracking-tight text-text mb-6">Personal Details</h2>
 
           <div className="flex flex-col gap-6">
             <div>
-              <label className="block text-xs font-bold text-[#52525B] mb-1.5 uppercase tracking-[0.1em]">Full Name</label>
+              <label className="block text-xs font-bold text-text-body mb-1.5 uppercase tracking-[0.1em]">Full Name</label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA]" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
                 <input
                   type="text"
                   value={fullName}
                   onChange={e => setFullName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-[#FCF9F8] border border-[#E4E4E7] rounded-md text-sm text-[#18181B] focus:border-[#B91C1C] focus:ring-1 focus:ring-[#B91C1C]/30 transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-surface border border-border rounded-md text-sm text-text focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#52525B] mb-1.5 uppercase tracking-[0.1em]">Contact Number</label>
+              <label className="block text-xs font-bold text-text-body mb-1.5 uppercase tracking-[0.1em]">Contact Number</label>
               <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA]" />
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
                 <input
                   type="tel"
                   value={contactNumber}
                   onChange={handlePhoneChange}
                   maxLength={11}
                   placeholder="09XXXXXXXXX"
-                  className="w-full pl-10 pr-4 py-3 bg-[#FCF9F8] border border-[#E4E4E7] rounded-md text-sm text-[#18181B] placeholder-[#A1A1AA] focus:border-[#B91C1C] focus:ring-1 focus:ring-[#B91C1C]/30 transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-surface border border-border rounded-md text-sm text-text placeholder-text-faint focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
                 />
               </div>
-              <p className="text-[10px] text-[#A1A1AA] mt-2">This number will be used for SMS notifications if configured by your administrator.</p>
+              <p className="text-[10px] text-text-faint mt-2">This number will be used for SMS notifications if configured by your administrator.</p>
             </div>
 
-            <div className="flex gap-3 mt-2 border-t border-[#E4E4E7] pt-6">
+            <div className="flex gap-3 mt-2 border-t border-border pt-6">
               <button
                 onClick={handleSave}
                 disabled={saving || !hasChanges}
-                className="flex-1 py-3 bg-gradient-to-b from-[#18181B] to-black text-white text-sm font-bold rounded-lg hover:from-black hover:to-black transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-primary hover:bg-primary-dark text-white shadow-sm text-sm font-bold rounded-lg transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
               >
                 <Save className="w-4 h-4" />
                 {saving ? 'SAVING...' : hasChanges ? 'SAVE CHANGES' : 'NO CHANGES'}
@@ -145,12 +145,12 @@ export const ResidentAccount = () => {
             </div>
 
             {successMsg && (
-              <div className="flex items-center gap-2 justify-center text-sm font-bold text-[#00799C]">
+              <div className="flex items-center gap-2 justify-center text-sm font-bold text-teal-light">
                 <CheckCircle2 className="w-4 h-4" /> {successMsg}
               </div>
             )}
             {errorMsg && (
-              <div className="flex items-center gap-2 justify-center text-sm font-bold text-[#DC2626]">
+              <div className="flex items-center gap-2 justify-center text-sm font-bold text-primary">
                 <AlertTriangle className="w-4 h-4" /> {errorMsg}
               </div>
             )}
@@ -159,34 +159,34 @@ export const ResidentAccount = () => {
 
         {/* Account Info Sidebar */}
         <div className="lg:col-span-1 flex flex-col gap-6">
-          <div className="bg-[#FCF9F8] border border-[#E4E4E7] rounded-lg p-6">
-            <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-[#52525B] mb-4">Account Overview</h3>
+          <div className="bg-surface border border-border rounded-lg p-6">
+            <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-text-body mb-4">Account Overview</h3>
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
-                <Shield className="w-4 h-4 text-[#B91C1C]" />
+                <Shield className="w-4 h-4 text-primary" />
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Role</span>
-                  <span className="text-sm font-bold text-[#18181B]">Resident / Owner</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">Role</span>
+                  <span className="text-sm font-bold text-text">Resident / Owner</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Cpu className="w-4 h-4 text-[#B91C1C]" />
+                <Cpu className="w-4 h-4 text-primary" />
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Assigned Unit</span>
-                  <span className="text-sm font-bold text-[#18181B]">{deviceCode || 'None'}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">Assigned Unit</span>
+                  <span className="text-sm font-bold text-text">{deviceCode || 'None'}</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Calendar className="w-4 h-4 text-[#B91C1C]" />
+                <Calendar className="w-4 h-4 text-primary" />
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Registered On</span>
-                  <span className="text-sm font-bold text-[#18181B]">{new Date(profile.created_at).toLocaleDateString()}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">Registered On</span>
+                  <span className="text-sm font-bold text-text">{new Date(profile.created_at).toLocaleDateString()}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-[#DC2626] rounded-lg p-6 text-white">
+          <div className="bg-primary rounded-lg p-6 text-white">
             <Settings className="w-6 h-6 mb-3 text-white/80" />
             <h3 className="font-bold text-lg mb-1">Need Admin Help?</h3>
             <p className="text-xs text-white/80 leading-relaxed mb-4">
@@ -194,7 +194,7 @@ export const ResidentAccount = () => {
             </p>
             <button
               onClick={() => setIsSupportModalOpen(true)}
-              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2.5 bg-white text-[#DC2626] text-xs font-bold rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
+              className="w-full inline-flex justify-center items-center gap-2 px-4 py-2.5 bg-white text-primary text-xs font-bold rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
             >
               <Mail className="w-4 h-4" />
               Contact Administrator

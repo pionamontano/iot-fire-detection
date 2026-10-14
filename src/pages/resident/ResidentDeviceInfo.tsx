@@ -66,7 +66,7 @@ export const ResidentDeviceInfo = () => {
   const { page, setPage, pageRows } = usePagedRows(readings);
 
   if (loading) return <DeviceInfoSkeleton />;
-  if (!device) return <div className="p-8 font-bold text-[#DC2626]">No device registered to your account.</div>;
+  if (!device) return <div className="p-8 font-bold text-primary">No device registered to your account.</div>;
 
   // Shared 2 / 15 minute rule and status colors, same as the Dashboard and admin pages.
   const connectivity = getConnectivityStatus(device.last_seen_at);
@@ -81,16 +81,16 @@ export const ResidentDeviceInfo = () => {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-[#DC2626]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
+          <div className="flex items-center gap-2 text-primary">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
             <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Hardware Profile</span>
           </div>
-          <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Device Information</h1>
+          <h1 className="text-3xl font-black tracking-tight text-text">Device Information</h1>
         </div>
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-[#18181B] text-white text-[10px] font-bold uppercase tracking-widest rounded hover:bg-black transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 border border-border bg-surface-card text-text-body text-[10px] font-bold uppercase tracking-widest rounded hover:bg-surface transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
           Refresh
@@ -101,56 +101,56 @@ export const ResidentDeviceInfo = () => {
         {/* Main Info (2/3) */}
         <div className="lg:col-span-2 flex flex-col gap-6">
           {/* Device Card */}
-          <div className="bg-white border border-[#E4E4E7] rounded-lg p-6">
+          <div className="bg-white border border-border rounded-lg p-6">
             <div className="flex items-center gap-4 mb-6">
               <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${connInfo.badgeBg} ${connInfo.badgeText}`}>
                 {connectivity === 'offline' ? <WifiOff className="w-6 h-6" /> : <Wifi className="w-6 h-6" />}
               </div>
               <div>
-                <h2 className="text-xl font-black text-[#18181B]">{device.device_code}</h2>
-                <p className="text-xs text-[#52525B]">{device.label}</p>
+                <h2 className="text-xl font-black text-text">{device.device_code}</h2>
+                <p className="text-xs text-text-body">{device.label}</p>
               </div>
               <span className="ml-auto"><StatusBadge status={connectivity} /></span>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-[#F4F4F5] p-3 rounded col-span-2">
+              <div className="bg-surface-alt p-3 rounded col-span-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Location</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">Location</span>
                   {!editingLocation && (
                     <button
                       onClick={() => { setLocationMsg(null); setEditingLocation(true); }}
                       title="Edit address and pin"
-                      className="text-[#A1A1AA] hover:text-[#18181B] transition-colors"
+                      className="text-text-faint hover:text-text transition-colors"
                     >
                       <Pencil className="w-3 h-3" />
                     </button>
                   )}
                 </div>
-                <span className="text-xs font-bold text-[#18181B] flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />{displayAddress(device.location_desc)}</span>
+                <span className="text-xs font-bold text-text flex items-center gap-1 mt-1"><MapPin className="w-3 h-3" />{displayAddress(device.location_desc)}</span>
                 {locationMsg && (
-                  <p className="text-[10px] font-bold mt-1.5 text-[#00799C]">{locationMsg}</p>
+                  <p className="text-[10px] font-bold mt-1.5 text-teal-light">{locationMsg}</p>
                 )}
               </div>
-              <div className="bg-[#F4F4F5] p-3 rounded">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Temp Threshold</span>
-                <span className="text-xs font-bold text-[#DC2626] flex items-center gap-1 mt-1"><Thermometer className="w-3 h-3" />{device.temp_threshold}°C</span>
+              <div className="bg-surface-alt p-3 rounded">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">Temp Threshold</span>
+                <span className="text-xs font-bold text-primary flex items-center gap-1 mt-1"><Thermometer className="w-3 h-3" />{device.temp_threshold}°C</span>
               </div>
-              <div className="bg-[#F4F4F5] p-3 rounded">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">CO Threshold</span>
-                <span className="text-xs font-bold text-[#DC2626] flex items-center gap-1 mt-1"><Wind className="w-3 h-3" />{device.co_threshold} ppm</span>
+              <div className="bg-surface-alt p-3 rounded">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">CO Threshold</span>
+                <span className="text-xs font-bold text-primary flex items-center gap-1 mt-1"><Wind className="w-3 h-3" />{device.co_threshold} ppm</span>
               </div>
-              <div className="bg-[#F4F4F5] p-3 rounded">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-[#A1A1AA] block">Last Seen</span>
-                <span className="text-xs font-bold text-[#18181B] flex items-center gap-1 mt-1"><Clock className="w-3 h-3" />{device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'Never'}</span>
+              <div className="bg-surface-alt p-3 rounded">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-text-faint block">Last Seen</span>
+                <span className="text-xs font-bold text-text flex items-center gap-1 mt-1"><Clock className="w-3 h-3" />{device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'Never'}</span>
               </div>
             </div>
           </div>
 
           {editingLocation && (
-            <div className="bg-white border border-[#E4E4E7] rounded-lg p-6">
-              <h2 className="text-lg font-black tracking-tight text-[#18181B]">Install Location</h2>
-              <p className="text-xs text-[#52525B] mt-1 mb-5">
+            <div className="bg-white border border-border rounded-lg p-6">
+              <h2 className="text-lg font-black tracking-tight text-text">Install Location</h2>
+              <p className="text-xs text-text-body mt-1 mb-5">
                 Where is the device installed? Changing it sends the new pin to an administrator to confirm.
               </p>
               <DeviceLocationEditor
@@ -171,8 +171,8 @@ export const ResidentDeviceInfo = () => {
           <div className={TABLE_CARD}>
             <div className={TABLE_TOOLBAR}>
               <div>
-                <h2 className="text-lg font-black tracking-tight text-[#18181B]">Recent Sensor Readings</h2>
-                <p className="text-[10px] text-[#A1A1AA] uppercase tracking-wider mt-1">Last {readings.length} readings</p>
+                <h2 className="text-lg font-black tracking-tight text-text">Recent Sensor Readings</h2>
+                <p className="text-[10px] text-text-faint uppercase tracking-wider mt-1">Last {readings.length} readings</p>
               </div>
             </div>
             <TableScroll>
@@ -190,12 +190,12 @@ export const ResidentDeviceInfo = () => {
                 <tbody>
                   {readings.length > 0 ? pageRows.map(r => (
                     <tr key={r.id} className={TR}>
-                      <td className={`${TD} text-xs text-[#52525B]`}>{new Date(r.recorded_at).toLocaleString()}</td>
-                      <td className={`${TD} text-xs font-bold ${r.temp_celsius >= device.temp_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.temp_celsius.toFixed(1)}°C</td>
-                      <td className={`${TD} text-xs font-bold ${r.co_ppm >= device.co_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.co_ppm.toFixed(0)} ppm</td>
-                      <td className={`${TD} text-xs`}>{r.gps_valid ? <CheckCircle2 className="w-4 h-4 text-[#00799C]" /> : <XCircle className="w-4 h-4 text-[#A1A1AA]" />}</td>
-                      <td className={`${TD} text-xs text-[#18181B]`}>{r.on_battery ? 'Battery' : 'Mains'}</td>
-                      <td className={`${TD} text-xs`}>{r.sensor_ready ? <CheckCircle2 className="w-4 h-4 text-[#00799C]" /> : <XCircle className="w-4 h-4 text-[#DC2626]" />}</td>
+                      <td className={`${TD} text-xs text-text-body`}>{new Date(r.recorded_at).toLocaleString()}</td>
+                      <td className={`${TD} text-xs font-bold ${r.temp_celsius >= device.temp_threshold ? 'text-primary' : 'text-text'}`}>{r.temp_celsius.toFixed(1)}°C</td>
+                      <td className={`${TD} text-xs font-bold ${r.co_ppm >= device.co_threshold ? 'text-primary' : 'text-text'}`}>{r.co_ppm.toFixed(0)} ppm</td>
+                      <td className={`${TD} text-xs`}>{r.gps_valid ? <CheckCircle2 className="w-4 h-4 text-teal-light" /> : <XCircle className="w-4 h-4 text-text-faint" />}</td>
+                      <td className={`${TD} text-xs text-text`}>{r.on_battery ? 'Battery' : 'Mains'}</td>
+                      <td className={`${TD} text-xs`}>{r.sensor_ready ? <CheckCircle2 className="w-4 h-4 text-teal-light" /> : <XCircle className="w-4 h-4 text-primary" />}</td>
                     </tr>
                   )) : (
                     <TableEmpty colSpan={6}>No sensor readings available.</TableEmpty>
@@ -210,8 +210,8 @@ export const ResidentDeviceInfo = () => {
         {/* Sidebar (1/3) */}
         <div className="lg:col-span-1 flex flex-col gap-6">
           {/* Map */}
-          <div className="bg-white border border-[#E4E4E7] rounded-lg p-4">
-            <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-[#52525B] mb-3">Device Location</h3>
+          <div className="bg-white border border-border rounded-lg p-4">
+            <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-text-body mb-3">Device Location</h3>
             {location.lat !== null && location.lng !== null ? (
               <div className="h-56 rounded overflow-hidden relative z-0">
                 <MapContainer key={`${location.lat},${location.lng}`} center={[location.lat, location.lng]} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
@@ -232,14 +232,14 @@ export const ResidentDeviceInfo = () => {
               {!isValidCoordinate(device.latitude, device.longitude) ? (
                 <span className="font-bold text-[#B45309] flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />Install pin not set</span>
               ) : device.location_verified ? (
-                <span className="font-bold text-[#047857] flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />Install pin confirmed</span>
+                <span className="font-bold text-success-dark flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />Install pin confirmed</span>
               ) : (
                 <span className="font-bold text-[#B45309] flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />Install pin waiting for confirmation</span>
               )}
               {!editingLocation && (
                 <button
                   onClick={() => { setLocationMsg(null); setEditingLocation(true); }}
-                  className="font-bold uppercase tracking-wide text-[#00799C] hover:underline shrink-0"
+                  className="font-bold uppercase tracking-wide text-teal-light hover:underline shrink-0"
                 >
                   {isValidCoordinate(device.latitude, device.longitude) ? 'Move pin' : 'Set pin'}
                 </button>
@@ -248,8 +248,8 @@ export const ResidentDeviceInfo = () => {
           </div>
 
           {/* Device Specs */}
-          <div className="bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg p-6">
-            <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-[#52525B] mb-4">Device Specs</h3>
+          <div className="bg-surface-alt border border-border rounded-lg p-6">
+            <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-text-body mb-4">Device Specs</h3>
             <div className="flex flex-col gap-3">
               {[
                 { label: 'Device Code', value: device.device_code },
@@ -258,8 +258,8 @@ export const ResidentDeviceInfo = () => {
                 { label: 'BFP Contact', value: device.bfp_contact || 'Not set' },
               ].map((item, i) => (
                 <div key={i} className="flex justify-between bg-white p-3 rounded shadow-sm">
-                  <span className="text-xs text-[#52525B]">{item.label}</span>
-                  <span className="text-xs font-bold text-[#18181B]">{item.value}</span>
+                  <span className="text-xs text-text-body">{item.label}</span>
+                  <span className="text-xs font-bold text-text">{item.value}</span>
                 </div>
               ))}
             </div>

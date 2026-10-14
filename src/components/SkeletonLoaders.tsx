@@ -18,7 +18,7 @@ export const DashboardSkeleton = () => (
     {/* 4 Stat Cards */}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 md:mb-8">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="bg-white border border-[#E5E2E1] rounded-lg p-4 sm:p-5 flex flex-col gap-3">
+        <div key={i} className="bg-white border border-border rounded-lg p-4 sm:p-5 flex flex-col gap-3">
           <Skeleton className="h-3 w-20" />
           <Skeleton className="h-9 w-14 rounded-md" />
         </div>
@@ -35,9 +35,9 @@ export const DashboardSkeleton = () => (
         </div>
         <div className="flex flex-col gap-3">
           <Skeleton className="h-6 w-40" />
-          <div className="bg-white border border-[#E5E2E1] rounded-lg overflow-hidden">
+          <div className="bg-white border border-border rounded-lg overflow-hidden">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="px-4 sm:px-6 py-5 flex items-center gap-4 sm:gap-8 border-b border-[#F0EDEC]">
+              <div key={i} className="px-4 sm:px-6 py-5 flex items-center gap-4 sm:gap-8 border-b border-border-warm">
                 <Skeleton className="h-4 w-16 sm:w-24" />
                 <Skeleton className="h-4 w-48 flex-1" />
                 <Skeleton className="h-6 w-20 rounded-full" />
@@ -52,9 +52,9 @@ export const DashboardSkeleton = () => (
         <Skeleton className="h-12 w-full rounded-lg" />
         <Skeleton className="h-12 w-full rounded-lg" />
         <Skeleton className="h-6 w-36 mt-5" />
-        <div className="bg-white border border-[#E5E2E1] rounded-lg">
+        <div className="bg-white border border-border rounded-lg">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex gap-3 p-4 border-b border-[#F0EDEC]">
+            <div key={i} className="flex gap-3 p-4 border-b border-border-warm">
               <Skeleton className="h-2 w-2 mt-1 rounded-full" />
               <div className="flex-1 flex flex-col gap-2">
                 <Skeleton className="h-3 w-32" />
@@ -75,7 +75,7 @@ export const ResponderDashboardSkeleton = () => (
     {/* 4 Stat Cards */}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="bg-[#F6F3F2] border border-[#E5E2E1] rounded-lg px-5 py-4 flex flex-col gap-3">
+        <div key={i} className="bg-surface-alt border border-border rounded-lg px-5 py-4 flex flex-col gap-3">
           <Skeleton className="h-3 w-24" />
           <Skeleton className="h-10 w-16 rounded-md" />
         </div>
@@ -87,14 +87,14 @@ export const ResponderDashboardSkeleton = () => (
       <div className="lg:col-span-8">
         <Skeleton className="w-full rounded-lg" style={{ minHeight: 420 }} />
       </div>
-      <div className="lg:col-span-4 bg-white border border-[#E5E2E1] rounded-lg flex flex-col overflow-hidden" style={{ maxHeight: 420 }}>
-        <div className="px-5 py-4 border-b border-[#E5E2E1] flex items-center justify-between">
+      <div className="lg:col-span-4 bg-white border border-border rounded-lg flex flex-col overflow-hidden" style={{ maxHeight: 420 }}>
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <Skeleton className="h-4 w-28" />
           <Skeleton className="h-3 w-3 rounded-full" />
         </div>
         <div className="flex-1 p-4 flex flex-col gap-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex flex-col gap-2 pb-4 border-b border-[#E5E2E1] last:border-0">
+            <div key={i} className="flex flex-col gap-2 pb-4 border-b border-border last:border-0">
               <div className="flex justify-between">
                 <Skeleton className="h-4 w-36" />
                 <Skeleton className="h-3 w-16" />
@@ -111,8 +111,8 @@ export const ResponderDashboardSkeleton = () => (
     </div>
 
     {/* Table */}
-    <div className="bg-white border border-[#E5E2E1] rounded-lg overflow-hidden">
-      <div className="px-6 py-4 border-b border-[#E5E2E1] flex items-center justify-between">
+    <div className="bg-white border border-border rounded-lg overflow-hidden">
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
         <Skeleton className="h-4 w-36" />
         <Skeleton className="h-8 w-56 rounded" />
       </div>
@@ -138,7 +138,7 @@ export const ResidentHomeSkeleton = () => (
     {/* 4 Stat Cards */}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="bg-white border border-[#E4E4E7] rounded-lg p-4 sm:p-5 flex flex-col gap-3">
+        <div key={i} className="bg-white border border-border rounded-lg p-4 sm:p-5 flex flex-col gap-3">
           <Skeleton className="h-3 w-24" />
           <Skeleton className="h-8 w-20 rounded-md" />
           <Skeleton className="h-3 w-28" />
@@ -150,7 +150,7 @@ export const ResidentHomeSkeleton = () => (
       {/* Main Column */}
       <div className="lg:col-span-2 flex flex-col gap-6">
         {/* Readings */}
-        <div className="bg-white rounded-lg border border-[#E4E4E7] p-5 sm:p-6">
+        <div className="bg-white rounded-lg border border-border p-5 sm:p-6">
           <Skeleton className="h-5 w-40 mb-2" />
           <Skeleton className="h-3 w-56 mb-8" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
@@ -165,7 +165,7 @@ export const ResidentHomeSkeleton = () => (
         </div>
 
         {/* Reading History */}
-        <div className="bg-white rounded-lg border border-[#E4E4E7] p-5 sm:p-6">
+        <div className="bg-white rounded-lg border border-border p-5 sm:p-6">
           <div className="flex justify-between items-center mb-8">
             <Skeleton className="h-5 w-40" />
             <Skeleton className="h-8 w-40 rounded-lg" />
@@ -178,8 +178,8 @@ export const ResidentHomeSkeleton = () => (
         </div>
 
         {/* Recent Alerts */}
-        <div className="bg-white rounded-lg border border-[#E4E4E7] overflow-hidden">
-          <div className="flex justify-between items-center p-5 border-b border-[#F4F4F5]">
+        <div className="bg-white rounded-lg border border-border overflow-hidden">
+          <div className="flex justify-between items-center p-5 border-b border-border-warm">
             <Skeleton className="h-5 w-36" />
             <Skeleton className="h-3 w-16" />
           </div>
@@ -190,7 +190,7 @@ export const ResidentHomeSkeleton = () => (
       {/* Side Column */}
       <div className="lg:col-span-1 flex flex-col gap-6">
         {/* Device Health */}
-        <div className="bg-white rounded-lg p-5 sm:p-6 border border-[#E4E4E7]">
+        <div className="bg-white rounded-lg p-5 sm:p-6 border border-border">
           <Skeleton className="h-5 w-36 mb-2" />
           <Skeleton className="h-3 w-32 mb-6" />
           <div className="flex flex-col gap-4">
@@ -207,7 +207,7 @@ export const ResidentHomeSkeleton = () => (
         </div>
 
         {/* Install Location */}
-        <div className="bg-white rounded-lg p-5 sm:p-6 border border-[#E4E4E7]">
+        <div className="bg-white rounded-lg p-5 sm:p-6 border border-border">
           <Skeleton className="h-5 w-36 mb-2" />
           <Skeleton className="h-3 w-24 mb-4" />
           <Skeleton className="h-48 w-full rounded mb-4" />
@@ -225,7 +225,7 @@ export const ResidentHomeSkeleton = () => (
 export const TableRowsSkeleton = ({ cols = 5, rows = 5 }: { cols?: number; rows?: number }) => (
   <>
     {[...Array(rows)].map((_, rowIdx) => (
-      <div key={rowIdx} className="flex items-center px-6 py-4 border-b border-[#F4F4F5] last:border-0 gap-6">
+      <div key={rowIdx} className="flex items-center px-6 py-4 border-b border-border-warm last:border-0 gap-6">
         {[...Array(cols)].map((_, colIdx) => (
           <Skeleton
             key={colIdx}
@@ -257,7 +257,7 @@ export const TableBodySkeleton = ({ cols = 5, rows = 5 }: { cols?: number; rows?
 export const CardListSkeleton = ({ count = 4 }: { count?: number }) => (
   <div className="flex flex-col gap-3 animate-fade-in">
     {[...Array(count)].map((_, i) => (
-      <div key={i} className="bg-white border border-[#E5E2E1] rounded-lg p-5 flex items-center gap-4">
+      <div key={i} className="bg-white border border-border rounded-lg p-5 flex items-center gap-4">
         <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
         <div className="flex-1 flex flex-col gap-2">
           <Skeleton className="h-4 w-32" />
@@ -301,7 +301,7 @@ export const ProfileSkeleton = () => (
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Form */}
-      <div className="lg:col-span-2 bg-white border border-[#E4E4E7] rounded-lg p-8">
+      <div className="lg:col-span-2 bg-white border border-border rounded-lg p-8">
         <Skeleton className="h-5 w-36 mb-6" />
         <div className="flex flex-col gap-6">
           {[...Array(2)].map((_, i) => (
@@ -316,7 +316,7 @@ export const ProfileSkeleton = () => (
 
       {/* Sidebar */}
       <div className="lg:col-span-1">
-        <div className="bg-[#FCF9F8] border border-[#E4E4E7] rounded-lg p-6">
+        <div className="bg-surface border border-border rounded-lg p-6">
           <Skeleton className="h-3 w-32 mb-4" />
           {[...Array(3)].map((_, i) => (
             <div key={i} className="flex items-center gap-3 mb-4 last:mb-0">
@@ -346,9 +346,9 @@ export const DeviceInfoSkeleton = () => (
     {/* Map + Info */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <Skeleton className="h-64 w-full rounded-lg" />
-      <div className="bg-white border border-[#E4E4E7] rounded-lg p-6 flex flex-col gap-4">
+      <div className="bg-white border border-border rounded-lg p-6 flex flex-col gap-4">
         {[...Array(6)].map((_, i) => (
-          <div key={i} className="flex items-center justify-between py-2 border-b border-[#F4F4F5] last:border-0">
+          <div key={i} className="flex items-center justify-between py-2 border-b border-border-warm last:border-0">
             <Skeleton className="h-3 w-28" />
             <Skeleton className="h-4 w-20" />
           </div>
@@ -357,8 +357,8 @@ export const DeviceInfoSkeleton = () => (
     </div>
 
     {/* Readings */}
-    <div className="bg-white border border-[#E4E4E7] rounded-lg overflow-hidden">
-      <div className="p-6 border-b border-[#F4F4F5]">
+    <div className="bg-white border border-border rounded-lg overflow-hidden">
+      <div className="p-6 border-b border-border-warm">
         <Skeleton className="h-5 w-40" />
       </div>
       <TableRowsSkeleton cols={4} rows={5} />
@@ -379,7 +379,7 @@ export const AlertSettingsSkeleton = () => (
     {/* Threshold Cards */}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {[...Array(2)].map((_, i) => (
-        <div key={i} className="bg-white border border-[#E4E4E7] rounded-lg p-6">
+        <div key={i} className="bg-white border border-border rounded-lg p-6">
           <div className="flex items-center gap-3 mb-6">
             <Skeleton className="h-5 w-5 rounded" />
             <Skeleton className="h-5 w-36" />
@@ -392,7 +392,7 @@ export const AlertSettingsSkeleton = () => (
     </div>
 
     {/* Contact */}
-    <div className="bg-white border border-[#E4E4E7] rounded-lg p-6">
+    <div className="bg-white border border-border rounded-lg p-6">
       <Skeleton className="h-5 w-44 mb-4" />
       <Skeleton className="h-11 w-full rounded-md mb-3" />
       <Skeleton className="h-3 w-56" />

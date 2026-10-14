@@ -37,19 +37,19 @@ const markerIcon = new L.Icon({
 const RECENT_ALERT_ROWS = 5;
 
 // One card / heading style for every section on this page (same as the other resident pages).
-const CARD = 'bg-white rounded-lg border border-[#E4E4E7] p-5 sm:p-6';
-const CARD_TITLE = 'text-lg font-black tracking-tight text-[#18181B]';
+const CARD = 'bg-white rounded-lg border border-border p-5 sm:p-6';
+const CARD_TITLE = 'text-lg font-black tracking-tight text-text';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const AddressField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
   <label className="flex flex-col gap-1">
-    <span className="text-[#92400E] text-[10px] font-bold tracking-wider uppercase">{label}</span>
+    <span className="text-tier1-text text-[10px] font-bold tracking-wider uppercase">{label}</span>
     <input
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-white border border-[#F59E0B]/50 rounded px-3 py-2 text-sm text-[#231918] focus:outline-none focus:ring-2 focus:ring-[#D97706]/30 focus:border-[#D97706]"
+      className="w-full bg-white border border-amber-light/50 rounded px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-amber/30 focus:border-amber"
     />
   </label>
 );
@@ -64,16 +64,16 @@ const SummaryCard = ({ label, value, icon: Icon, hint, urgent = false }: {
   urgent?: boolean;
 }) => (
   <div className={`rounded-lg border p-4 sm:p-5 flex flex-col gap-2 min-w-0 ${
-    urgent ? 'bg-[#FEF2F2] border-[#FECACA] border-b-4 border-b-[#DC2626]' : 'bg-white border-[#E4E4E7]'
+    urgent ? 'bg-tier2-bg/50 border-tier2-border/30 border-b-4 border-b-primary' : 'bg-white border-border'
   }`}>
     <div className="flex items-start justify-between gap-2">
-      <span className={`text-[10px] font-bold tracking-[0.1em] uppercase ${urgent ? 'text-[#B91C1C]' : 'text-[#52525B]'}`}>{label}</span>
-      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${urgent ? 'text-[#DC2626]' : 'text-[#A1A1AA]'}`} />
+      <span className={`text-[10px] font-bold tracking-[0.1em] uppercase ${urgent ? 'text-primary' : 'text-text-body'}`}>{label}</span>
+      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${urgent ? 'text-primary' : 'text-text-faint'}`} />
     </div>
-    <span className={`font-black text-[28px] leading-8 sm:text-[36px] sm:leading-10 tracking-tighter ${urgent ? 'text-[#B91C1C]' : 'text-[#18181B]'}`}>
+    <span className={`font-black text-[28px] leading-8 sm:text-[36px] sm:leading-10 tracking-tighter ${urgent ? 'text-primary' : 'text-text'}`}>
       {value}
     </span>
-    <span className={`text-xs font-medium ${urgent ? 'text-[#B91C1C]' : 'text-[#71717A]'}`}>{hint}</span>
+    <span className={`text-xs font-medium ${urgent ? 'text-primary' : 'text-text-subtle'}`}>{hint}</span>
   </div>
 );
 
@@ -81,7 +81,7 @@ const SectionHeader = ({ title, meta, action }: { title: string; meta?: React.Re
   <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
     <div className="flex flex-col gap-0.5 min-w-0">
       <h2 className={CARD_TITLE}>{title}</h2>
-      {meta && <p className="text-xs text-[#71717A]">{meta}</p>}
+      {meta && <p className="text-xs text-text-subtle">{meta}</p>}
     </div>
     {action}
   </div>
@@ -102,9 +102,9 @@ const Notice = ({ tone, icon: Icon, title, children, action }: {
   action?: React.ReactNode;
 }) => {
   const styles = {
-    fire: 'bg-[#FEE2E2] border-[#DC2626] text-[#7F1D1D]',
-    warning: 'bg-[#FEF3C7] border-[#F59E0B] text-[#92400E]',
-    offline: 'bg-[#F4F4F5] border-[#A1A1AA] text-[#3F3F46]',
+    fire: 'bg-tier2-bg border-primary text-tier2-text',
+    warning: 'bg-tier1-bg border-amber-light text-tier1-text',
+    offline: 'bg-surface-alt border-text-faint text-text-body',
   }[tone];
   return (
     <div role={tone === 'offline' ? 'status' : 'alert'} className={`border-l-4 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${styles}`}>
@@ -131,26 +131,26 @@ const ReadingGauge = ({ label, value, unit, max, threshold, stale }: {
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
   const thresholdPercentage = Math.min(100, Math.max(0, (threshold / max) * 100));
   const over = value >= threshold;
-  const fill = stale ? 'bg-[#D4D4D8]' : over ? 'bg-[#DC2626]' : 'bg-[#00799C]';
+  const fill = stale ? 'bg-border' : over ? 'bg-primary' : 'bg-teal-light';
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex justify-between items-end gap-3">
-        <span className="text-[10px] font-bold tracking-widest uppercase text-[#52525B]">{label}</span>
+        <span className="text-[10px] font-bold tracking-widest uppercase text-text-body">{label}</span>
         <div className="flex items-baseline gap-1">
-          <span className={`text-3xl font-black tracking-tighter tabular-nums ${stale ? 'text-[#A1A1AA]' : over ? 'text-[#B91C1C]' : 'text-[#18181B]'}`}>
+          <span className={`text-3xl font-black tracking-tighter tabular-nums ${stale ? 'text-text-faint' : over ? 'text-primary' : 'text-text'}`}>
             {value.toFixed(1)}
           </span>
-          <span className={`text-sm font-bold ${stale ? 'text-[#A1A1AA]' : 'text-[#52525B]'}`}>{unit}</span>
+          <span className={`text-sm font-bold ${stale ? 'text-text-faint' : 'text-text-body'}`}>{unit}</span>
         </div>
       </div>
-      <div className="relative h-2.5 bg-[#F4F4F5] rounded-full overflow-hidden">
+      <div className="relative h-2.5 bg-surface-alt rounded-full overflow-hidden">
         <div className={`absolute left-0 top-0 bottom-0 rounded-full transition-all duration-700 ${fill}`} style={{ width: `${percentage}%` }} />
-        <div className="absolute top-0 bottom-0 w-0.5 bg-[#DC2626] z-10" style={{ left: `${thresholdPercentage}%` }} />
+        <div className="absolute top-0 bottom-0 w-0.5 bg-primary z-10" style={{ left: `${thresholdPercentage}%` }} />
       </div>
-      <div className="flex justify-between text-[10px] font-semibold text-[#A1A1AA] tabular-nums">
+      <div className="flex justify-between text-[10px] font-semibold text-text-faint tabular-nums">
         <span>0</span>
-        <span className="text-[#B91C1C]">Alert at {threshold} {unit}</span>
+        <span className="text-primary">Alert at {threshold} {unit}</span>
         <span>{max} {unit}</span>
       </div>
     </div>
@@ -181,18 +181,18 @@ const ReadingHistoryChart = ({ readings, metric, threshold, now }: {
     <div>
       <div className="flex gap-2">
         {/* Y axis */}
-        <div className="relative w-10 h-44 shrink-0 text-[10px] font-semibold text-[#A1A1AA] tabular-nums text-right">
+        <div className="relative w-10 h-44 shrink-0 text-[10px] font-semibold text-text-faint tabular-nums text-right">
           <span className="absolute right-0 top-0 -translate-y-1/2">{top}</span>
           {Math.abs(pct(threshold) - 50) > 12 && <span className="absolute right-0 top-1/2 -translate-y-1/2">{top / 2}</span>}
           <span className="absolute right-0 bottom-0 translate-y-1/2">0</span>
           {/* Alert level sits in the axis gutter, so bars over it never hide the label */}
-          <span className="absolute right-0 translate-y-1/2 font-bold text-[#B91C1C]" style={{ bottom: `${pct(threshold)}%` }}>{threshold}</span>
+          <span className="absolute right-0 translate-y-1/2 font-bold text-primary" style={{ bottom: `${pct(threshold)}%` }}>{threshold}</span>
         </div>
         {/* Plot */}
-        <div className="relative flex-1 h-44 border-b border-[#E4E4E7]" onMouseLeave={() => setHover(null)}>
-          <div className="absolute inset-x-0 top-0 border-t border-[#F4F4F5]" />
-          <div className="absolute inset-x-0 top-1/2 border-t border-[#F4F4F5]" />
-          <div className="absolute inset-x-0 border-t-2 border-dashed border-[#DC2626]/70 z-10 pointer-events-none" style={{ bottom: `${pct(threshold)}%` }} />
+        <div className="relative flex-1 h-44 border-b border-border" onMouseLeave={() => setHover(null)}>
+          <div className="absolute inset-x-0 top-0 border-t border-border-warm" />
+          <div className="absolute inset-x-0 top-1/2 border-t border-border-warm" />
+          <div className="absolute inset-x-0 border-t-2 border-dashed border-primary/70 z-10 pointer-events-none" style={{ bottom: `${pct(threshold)}%` }} />
           <div className="absolute inset-0 flex items-end gap-[2px]">
             {readings.map((r, i) => {
               const v = values[i];
@@ -208,7 +208,7 @@ const ReadingHistoryChart = ({ readings, metric, threshold, now }: {
                   className="relative flex-1 h-full flex items-end focus:outline-none group"
                 >
                   <div
-                    className={`w-full rounded-t transition-all duration-300 ${over ? 'bg-[#DC2626]' : 'bg-[#00799C]'} ${hover !== null && hover !== i ? 'opacity-40' : ''} group-focus-visible:ring-2 group-focus-visible:ring-primary/40`}
+                    className={`w-full rounded-t transition-all duration-300 ${over ? 'bg-primary' : 'bg-teal-light'} ${hover !== null && hover !== i ? 'opacity-40' : ''} group-focus-visible:ring-2 group-focus-visible:ring-primary/40`}
                     style={{ height: `${Math.max(1.5, pct(v))}%` }}
                   />
                 </div>
@@ -217,7 +217,7 @@ const ReadingHistoryChart = ({ readings, metric, threshold, now }: {
           </div>
           {hovered && hover !== null && (
             <div
-              className="absolute z-20 -top-2 -translate-y-full -translate-x-1/2 bg-[#18181B] text-white rounded px-2 py-1 text-[11px] whitespace-nowrap pointer-events-none shadow"
+              className="absolute z-20 -top-2 -translate-y-full -translate-x-1/2 bg-text text-white rounded px-2 py-1 text-[11px] whitespace-nowrap pointer-events-none shadow"
               style={{ left: `${((hover + 0.5) / readings.length) * 100}%` }}
             >
               <span className="font-bold tabular-nums">{values[hover].toFixed(1)} {unit}</span>
@@ -226,14 +226,14 @@ const ReadingHistoryChart = ({ readings, metric, threshold, now }: {
           )}
         </div>
       </div>
-      <div className="flex justify-between text-[10px] font-semibold text-[#A1A1AA] mt-2 pl-12">
+      <div className="flex justify-between text-[10px] font-semibold text-text-faint mt-2 pl-12">
         <span>{formatEventTime(readings[0].recorded_at, now)}</span>
         <span>{formatEventTime(readings[readings.length - 1].recorded_at, now)}</span>
       </div>
-      <div className="flex items-center gap-4 text-[11px] font-medium text-[#52525B] mt-4 pl-12">
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#00799C]" />Below alert level</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#DC2626]" />At or above</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[#DC2626]" />Alert level ({threshold} {unit})</span>
+      <div className="flex items-center gap-4 text-[11px] font-medium text-text-body mt-4 pl-12">
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-teal-light" />Below alert level</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-primary" />At or above</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-primary" />Alert level ({threshold} {unit})</span>
       </div>
     </div>
   );
@@ -395,12 +395,12 @@ export const ResidentHome = () => {
   if (!device) {
     return (
       <div className="flex items-center justify-center min-h-[70vh] px-4 font-['Inter',_sans-serif]">
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-[#E5E2E1] max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-[#FEE2E2] rounded-full flex items-center justify-center mx-auto mb-6">
-            <Cpu className="text-[#D32F2F] w-8 h-8" />
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-border max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-tier2-bg rounded-full flex items-center justify-center mx-auto mb-6">
+            <Cpu className="text-accent w-8 h-8" />
           </div>
-          <h2 className="text-2xl font-black text-[#231918] mb-2 tracking-tight">Link Your Device</h2>
-          <p className="text-[#534341] text-sm mb-8">
+          <h2 className="text-2xl font-black text-text mb-2 tracking-tight">Link Your Device</h2>
+          <p className="text-text-body text-sm mb-8">
             You don't have a device linked to your account yet. Enter your device code below to get started.
           </p>
 
@@ -412,11 +412,11 @@ export const ResidentHome = () => {
                 placeholder="e.g. FA-001"
                 value={linkCode}
                 onChange={(e) => setLinkCode(e.target.value)}
-                className="w-full px-4 py-3 bg-[#FCF9F8] border border-[#E5E2E1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#D32F2F] focus:border-transparent text-center font-bold text-[#231918] tracking-widest uppercase"
+                className="w-full px-4 py-3 bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-center font-bold text-text tracking-widest uppercase"
               />
             </div>
             {linkError && (
-              <div className="p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-lg text-[#DC2626] text-sm font-medium">
+              <div className="p-3 bg-tier2-bg/50 border border-tier2-border/30 rounded-lg text-primary text-sm font-medium">
                 {linkError}
               </div>
             )}
@@ -475,7 +475,7 @@ export const ResidentHome = () => {
     },
   ];
   const TONE_PILL = { ok: PILL_OK, warn: PILL_WARN, none: PILL_OFF };
-  const TONE_ICON = { ok: 'text-[#047857]', warn: 'text-[#B45309]', none: 'text-[#A1A1AA]' };
+  const TONE_ICON = { ok: 'text-success-dark', warn: 'text-[#B45309]', none: 'text-text-faint' };
 
   const historyOldestFirst = [...recentReadings].reverse();
 
@@ -533,21 +533,21 @@ export const ResidentHome = () => {
       {/* Header (same layout as the other resident pages) */}
       <div className="flex flex-wrap justify-between items-start gap-4">
         <div className="flex flex-col gap-1 min-w-0">
-          <div className="flex items-center gap-2 text-[#DC2626]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
+          <div className="flex items-center gap-2 text-primary">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
             <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Overview</span>
           </div>
-          <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Dashboard</h1>
-          <p className="text-sm text-[#52525B] mt-1">
-            Status and readings from your device <span className="font-bold text-[#18181B]">{device.device_code}</span>{device.label ? ` (${device.label})` : ''}.
+          <h1 className="text-3xl font-black tracking-tight text-text">Dashboard</h1>
+          <p className="text-sm text-text-body mt-1">
+            Status and readings from your device <span className="font-bold text-text">{device.device_code}</span>{device.label ? ` (${device.label})` : ''}.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-[#A1A1AA] hidden sm:inline">Updated {refreshedLabel}</span>
+          <span className="text-xs text-text-faint hidden sm:inline">Updated {refreshedLabel}</span>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="flex items-center gap-2 px-4 py-2 bg-[#18181B] text-white text-[10px] font-bold uppercase tracking-widest rounded hover:bg-black transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 border border-border bg-surface-card text-text-body text-[10px] font-bold uppercase tracking-widest rounded hover:bg-surface transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
@@ -583,11 +583,11 @@ export const ResidentHome = () => {
       )}
 
       {discrepancy && (
-        <div className="bg-[#FEF3C7] border border-[#F59E0B] p-4 rounded-lg flex flex-col gap-4">
+        <div className="bg-tier1-bg border border-amber-light p-4 rounded-lg flex flex-col gap-4">
           <div className="flex gap-3">
-            <AlertTriangle className="text-[#D97706] mt-0.5 shrink-0" size={20} />
+            <AlertTriangle className="text-amber mt-0.5 shrink-0" size={20} />
             <div>
-              <h4 className="text-[#92400E] font-bold text-sm">Location Discrepancy Detected</h4>
+              <h4 className="text-tier1-text font-bold text-sm">Location Discrepancy Detected</h4>
               <p className="text-[#B45309] text-xs mt-1">
                 The device's GPS indicates it is at <strong className="font-extrabold">{discrepancy.gps_derived_address}</strong>, but its registered location is <strong className="font-extrabold">{discrepancy.registered_address}</strong>. Review and correct the address below, then confirm.
               </p>
@@ -604,8 +604,8 @@ export const ResidentHome = () => {
           </div>
 
           <div className="flex gap-2 w-full sm:w-auto sm:self-end">
-             <button onClick={() => handleDiscrepancyResolution('approved')} className="flex-1 sm:flex-none px-4 py-2 bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold rounded shadow-sm transition-colors uppercase tracking-wider">Update</button>
-             <button onClick={() => handleDiscrepancyResolution('rejected')} className="flex-1 sm:flex-none px-4 py-2 bg-white hover:bg-gray-50 text-[#92400E] border border-[#D97706] text-xs font-bold rounded shadow-sm transition-colors uppercase tracking-wider">Keep Current</button>
+             <button onClick={() => handleDiscrepancyResolution('approved')} className="flex-1 sm:flex-none px-4 py-2 bg-amber hover:bg-[#B45309] text-white text-xs font-bold rounded shadow-sm transition-colors uppercase tracking-wider">Update</button>
+             <button onClick={() => handleDiscrepancyResolution('rejected')} className="flex-1 sm:flex-none px-4 py-2 bg-white hover:bg-gray-50 text-tier1-text border border-amber text-xs font-bold rounded shadow-sm transition-colors uppercase tracking-wider">Keep Current</button>
           </div>
         </div>
       )}
@@ -644,23 +644,23 @@ export const ResidentHome = () => {
             />
 
             {!latestReading ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-[#A1A1AA]">
+              <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-text-faint">
                 <Gauge className="w-8 h-8" />
-                <span className="text-sm font-medium text-[#52525B]">Your device hasn't sent a reading yet.</span>
+                <span className="text-sm font-medium text-text-body">Your device hasn't sent a reading yet.</span>
               </div>
             ) : warmingUp ? (
               // MQ-7 warm-up window (spec SW-2.1.1/SW-2.4.5): raw values and
               // threshold bars are unreliable/unset until sensor_ready flips
               // true, so show a placeholder instead of misleading numbers.
               <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-                <Loader2 className="w-6 h-6 text-[#00799C] animate-spin" />
-                <span className="text-sm font-bold text-[#52525B]">Sensors warming up</span>
-                <span className="text-xs text-[#A1A1AA] max-w-xs">The carbon monoxide sensor is calibrating. Readings will appear once it is ready.</span>
+                <Loader2 className="w-6 h-6 text-teal-light animate-spin" />
+                <span className="text-sm font-bold text-text-body">Sensors warming up</span>
+                <span className="text-xs text-text-faint max-w-xs">The carbon monoxide sensor is calibrating. Readings will appear once it is ready.</span>
               </div>
             ) : (
               <>
                 {!hasLiveData && (
-                  <p className="mt-4 text-xs font-medium text-[#52525B] bg-[#F4F4F5] rounded px-3 py-2">
+                  <p className="mt-4 text-xs font-medium text-text-body bg-surface-alt rounded px-3 py-2">
                     These values are from the device's last report and may not match conditions now.
                   </p>
                 )}
@@ -692,7 +692,7 @@ export const ResidentHome = () => {
               title="Reading History"
               meta={recentReadings.length > 0 ? `Last ${recentReadings.length} readings` : undefined}
               action={
-                <div role="radiogroup" aria-label="Reading to chart" className="inline-flex rounded-lg border border-[#E4E4E7] p-0.5 bg-[#F4F4F5]">
+                <div role="radiogroup" aria-label="Reading to chart" className="inline-flex rounded-lg border border-border p-0.5 bg-surface-alt">
                   {(['temp', 'co'] as const).map(m => (
                     <button
                       key={m}
@@ -700,7 +700,7 @@ export const ResidentHome = () => {
                       role="radio"
                       aria-checked={metric === m}
                       onClick={() => setMetric(m)}
-                      className={`px-3 h-7 rounded-md text-xs font-bold transition-colors ${metric === m ? 'bg-white text-[#18181B] shadow-sm' : 'text-[#71717A] hover:text-[#18181B]'}`}
+                      className={`px-3 h-7 rounded-md text-xs font-bold transition-colors ${metric === m ? 'bg-white text-text shadow-sm' : 'text-text-subtle hover:text-text'}`}
                     >
                       {m === 'temp' ? 'Temperature' : 'CO'}
                     </button>
@@ -717,7 +717,7 @@ export const ResidentHome = () => {
                   now={now}
                 />
               ) : (
-                <div className="h-44 flex items-center justify-center text-sm font-medium text-[#A1A1AA]">
+                <div className="h-44 flex items-center justify-center text-sm font-medium text-text-faint">
                   No reading history yet
                 </div>
               )}
@@ -751,21 +751,21 @@ export const ResidentHome = () => {
                       <td className={TD}>
                         <div className="flex items-center gap-2">
                           {alert.alert_tier === 2
-                            ? <Flame className="w-4 h-4 text-[#DC2626] shrink-0" />
-                            : <ThermometerSun className="w-4 h-4 text-[#F59E0B] shrink-0" />}
-                          <span className="text-sm font-bold text-[#18181B] whitespace-nowrap">
+                            ? <Flame className="w-4 h-4 text-primary shrink-0" />
+                            : <ThermometerSun className="w-4 h-4 text-amber-light shrink-0" />}
+                          <span className="text-sm font-bold text-text whitespace-nowrap">
                             {alert.alert_tier === 2 ? 'Tier 2 Alert' : 'Tier 1 Warning'}
                           </span>
                         </div>
                       </td>
                       <td className={TD}>
-                        <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${alert.resolved_at ? 'bg-[#E4E4E7] text-[#52525B]' : 'bg-[#DC2626] text-white'}`}>
+                        <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${alert.resolved_at ? 'bg-surface-cream text-text-body' : 'bg-primary text-white'}`}>
                           {alert.resolved_at ? 'Resolved' : 'Active'}
                         </span>
                       </td>
-                      <td className={`${TD} text-xs text-[#52525B] whitespace-nowrap`}>{formatEventTime(alert.triggered_at, now)}</td>
-                      <td className={`${TD} text-right font-mono text-xs font-bold text-[#18181B] whitespace-nowrap`}>{alert.temp_celsius?.toFixed(1)}°C</td>
-                      <td className={`${TD} text-right font-mono text-xs font-bold text-[#18181B] whitespace-nowrap`}>{alert.co_ppm?.toFixed(0)} ppm</td>
+                      <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>{formatEventTime(alert.triggered_at, now)}</td>
+                      <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.temp_celsius?.toFixed(1)}°C</td>
+                      <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.co_ppm?.toFixed(0)} ppm</td>
                     </tr>
                   ))}
                 </tbody>
@@ -784,18 +784,18 @@ export const ResidentHome = () => {
               title="Device Health"
               meta={hasLiveData ? 'From the latest report' : isOffline ? 'Shown once the device reports again' : 'Waiting for the first reading'}
             />
-            <ul className="mt-5 flex flex-col divide-y divide-[#F4F4F5]">
+            <ul className="mt-5 flex flex-col divide-y divide-border-warm">
               {health.map(item => (
                 <li key={item.label} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="flex items-center gap-3">
                     <item.icon size={16} className={TONE_ICON[item.tone]} />
-                    <span className="text-sm font-bold text-[#18181B]">{item.label}</span>
+                    <span className="text-sm font-bold text-text">{item.label}</span>
                   </div>
                   <span className={TONE_PILL[item.tone]}>{item.status}</span>
                 </li>
               ))}
             </ul>
-            <div className="mt-5 pt-4 border-t border-[#F4F4F5]">
+            <div className="mt-5 pt-4 border-t border-border-warm">
               <SectionLink to="/home/devices">Device information</SectionLink>
             </div>
           </section>
@@ -831,13 +831,13 @@ export const ResidentHome = () => {
             </div>
             <LocationBadge location={location} now={now} />
             <div className="flex gap-2 items-start mt-4">
-              <MapPin size={16} className="text-[#52525B] mt-0.5 shrink-0" />
-              <span className="text-sm font-semibold text-[#18181B]">{displayAddress(device.location_desc)}</span>
+              <MapPin size={16} className="text-text-body mt-0.5 shrink-0" />
+              <span className="text-sm font-semibold text-text">{displayAddress(device.location_desc)}</span>
             </div>
             {!isValidCoordinate(device.latitude, device.longitude) && (
               <Link
                 to="/home/devices"
-                className="mt-4 block w-full text-center py-2.5 rounded bg-[#FEF3C7] text-[#B45309] text-[11px] font-bold uppercase tracking-wide hover:bg-[#FDE68A] transition-colors"
+                className="mt-4 block w-full text-center py-2.5 rounded bg-tier1-bg text-[#B45309] text-[11px] font-bold uppercase tracking-wide hover:bg-[#FDE68A] transition-colors"
               >
                 Set your install address and pin
               </Link>
