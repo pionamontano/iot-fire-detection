@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../components/PageHeader';
 import { FilterChips } from '../../components/FilterChips';
 import { supabase } from '../../lib/supabase';
@@ -24,7 +25,11 @@ export const SupportRequests = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
 
-  const [selected, setSelected] = useState<SupportRequestRow | null>(null);
+  // The open dialog lives in the URL (?request=<id>), so a notification or a
+  // shared link opens that request, and Back closes the dialog.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedId = searchParams.get('request');
+  const selected = selectedId ? requests.find(r => r.id === selectedId) ?? null : null;
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,16 +71,48 @@ export const SupportRequests = () => {
     setLoading(false);
   };
 
-  const openDetails = (req: SupportRequestRow) => {
-    setNotice(null);
-    setSelected(req);
+  const setSelectedId = (id: string | null, replace = false) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (id) next.set('request', id); else next.delete('request');
+      return next;
+    }, { replace });
   };
 
+  const openDetails = (req: SupportRequestRow) => {
+    setNotice(null);
+    setSelectedId(req.id);
+  };
+
+  const closeDetails = () => setSelectedId(null, true);
+
   const handleDone = (message: string) => {
-    setSelected(null);
+    closeDetails();
     setNotice(message);
     fetchRequests(false);
   };
+
+  // Show a linked request on its own tab; tell the admin if the link is stale.
+  useEffect(() => {
+    if (loading || loadError || !selectedId) return;
+    if (selected) {
+      setActiveTab(selected.status);
+    } else {
+      setNotice('That support request no longer exists.');
+      closeDetails();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, selectedId, selected?.status]);
+
+  // Rows and cards open the request like their Resolve / View button.
+  const rowProps = (r: SupportRequestRow) => ({
+    onClick: () => openDetails(r),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openDetails(r); }
+    },
+    tabIndex: 0,
+    'aria-label': `${r.status === 'open' ? 'Resolve' : 'View'} ${r.category} request from ${r.full_name}`,
+  });
 
   const switchTab = (tab: TabType) => {
     setActiveTab(tab);
@@ -144,12 +181,12 @@ export const SupportRequests = () => {
 
   // Open requests go straight to the resolve dialog, which also shows the full message.
   const actions = (r: SupportRequestRow) => r.status === 'open' ? (
-    <button onClick={() => openDetails(r)} className={ACTION_APPROVE}>
+    <button onClick={(e) => { e.stopPropagation(); openDetails(r); }} className={ACTION_APPROVE}>
       <CheckCircle className="w-4 h-4" />
       Resolve
     </button>
   ) : (
-    <button onClick={() => openDetails(r)} className={ACTION_EDIT}>
+    <button onClick={(e) => { e.stopPropagation(); openDetails(r); }} className={ACTION_EDIT}>
       <Eye className="w-4 h-4" />
       View
     </button>
@@ -241,7 +278,7 @@ export const SupportRequests = () => {
                     </thead>
                     <tbody>
                       {pageRows.map(r => (
-                        <tr key={r.id} className={TR}>
+                        <tr key={r.id} {...rowProps(r)} className={`${TR} cursor-pointer focus:outline-none focus-visible:bg-surface focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary`}>
                           {[identity, ...columns].map(c => (
                             <td key={c.header} className={`${TD} text-text ${c.wrap ? 'max-w-xs' : 'whitespace-nowrap'}`}>{c.cell(r)}</td>
                           ))}
@@ -256,7 +293,7 @@ export const SupportRequests = () => {
 
                 <ul className="2xl:hidden grid grid-cols-1 lg:grid-cols-2 gap-3 p-3 sm:p-4">
                   {pageRows.map(r => (
-                    <li key={r.id} className="border border-border rounded-lg p-4 flex flex-col gap-4 bg-surface-card">
+                    <li key={r.id} {...rowProps(r)} className="border border-border rounded-lg p-4 flex flex-col gap-4 bg-surface-card cursor-pointer hover:border-text-faint transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                       {identity.cell(r)}
                       <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
                         {columns.map(c => (
@@ -282,7 +319,7 @@ export const SupportRequests = () => {
           key={selected.id}
           request={selected}
           reviewerName={selected.reviewed_by ? reviewerNames.get(selected.reviewed_by) : undefined}
-          onClose={() => setSelected(null)}
+          onClose={closeDetails}
           onDone={handleDone}
         />
       )}

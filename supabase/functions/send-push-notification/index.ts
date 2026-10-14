@@ -79,7 +79,7 @@ serve(async (req: Request) => {
       callerIsAdmin = profile?.role === 'admin' && profile?.status === 'approved' && profile?.is_active !== false;
     }
 
-    const { userIds, title, body, icon, topic } = await req.json();
+    const { userIds, title, body, icon, topic, url } = await req.json();
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
       return new Response(JSON.stringify({ error: 'Missing or invalid userIds array' }), {
@@ -136,7 +136,10 @@ serve(async (req: Request) => {
       throw subError;
     }
 
-    const payload = JSON.stringify({ title, body, icon });
+    // Optional in-app path the notification opens when clicked (public/sw.js). Only same-site
+    // paths are passed on, so a notification can never send someone to another website.
+    const safeUrl = typeof url === 'string' && /^\/(?![/\\])/.test(url) ? url : undefined;
+    const payload = JSON.stringify({ title, body, icon, url: safeUrl });
     // A timeout stops one slow push service from holding the whole alert; `topic` (<= 32 URL-safe chars) lets the push
     // service replace an undelivered duplicate of the same alert. Expired endpoints are REPORTED, never deleted here.
     const sendOptions: Record<string, unknown> = { timeout: 3000 };

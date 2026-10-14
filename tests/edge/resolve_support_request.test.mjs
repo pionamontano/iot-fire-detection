@@ -47,6 +47,7 @@ test('resolving saves the note and reviewer, and messages the requester on Teleg
   assert.equal(t.calls.telegram[0].chat_id, 'chat-res');
   assert.match(t.calls.telegram[0].text, /Role Change.*resolved[\s\S]*Role changed to BFP Responder/);
   assert.deepEqual(t.calls.push[0].userIds, ['res-1']);
+  assert.equal(t.calls.push[0].url, '/account', 'the push opens their My Requests list');
 });
 
 test('resolving an already-resolved request only updates the note and never re-notifies', async () => {

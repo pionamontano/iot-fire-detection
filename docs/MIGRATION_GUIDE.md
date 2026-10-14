@@ -125,6 +125,10 @@ Some edge functions use secrets. Set them via CLI:
 ```bash
 supabase secrets set TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 supabase secrets set TELEGRAM_CHAT_ID=your_telegram_chat_id
+# Optional: the dashboard's public address, e.g. https://agapsense.vercel.app.
+# Admins' Telegram messages about new support requests include a link to the
+# request only when this is set.
+supabase secrets set APP_URL=https://your-dashboard-url
 ```
 
 > [!NOTE]

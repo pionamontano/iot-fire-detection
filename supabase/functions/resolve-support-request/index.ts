@@ -21,6 +21,8 @@ const corsHeaders = {
 
 const NOTIFY_TIMEOUT_MS = 3500
 const MAX_NOTES = 1000
+// Where each role sees "My Requests"; a push opens it (admins have no such list).
+const MY_REQUESTS_PATH = { resident: '/account', bfp_responder: '/responder/settings' }
 
 const respond = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -44,12 +46,12 @@ async function sendTelegram(chatId, text) {
   }
 }
 
-async function sendPush(userId, title, body) {
+async function sendPush(userId, title, body, url) {
   try {
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-push-notification`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
-      body: JSON.stringify({ userIds: [userId], title, body }),
+      body: JSON.stringify({ userIds: [userId], title, body, url }),
       signal: AbortSignal.timeout(NOTIFY_TIMEOUT_MS),
     })
     if (res.status === 503) return 'not_configured'
@@ -140,7 +142,7 @@ serve(async (req: Request) => {
     // Same eligibility rule as alert delivery: approved, active accounts only.
     const { data: requester } = await supabaseAdmin
       .from('profiles')
-      .select('id, status, is_active, telegram_chat_id')
+      .select('id, role, status, is_active, telegram_chat_id')
       .eq('id', request.user_id)
       .maybeSingle()
     if (!requester || requester.status !== 'approved' || requester.is_active === false) {
@@ -151,7 +153,7 @@ serve(async (req: Request) => {
     const body = `Your "${request.category}" request was resolved by the administrator.${notes ? `\nNote: ${notes}` : ''}`
     const [telegram, push] = await Promise.all([
       sendTelegram(requester.telegram_chat_id, `AgapSense: ${body}`),
-      sendPush(requester.id, title, body),
+      sendPush(requester.id, title, body, MY_REQUESTS_PATH[requester.role]),
     ])
 
     return respond({ success: true, notified: { telegram, push } })

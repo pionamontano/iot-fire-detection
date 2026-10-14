@@ -44,12 +44,12 @@ export const ContactLines = ({ req }: { req: SupportRequest }) => {
   return (
     <div className="space-y-1 text-text-body">
       {req.contact_email && (
-        <a href={`mailto:${req.contact_email}`} className="flex items-center gap-1.5 hover:text-primary break-all">
+        <a href={`mailto:${req.contact_email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 hover:text-primary break-all">
           <Mail className="w-3.5 h-3.5 shrink-0 text-text-faint" />{req.contact_email}
         </a>
       )}
       {req.contact_phone && (
-        <a href={`tel:${req.contact_phone}`} className="flex items-center gap-1.5 hover:text-primary">
+        <a href={`tel:${req.contact_phone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 hover:text-primary">
           <Phone className="w-3.5 h-3.5 shrink-0 text-text-faint" />{req.contact_phone}
         </a>
       )}

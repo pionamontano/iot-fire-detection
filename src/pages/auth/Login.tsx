@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import type { Location } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -52,13 +53,22 @@ export const Login = () => {
     return () => clearInterval(interval);
   }, [lockoutTimer]);
 
+  // AuthGuard sends signed-out visitors here with the page they asked for
+  // (e.g. a support request opened from a notification). Return them to it;
+  // AuthGuard still redirects if that page isn't allowed for their role.
+  const from = (useLocation().state as { from?: Location } | null)?.from;
+  const returnTo = from && from.pathname !== '/' && from.pathname !== '/login'
+    ? `${from.pathname}${from.search}${from.hash}`
+    : null;
+
   useEffect(() => {
     if (session && profile) {
-      if (profile.role === 'admin') navigate('/dashboard', { replace: true });
+      if (returnTo && profile.status === 'approved') navigate(returnTo, { replace: true });
+      else if (profile.role === 'admin') navigate('/dashboard', { replace: true });
       else if (profile.role === 'bfp_responder') navigate('/responder', { replace: true });
       else if (profile.role === 'resident') navigate('/home', { replace: true });
     }
-  }, [session, profile, navigate]);
+  }, [session, profile, navigate, returnTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
