@@ -31,8 +31,13 @@ type AuthLayoutProps = {
   children: React.ReactNode;
 };
 
-const { label, year, school, program, team, area } = PROJECT_INFO;
-const affiliation = [program, school].filter(Boolean).join(', ');
+const { label, year, title: projectTitle, school, program, section, team, area } = PROJECT_INFO;
+
+const TeamList = ({ className = '' }: { className?: string }) => (
+  <ul className={`grid grid-cols-1 min-[360px]:grid-cols-2 gap-x-4 gap-y-0.5 ${className}`}>
+    {team.map((name) => <li key={name}>{name}</li>)}
+  </ul>
+);
 
 const CapstoneBadge = ({ className = '' }: { className?: string }) => (
   <span className={`inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-primary shadow-sm whitespace-nowrap ${className}`}>
@@ -44,16 +49,24 @@ const CapstoneBadge = ({ className = '' }: { className?: string }) => (
 const CapstoneCard = () => (
   <div className="rounded-xl bg-black/20 ring-1 ring-white/15 p-5">
     <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-white/60">About this project</p>
-    <p className="mt-2 text-sm leading-relaxed text-white/85">
-      AgapSense is a student capstone project: an IoT fire detection and alert system
-      designed for homes in the {area}.
-    </p>
-    {affiliation && <p className="mt-2 text-sm font-semibold">{affiliation}</p>}
+    {projectTitle
+      ? <p className="mt-2 text-sm font-semibold leading-snug">{projectTitle}</p>
+      : <p className="mt-2 text-sm leading-relaxed text-white/85">AgapSense is a student capstone project for homes in the {area}.</p>}
+    {(program || school) && (
+      <p className="mt-2 text-xs leading-relaxed text-white/75">
+        {program}{program && school && <br />}{school}
+      </p>
+    )}
     {team.length > 0 && (
-      <p className="mt-1 text-xs leading-relaxed text-white/70">{team.join(' \u00b7 ')}</p>
+      <div className="mt-3 pt-3 border-t border-white/15">
+        <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-white/60">
+          Proponents{section && <span className="normal-case tracking-normal font-semibold"> · {section}</span>}
+        </p>
+        <TeamList className="mt-1.5 text-xs leading-relaxed text-white/85" />
+      </div>
     )}
     <p className="mt-3 text-[11px] leading-relaxed text-white/55">
-      Academic prototype. Not an official Bureau of Fire Protection service.
+      Academic prototype for the {area}. Not an official Bureau of Fire Protection service.
     </p>
   </div>
 );
@@ -77,7 +90,7 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
     <aside className="relative overflow-hidden bg-gradient-to-br from-primary via-[#A51818] to-[#7F1212] text-white lg:sticky lg:top-0 lg:h-dvh">
       <SignalRings />
 
-      <div className="relative z-10 flex h-full flex-col px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10 xl:px-16">
+      <div className="relative z-10 flex h-full flex-col lg:overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10 xl:px-16">
         <div className="flex flex-wrap items-center justify-between lg:justify-start gap-x-4 gap-y-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
@@ -98,7 +111,7 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
             IoT smoke and heat monitoring that alerts residents and BFP responders the moment a fire starts.
           </p>
 
-          <ul className="hidden lg:[@media(min-height:820px)]:flex flex-col gap-5 mt-10 max-w-sm">
+          <ul className="hidden lg:[@media(min-height:1000px)]:flex flex-col gap-5 mt-10 max-w-sm">
             {FEATURES.map(({ icon: Icon, title: t, text }) => (
               <li key={t} className="flex gap-4">
                 <span className="w-10 h-10 shrink-0 rounded-lg bg-white/15 ring-1 ring-white/20 flex items-center justify-center">
@@ -129,10 +142,17 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
         {children}
 
         <footer className="lg:hidden mt-12 pt-6 border-t border-border text-xs leading-relaxed text-text-warm">
-          <p className="font-semibold text-[#534341]">AgapSense · {label} {year}</p>
-          {affiliation && <p>{affiliation}</p>}
-          {team.length > 0 && <p>{team.join(' \u00b7 ')}</p>}
-          <p className="mt-1">Academic prototype. Not an official Bureau of Fire Protection service.</p>
+          <p className="font-bold uppercase tracking-[0.1em] text-[11px] text-[#534341]">About this project</p>
+          {projectTitle && <p className="mt-1.5 font-semibold text-[#534341]">{projectTitle}</p>}
+          {program && <p className="mt-1">{program}</p>}
+          {school && <p>{school}</p>}
+          {team.length > 0 && (
+            <>
+              <p className="mt-3 font-semibold text-[#534341]">Proponents{section && ` · ${section}`}</p>
+              <TeamList className="mt-1" />
+            </>
+          )}
+          <p className="mt-3">Academic prototype for the {area}. Not an official Bureau of Fire Protection service.</p>
         </footer>
       </div>
     </main>

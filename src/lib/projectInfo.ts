@@ -1,14 +1,22 @@
 // Capstone credits shown on the sign-in and registration pages.
-// Fill in the blanks below; empty fields are simply left off the page.
+// Empty fields are simply left off the page.
 export const PROJECT_INFO = {
   label: 'Capstone Project',
   year: '2026',
+  title: 'IoT-Based Fire Detection and Location Tracking System Using Multi-Sensor Fusion and Dual-Path Communication',
   /** e.g. 'Bulacan State University' */
   school: '',
-  /** e.g. 'BS Computer Engineering' */
-  program: '',
-  /** Team members, shown in this order. */
-  team: [] as string[],
+  program: 'Bachelor of Science in Information Technology, major in Infrastructure Services',
+  section: 'BSIT 4C-G2',
+  /** Proponents, shown in this order. */
+  team: [
+    'Bernades, Trixy Ann C.',
+    'Carreon, Ryo Jiro S.',
+    'Gonzales, Jazmin Joy O.',
+    'Jumaquio, Brent Jacob M.',
+    'Montano, Piona Angela L.',
+    'Pangilinan, Jasmine L.',
+  ] as string[],
   /** Where the system is designed to be deployed. */
   area: 'City of Malolos, Bulacan',
 };
