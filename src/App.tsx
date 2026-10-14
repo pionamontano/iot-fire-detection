@@ -44,6 +44,7 @@ import { ResidentSetup } from './pages/resident/ResidentSetup';
 import { ResidentAlertSettings } from './pages/resident/ResidentAlertSettings';
 import { ResidentDeviceInfo } from './pages/resident/ResidentDeviceInfo';
 import { ResidentSystemLog } from './pages/resident/ResidentSystemLog';
+import { ResidentAlerts } from './pages/resident/ResidentAlerts';
 import { ResidentAccount } from './pages/resident/ResidentAccount';
 
 // Pages - Common
@@ -98,6 +99,7 @@ function App() {
             <Route path="/setup" element={<ResidentSetup />} />
             <Route element={<ResidentLayout />}>
               <Route path="/home" element={<ResidentHome />} />
+              <Route path="/home/alerts" element={<ResidentAlerts />} />
               <Route path="/home/settings" element={<ResidentAlertSettings />} />
               <Route path="/home/devices" element={<ResidentDeviceInfo />} />
               <Route path="/home/logs" element={<ResidentSystemLog />} />

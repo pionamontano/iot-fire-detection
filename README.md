@@ -65,6 +65,7 @@ The Responder routes are mounted under `/responder`.
 The Resident routes are mounted under `/home` or `/account`.
 - Setup (`ResidentSetup.tsx`): Initial onboarding flow for new users to register their location and devices.
 - Resident Home (`ResidentHome.tsx`): The primary view showing the status of their specific home and devices.
+- Alert History (`ResidentAlerts.tsx`): The resident's past alerts, filtered by date range and tier.
 - Alert Settings (`ResidentAlertSettings.tsx`): Configuration for how they receive notifications (e.g., SMS, push notifications).
 - Device Info & Logs (`ResidentDeviceInfo.tsx`, `ResidentSystemLog.tsx`): Localized monitoring of their own hardware sensors.
 

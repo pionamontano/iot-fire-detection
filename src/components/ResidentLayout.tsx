@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, BellRing, Settings, Menu, X, Cpu, FileText } from 'lucide-react';
+import { LayoutDashboard, BellRing, Settings, Menu, X, Cpu, FileText, History } from 'lucide-react';
 import { NotificationDropdown, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
@@ -20,6 +20,7 @@ export const ResidentLayout = () => {
 
   const navItems = [
     { name: 'Dashboard', path: '/home', icon: LayoutDashboard },
+    { name: 'Alert History', path: '/home/alerts', icon: History },
     { name: 'Alert Settings', path: '/home/settings', icon: BellRing },
     { name: 'Device Information', path: '/home/devices', icon: Cpu },
     { name: 'System Log', path: '/home/logs', icon: FileText },

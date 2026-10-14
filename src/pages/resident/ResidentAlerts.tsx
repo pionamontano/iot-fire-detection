@@ -90,11 +90,15 @@ export const ResidentAlerts = () => {
   };
 
   return (
-    <div className="max-w-[640px] mx-auto w-full px-4 py-8 flex flex-col gap-6 font-['Inter',_sans-serif]">
-      {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-black tracking-tight text-[#18181B]">Alert Log</h1>
-        <p className="text-sm text-[#52525B]">History of fire alerts detected by your device.</p>
+    <div className="flex flex-col gap-6 pb-12">
+      {/* Header (same layout as the other resident pages) */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-[#DC2626]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Alerts</span>
+        </div>
+        <h1 className="text-3xl font-black tracking-tight text-[#18181B]">Alert History</h1>
+        <p className="text-sm text-[#52525B] mt-1">Fire alerts and warnings your device detected, by date range and tier.</p>
       </div>
 
       {/* Filters */}

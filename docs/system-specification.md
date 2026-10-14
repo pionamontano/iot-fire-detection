@@ -205,7 +205,7 @@ Roles are exactly those in `profiles.role` CHECK (`20260717000000_init.sql:29`):
 | Aspect | Detail | Evidence |
 |---|---|---|
 | Purpose | Monitor own device, edit its thresholds, review location-drift prompts, manage own contact | |
-| UI pages | `/setup` (mandatory first), `/home`, `/home/settings`, `/home/devices`, `/home/logs`, `/account` | `App.tsx:87-95` |
+| UI pages | `/setup` (mandatory first), `/home`, `/home/alerts`, `/home/settings`, `/home/devices`, `/home/logs`, `/account` | `App.tsx:87-95` |
 | Backend authority | Read own device (`devices_safe`/column grants), own `sensor_readings`/`alert_events` (`device_id = own`); `update_own_device_alert_settings()` (CO 0–1000, temp 0–100; approved resident only); `resolve_address_discrepancy()` (own rows; approval overwrites the device's registered address and coordinates); self-update of own profile (non-protected columns); `link-device` Edge Function | `20260917080000`, `20261016000000`, `link-device/index.ts` |
 | Prohibited | Other residents' data; role/status/device_id changes via direct update (trigger resets them) | `protect_profile_fields` init.sql:236-261 |
 | Concerns | `protect_profile_fields` does not cover `is_active`, `setup_complete`, `telegram_chat_id` (KI-10). A resident's approval of a drift prompt changes the *device-wide* registered location used by all subsequent drift checks (design as implemented) | |
@@ -522,7 +522,7 @@ Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `supp
 | Resident | `ResidentSetup` | First-run contact number | `profiles` | Save | AuthGuard(resident) | Verified | |
 | Resident | `ResidentHome` | Own device dashboard + link + drift prompt | `devices_safe`, `sensor_readings`, `alert_events`, `address_discrepancies`; Edge/RPC | Link device, refresh, approve/reject drift | same / RLS | Partial | KI-01, KI-03 |
 | Resident | `ResidentAlertSettings` | Thresholds, contact, push, Telegram | `devices_safe`, RPC, `profiles` | Save | same | Verified | KI-24 |
-| Resident | `ResidentDeviceInfo`, `ResidentSystemLog`, `ResidentAlerts` | Device info, log, alert list | `devices_safe`, `sensor_readings`, `alert_events` | Refresh | same | Partial | `ResidentAlerts.tsx` is not routed in `App.tsx` (unused page — Verified by route list) |
+| Resident | `ResidentDeviceInfo`, `ResidentSystemLog`, `ResidentAlerts` | Device info, log, alert list | `devices_safe`, `sensor_readings`, `alert_events` | Refresh | same | Verified | `ResidentAlerts.tsx` is routed at `/home/alerts` ("Alert History" in the resident sidebar) |
 | Resident | `ResidentAccount` | Name/contact | `profiles`, `devices_safe` | Save | same | Partial | |
 | Shared | `AdminLayout`/`ResponderLayout`/`ResidentLayout`, `HeaderWidgets` (search, bell, user menu), `AdminSupportModal`, `LoadErrorBanner`, `GlobalErrorBoundary`, `LocationBadge` | Shell and helpers | | | | | |
 
