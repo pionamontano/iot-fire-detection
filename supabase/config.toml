@@ -42,3 +42,6 @@ verify_jwt = false
 
 [functions.link-device]
 verify_jwt = false
+
+[functions.resolve-support-request]
+verify_jwt = false

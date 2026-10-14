@@ -86,7 +86,8 @@ Located in `supabase/functions/`. Functions called by the ESP32 authenticate wit
 | **`link-device`** | Resident | Links the caller to a device by device code. |
 | **`telegram-webhook`** | Telegram | Links a user's Telegram chat ID to their profile (`/start <token>`). *No code yet sends alerts to per-user chats; alerts go to the shared station chat only.* |
 | **`register-push`** / **`send-push-notification`** | Frontend / backend | Web Push (VAPID) subscription storage and delivery. |
-| **`admin-support-request`** | Frontend | Inserts an in-app support request. |
+| **`admin-support-request`** | Frontend | Inserts an in-app support request and notifies every approved, active admin (browser push that opens `/admin/support?request=<id>`, plus their linked Telegram chat; the link is added to Telegram only when the `APP_URL` secret is set). |
+| **`resolve-support-request`** | Admin | Resolves or reopens a support request; on resolve, messages the requester (linked Telegram chat + browser push) with the admin's note. |
 
 ---
 

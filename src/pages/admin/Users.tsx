@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { PageHeader } from '../../components/PageHeader';
 import { FilterChips } from '../../components/FilterChips';
 import { supabase } from '../../lib/supabase';
@@ -10,11 +9,17 @@ import type { Profile, RegistrationRequest, Device } from '../../lib/supabase';
 import {
   UserPlus, Cpu,
   Loader2, Link, CheckCircle, Users as UsersIcon, UserX, Pencil,
-  Search, X, AlertCircle, ShieldAlert
+  Search, AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { usePagedRows } from '../../hooks/usePagedRows';
+import {
+  LABEL, FIELD, BTN, BTN_SECONDARY, BTN_PRIMARY, BTN_SUCCESS, ACTION, ACTION_APPROVE, ACTION_REJECT, ACTION_EDIT,
+  PILL, PILL_OK, PILL_WARN, PILL_OFF, Avatar, Identity, ErrorNote, Modal, ModalActions,
+} from '../../components/ui';
+import { OptionList, DevicePicker } from '../../components/pickers';
+import { ROLE_OPTIONS } from '../../lib/roles';
 
 // One placeholder for every missing value on this page.
 const EMPTY = '—';
@@ -32,26 +37,6 @@ const formatDate = (dateStr: string | null) => {
 // manage-registration stores this literal when an admin rejects without
 // typing a reason, so it is not a real reason to show.
 const DEFAULT_REJECT_NOTE = 'Rejected';
-
-// ─── Shared styles (theme tokens from index.css, same as Dashboard) ───
-
-const LABEL = 'block text-sm font-bold text-text mb-1';
-const FIELD = 'w-full h-10 px-3 border border-border rounded-lg bg-surface-card text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary';
-const BTN = 'h-10 px-4 rounded-lg font-bold text-sm transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-50';
-const BTN_SECONDARY = `${BTN} border border-border text-text-body bg-surface-card hover:bg-surface`;
-const BTN_PRIMARY = `${BTN} bg-primary text-white hover:bg-primary-dark shadow-sm`;
-const BTN_SUCCESS = `${BTN} bg-success-dark text-white hover:bg-[#065F46] shadow-sm`;
-// Row-level actions: compact pills on desktop, full-width tap targets on cards.
-const ACTION = 'h-9 px-3 rounded-lg font-bold text-sm transition-colors inline-flex items-center justify-center gap-1.5 flex-1 2xl:flex-none';
-const ACTION_APPROVE = `${ACTION} bg-success/10 text-success-dark hover:bg-success/20`;
-const ACTION_REJECT = `${ACTION} bg-tier2-bg text-primary hover:bg-tier2-bg/70`;
-const ACTION_EDIT = `${ACTION} border border-border text-text-body bg-surface-card hover:bg-surface hover:text-text`;
-
-// No nowrap here: table cells already keep one line, card fields may need to wrap.
-const PILL = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-bold max-w-full';
-const PILL_OK = `${PILL} bg-success/10 text-success-dark border-success/30`;
-const PILL_WARN = `${PILL} bg-tier1-bg text-tier1-text border-amber-light/40`;
-const PILL_OFF = `${PILL} bg-surface-alt text-text-muted border-border`;
 
 type TabType = 'approved' | 'pending' | 'rejected';
 type AccountInfo = { email: string | null; last_sign_in_at: string | null };
@@ -73,167 +58,11 @@ const getRoleLabel = (role: string) => {
   }
 };
 
-const ROLE_OPTIONS: Option[] = [
-  { value: 'resident', title: 'Resident / Owner', detail: 'Owns a device and gets home alerts' },
-  { value: 'bfp_responder', title: 'BFP Responder', detail: 'Receives and responds to fire alerts' },
-  { value: 'admin', title: 'Administrator', detail: 'Full access to this dashboard' },
-];
 
 const RoleBadge = ({ role }: { role: string }) => (
   <span className={`${PILL} font-semibold ${ROLE_BADGE[role] ?? 'bg-gray-100 text-gray-800 border-gray-200'}`}>
     {getRoleLabel(role)}
   </span>
-);
-
-const Avatar = ({ name }: { name: string }) => (
-  <div className="w-10 h-10 shrink-0 rounded-full bg-surface border border-border flex items-center justify-center font-bold text-text-body">
-    {name.charAt(0).toUpperCase()}
-  </div>
-);
-
-type Option = { value: string; title: string; detail?: React.ReactNode; icon?: React.ReactNode };
-
-// Tappable radio cards (replaces a <select> inside forms and modals): shows
-// each option's details, not just its name, and works well with touch.
-const OptionList = ({ name, label, value, onChange, options }: {
-  name: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: Option[];
-}) => (
-  <div role="radiogroup" aria-label={label} className="grid grid-cols-1 gap-2">
-    {options.map(o => {
-      const selected = o.value === value;
-      return (
-        <label
-          key={o.value || 'none'}
-          className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-            selected ? 'border-primary bg-surface-warm ring-1 ring-primary' : 'border-border bg-surface-card hover:border-text-faint'
-          }`}
-        >
-          <input
-            type="radio"
-            name={name}
-            value={o.value}
-            checked={selected}
-            onChange={() => onChange(o.value)}
-            className="mt-0.5 accent-[var(--color-primary)] shrink-0"
-          />
-          {o.icon}
-          <span className="min-w-0">
-            <span className="block text-sm font-bold text-text">{o.title}</span>
-            {o.detail && <span className="block text-xs text-text-warm mt-0.5">{o.detail}</span>}
-          </span>
-        </label>
-      );
-    })}
-  </div>
-);
-
-// Device chooser for the approve/assign modals: a searchable list of the
-// unassigned devices, showing code, name and installed location.
-const DevicePicker = ({ name, value, onChange, devices, noneLabel }: {
-  name: string;
-  value: string;
-  onChange: (id: string) => void;
-  devices: Device[];
-  // When set, a first "skip" option with this title (value '').
-  noneLabel?: string;
-}) => {
-  const [query, setQuery] = useState('');
-  const q = query.trim().toLowerCase();
-  const shown = devices.filter(d =>
-    d.id === value || !q || [d.device_code, d.label, d.location_desc].some(f => f?.toLowerCase().includes(q))
-  );
-  const options: Option[] = [
-    ...(noneLabel ? [{ value: '', title: noneLabel, detail: 'You can assign one later from the Approved Users tab.' }] : []),
-    ...shown.map(d => ({
-      value: d.id,
-      title: d.device_code,
-      detail: [d.label, d.location_desc].filter(Boolean).join(' · ') || undefined,
-      icon: <Cpu className="w-4 h-4 mt-0.5 text-primary-dark shrink-0" />,
-    })),
-  ];
-  return (
-    <div className="space-y-2">
-      {devices.length > 5 && (
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-faint pointer-events-none" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search code, name or location"
-            aria-label="Search devices"
-            className={`${FIELD} pl-9`}
-          />
-        </div>
-      )}
-      <div className="max-h-64 overflow-y-auto -mx-1 px-1 py-1">
-        <OptionList name={name} label="Device" value={value} onChange={onChange} options={options} />
-        {devices.length === 0 ? (
-          <p className="text-xs text-amber mt-2 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" />
-            No unassigned devices available. Register one under Devices.
-          </p>
-        ) : shown.length === 0 && (
-          <p className="text-xs text-text-warm mt-2">No devices match “{query}”.</p>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const Identity = ({ name, sub, badge }: { name: string; sub: React.ReactNode; badge?: React.ReactNode }) => (
-  <div className="flex items-center gap-3 min-w-0">
-    <Avatar name={name} />
-    <div className="min-w-0">
-      <div className="text-sm font-bold text-text flex items-center gap-2 flex-wrap">
-        <span className="truncate">{name}</span>
-        {badge}
-      </div>
-      <div className="text-sm text-text-warm truncate">{sub}</div>
-    </div>
-  </div>
-);
-
-const ErrorNote = ({ message }: { message: string }) => (
-  <div className="mb-4 p-3 bg-tier2-bg text-tier2-text text-sm rounded-lg flex items-start gap-2">
-    <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-    {message}
-  </div>
-);
-
-// Bottom sheet on phones, centred dialog from sm up; body scrolls if tall.
-// Portalled to <body> so it covers the app header, which sits in a separate
-// stacking context from the page content.
-const Modal = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => createPortal(
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 z-[100]" onClick={onClose}>
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onClick={(e) => e.stopPropagation()}
-      className="bg-surface-card w-full sm:max-w-md max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-xl shadow-2xl border border-border"
-    >
-      <div className="px-5 sm:px-6 py-4 border-b border-border flex justify-between items-center gap-4 shrink-0">
-        <h3 className="text-lg sm:text-xl font-black text-text">{title}</h3>
-        <button onClick={onClose} className="p-1 -m-1 text-text-faint hover:text-text-body" aria-label="Close">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-      <div className="p-5 sm:p-6 overflow-y-auto">{children}</div>
-    </div>
-  </div>,
-  document.body
-);
-
-// Stacked full-width buttons on phones (primary on top), a right-aligned row from sm up.
-const ModalActions = ({ children }: { children: React.ReactNode }) => (
-  <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3 [&>button]:w-full sm:[&>button]:w-auto">
-    {children}
-  </div>
 );
 
 type Column<T> = {

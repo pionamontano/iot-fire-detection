@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ProfileSkeleton } from '../../components/SkeletonLoaders';
 import { Settings, Save, CheckCircle2, User, Phone, Shield, Calendar, AlertTriangle, Building2, MapPin, Mail, Send, Bell } from 'lucide-react';
 import { AdminSupportModal } from '../../components/AdminSupportModal';
+import { MySupportRequests } from '../../components/MySupportRequests';
 import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
 
 export const ResponderSettings = () => {
@@ -36,6 +37,7 @@ export const ResponderSettings = () => {
   const [stationContact, setStationContact] = useState('');
   const [email, setEmail] = useState('');
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [supportRefresh, setSupportRefresh] = useState(0);
 
   useEffect(() => {
     if (profile) {
@@ -473,6 +475,8 @@ export const ResponderSettings = () => {
               Contact Administrator
             </button>
           </div>
+
+          <MySupportRequests userId={profile.id} refreshKey={supportRefresh} />
         </div>
       </div>
 
@@ -481,6 +485,7 @@ export const ResponderSettings = () => {
         onClose={() => setIsSupportModalOpen(false)}
         profile={profile}
         userEmail={user?.email}
+        onSubmitted={() => setSupportRefresh(n => n + 1)}
       />
     </div>
   );

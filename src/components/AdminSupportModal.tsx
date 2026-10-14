@@ -7,6 +7,8 @@ interface AdminSupportModalProps {
   onClose: () => void;
   profile: any;
   userEmail?: string | null;
+  // Called once a request is saved, e.g. to refresh the "My Requests" list.
+  onSubmitted?: () => void;
 }
 
 const CATEGORIES = [
@@ -17,7 +19,7 @@ const CATEGORIES = [
   "Other"
 ];
 
-export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, onClose, profile, userEmail }) => {
+export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, onClose, profile, userEmail, onSubmitted }) => {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,7 +61,8 @@ export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({ isOpen, on
         throw new Error(data.error?.message || data.error);
       }
 
-      setSuccessMsg('Support request sent to the administrator. We will review your account shortly.');
+      setSuccessMsg("Support request sent. You'll see the administrator's reply under My Requests, and on Telegram if it's linked.");
+      onSubmitted?.();
 
       // Auto close after showing success for a brief moment
       setTimeout(() => {

@@ -122,3 +122,14 @@ test('validation unchanged', async () => {
   assert.equal((await s.post({ alert_event_id: 'a1', role: 'x', success: true })).status, 400);
   assert.equal((await s.post({ alert_event_id: 'a1', role: 'owner', success: 'yes' })).status, 400);
 });
+
+test('a same-site url is passed to the notification; an off-site or protocol-relative one is dropped', async () => {
+  const payloads = [];
+  const webpush = { setVapidDetails() {}, sendNotification: async (_sub, payload) => { payloads.push(JSON.parse(payload)); return { statusCode: 201 }; } };
+  const db = new FakeDb({ profiles, push_subscriptions: subs.filter((s) => s.endpoint.endsWith('token-1')) });
+  const handler = loadHandler('send-push-notification', { db, webpush, env: ENV });
+  for (const url of ['/admin/support?request=r1', 'https://evil.example', '//evil.example', '/\\evil.example', 42]) {
+    await call(handler, { userIds: ['u-ok'], title: 't', body: 'b', url });
+  }
+  assert.deepEqual(payloads.map((p) => p.url), ['/admin/support?request=r1', undefined, undefined, undefined, undefined]);
+});
