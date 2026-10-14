@@ -19,7 +19,7 @@ import {
   Map as MapIcon,
 } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
-import { TABLE_CARD, TABLE_TITLE, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager } from '../../components/Table';
+import { TABLE_CARD, TABLE_TITLE, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { getDeviceStatus as getSharedDeviceStatus, getStatusNote, DEVICE_STATUS, DEVICE_STATUS_ORDER } from '../../lib/deviceStatus';
 import type { DeviceStatus } from '../../lib/deviceStatus';
 import { StatusBadge } from '../../components/StatusBadge';
@@ -74,8 +74,7 @@ export const Alerts = () => {
     setCurrentPage(1);
   };
   const [currentPage, setCurrentPage] = useState(1);
-  // Same page size as the Devices table.
-  const itemsPerPage = 10;
+  const itemsPerPage = TABLE_PAGE_SIZE;
 
   const fetchData = useCallback(async () => {
     setLoading(true);

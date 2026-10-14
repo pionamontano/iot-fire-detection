@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Device } from '../../lib/supabase';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
-import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager } from '../../components/Table';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { useSearchParams } from 'react-router-dom';
 import {
   Download,
@@ -63,7 +63,7 @@ export const ResponderAlertLogs = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [avgResponseSeconds, setAvgResponseSeconds] = useState<number | null>(null);
   const [selectedLog, setSelectedLog] = useState<LogRow | null>(null);
-  const itemsPerPage = 15;
+  const itemsPerPage = TABLE_PAGE_SIZE;
 
   useEffect(() => {
     fetchData();

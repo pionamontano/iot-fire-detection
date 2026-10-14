@@ -7,7 +7,7 @@ import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import { Download, ChevronDown, AlertTriangle, Zap, History, Filter } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
-import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager } from '../../components/Table';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 
 type LogEvent = {
   id: string;
@@ -39,7 +39,6 @@ export const Logs = () => {
   const [eventTypeFilter, setEventTypeFilter] = useState<string>('All Event Types');
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
-  const itemsPerPage = 25;
   const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
 
   useEffect(() => {
@@ -155,8 +154,8 @@ export const Logs = () => {
   }, [logs, eventTypeFilter]);
 
   const paginatedLogs = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredLogs.slice(startIndex, startIndex + itemsPerPage);
+    const startIndex = (currentPage - 1) * TABLE_PAGE_SIZE;
+    return filteredLogs.slice(startIndex, startIndex + TABLE_PAGE_SIZE);
   }, [filteredLogs, currentPage]);
 
 
@@ -305,7 +304,7 @@ export const Logs = () => {
             </tbody>
           </table>
         </TableScroll>
-        <TablePager page={currentPage} pageSize={itemsPerPage} total={filteredLogs.length} onPageChange={setCurrentPage} />
+        <TablePager page={currentPage} pageSize={TABLE_PAGE_SIZE} total={filteredLogs.length} onPageChange={setCurrentPage} />
       </div>
 
       {/* ─── Footer Summary Cards ─── */}

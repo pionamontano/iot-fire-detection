@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { DeviceInfoSkeleton } from '../../components/SkeletonLoaders';
-import { TABLE_CARD, TABLE_TOOLBAR, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
+import { TABLE_CARD, TABLE_TOOLBAR, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
+import { usePagedRows } from '../../hooks/usePagedRows';
 import type { Device, SensorReading } from '../../lib/supabase';
 import { MapPin, Thermometer, Wind, Clock, Wifi, WifiOff, CheckCircle2, XCircle, RefreshCw, Pencil, ShieldCheck } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -59,6 +60,8 @@ export const ResidentDeviceInfo = () => {
     await fetchData(profile.device_id);
     setRefreshing(false);
   };
+
+  const { page, setPage, pageRows } = usePagedRows(readings);
 
   if (loading) return <DeviceInfoSkeleton />;
   if (!device) return <div className="p-8 font-bold text-[#DC2626]">No device registered to your account.</div>;
@@ -183,7 +186,7 @@ export const ResidentDeviceInfo = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {readings.length > 0 ? readings.map(r => (
+                  {readings.length > 0 ? pageRows.map(r => (
                     <tr key={r.id} className={TR}>
                       <td className={`${TD} text-xs text-[#52525B]`}>{new Date(r.recorded_at).toLocaleString()}</td>
                       <td className={`${TD} text-xs font-bold ${r.temp_celsius >= device.temp_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.temp_celsius.toFixed(1)}°C</td>
@@ -198,6 +201,7 @@ export const ResidentDeviceInfo = () => {
                 </tbody>
               </table>
             </TableScroll>
+            <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={readings.length} onPageChange={setPage} />
           </div>
         </div>
 

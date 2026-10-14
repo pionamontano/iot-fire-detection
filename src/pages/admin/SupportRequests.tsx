@@ -6,7 +6,8 @@ import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import { Loader2, CheckCircle, X, Mail, Phone } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
-import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
+import { usePagedRows } from '../../hooks/usePagedRows';
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return 'N/A';
@@ -93,6 +94,7 @@ export const SupportRequests = () => {
   const openRequests = requests.filter(r => r.status === 'open');
   const resolvedRequests = requests.filter(r => r.status === 'resolved');
   const visibleRequests = activeTab === 'open' ? openRequests : resolvedRequests;
+  const { page, setPage, pageRows } = usePagedRows(visibleRequests, activeTab);
 
   return (
     <>
@@ -158,7 +160,7 @@ export const SupportRequests = () => {
                 <tbody>
                   {loading ? (
                     <TableBodySkeleton cols={6} rows={5} />
-                  ) : visibleRequests.map((req) => (
+                  ) : pageRows.map((req) => (
                     <tr key={req.id} className={TR}>
                       <td className={`${TD} whitespace-nowrap`}>
                         <div className="flex items-center">
@@ -219,6 +221,7 @@ export const SupportRequests = () => {
                 </tbody>
               </table>
             </TableScroll>
+            <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={visibleRequests.length} onPageChange={setPage} />
           </div>
         </div>
       </div>

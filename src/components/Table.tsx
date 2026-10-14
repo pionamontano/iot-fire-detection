@@ -5,6 +5,9 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 // so headers, row spacing, hover, empty states and paging match everywhere.
 // Pages keep their own cell content; only the frame comes from here.
 
+/** Rows per page for every paged table. */
+export const TABLE_PAGE_SIZE = 10;
+
 /** White card the table (and its optional toolbar and pager) sits in. */
 export const TABLE_CARD = 'bg-white border border-border rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden';
 /** Title + search/filters bar at the top of a table card. */

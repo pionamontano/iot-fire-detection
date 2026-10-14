@@ -10,7 +10,7 @@ import type { Device, FirmwareRelease, AlertEvent } from '../../lib/supabase';
 import { isValidCoordinate, displayAddress } from '../../lib/location';
 import { Cpu, ChevronDown, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket, MapPin, ShieldCheck, CheckCircle2, Plus, Search, Filter, Map as MapIcon } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
-import { TABLE_CARD, TABLE_TOOLBAR, TABLE_TITLE, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager } from '../../components/Table';
+import { TABLE_CARD, TABLE_TOOLBAR, TABLE_TITLE, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { StatusBadge } from '../../components/StatusBadge';
 import { getDeviceStatus, getStatusNote } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
@@ -52,7 +52,6 @@ const FILTER_OPTIONS: { value: DeviceFilter; label: string }[] = [
   { value: 'unassigned', label: 'No resident linked' },
   { value: 'disabled', label: 'Disabled' },
 ];
-const PAGE_SIZE = 10;
 
 const timeAgo = (dateStr: string) => {
   const seconds = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 1000);
@@ -429,9 +428,9 @@ export const Devices = () => {
     return !q || [d.device_code, d.label, d.location_desc, residentNameByDevice[d.id]].some(v => v?.toLowerCase().includes(q));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [devices, filter, q, residentNameByDevice, latestRelease]);
-  const totalPages = Math.max(1, Math.ceil(filteredDevices.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredDevices.length / TABLE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const pageDevices = filteredDevices.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageDevices = filteredDevices.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
   const changeFilter = (f: DeviceFilter) => { setFilter(f); setFilterOpen(false); setPage(1); };
 
   const closeRegister = () => { setRegisterOpen(false); setRegistered(null); setRegisterError(null); };
@@ -621,7 +620,7 @@ export const Devices = () => {
           </table>
         </TableScroll>
 
-        <TablePager page={currentPage} pageSize={PAGE_SIZE} total={filteredDevices.length} onPageChange={setPage} />
+        <TablePager page={currentPage} pageSize={TABLE_PAGE_SIZE} total={filteredDevices.length} onPageChange={setPage} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

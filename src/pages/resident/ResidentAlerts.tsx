@@ -3,7 +3,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Filter } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
-import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
+import { usePagedRows } from '../../hooks/usePagedRows';
 
 type ResidentAlertEvent = {
   id: string;
@@ -70,6 +71,8 @@ export const ResidentAlerts = () => {
       setLoading(false);
     }
   }, [profile?.device_id, fromDate, toDate, tierFilter, fetchLogs]);
+
+  const { page, setPage, pageRows } = usePagedRows(logs, `${fromDate}|${toDate}|${tierFilter}`);
 
   const getTierBadge = (tier: number) => {
     if (tier === 1) {
@@ -151,7 +154,7 @@ export const ResidentAlerts = () => {
               ) : logs.length === 0 ? (
                 <TableEmpty colSpan={4}>No alerts found for the selected filters.</TableEmpty>
               ) : (
-                logs.map(log => {
+                pageRows.map(log => {
                   const d = new Date(log.triggered_at);
                   const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                   const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -178,6 +181,7 @@ export const ResidentAlerts = () => {
             </tbody>
           </table>
         </TableScroll>
+        <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={logs.length} onPageChange={setPage} />
       </div>
     </div>
   );

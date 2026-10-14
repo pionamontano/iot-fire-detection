@@ -12,7 +12,8 @@ import {
   Search, X, AlertCircle, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD } from '../../components/Table';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
+import { usePagedRows } from '../../hooks/usePagedRows';
 
 // One placeholder for every missing value on this page.
 const EMPTY = '—';
@@ -277,8 +278,10 @@ type Column<T> = {
 
 // One list per tab, one definition per list: a table from 2xl up (where the
 // sidebar still leaves room for every column), labelled cards below it.
-function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
+function DataList<T>({ rows, rowKey, identity, columns, actions, empty, resetKey }: {
   rows: T[];
+  // Back to page 1 when this changes (tab, search, filter).
+  resetKey: string;
   rowKey: (row: T) => string;
   identity: Column<T>;
   columns: Column<T>[];
@@ -286,6 +289,7 @@ function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
   actions?: (row: T) => React.ReactNode;
   empty: React.ReactNode;
 }) {
+  const { page, setPage, pageRows } = usePagedRows(rows, resetKey);
   if (rows.length === 0) {
     return <div className="px-5 py-14 text-center font-medium text-sm text-text-body">{empty}</div>;
   }
@@ -300,7 +304,7 @@ function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
           </tr>
         </thead>
         <tbody>
-          {rows.map(row => (
+          {pageRows.map(row => (
             <tr key={rowKey(row)} className={TR}>
               {[identity, ...columns].map(c => (
                 <td key={c.header} className={`${TD} text-text ${c.wrap ? 'max-w-xs' : 'whitespace-nowrap'}`}>{c.cell(row)}</td>
@@ -317,7 +321,7 @@ function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
       </div>
 
       <ul className="2xl:hidden grid grid-cols-1 lg:grid-cols-2 gap-3 p-3 sm:p-4">
-        {rows.map(row => {
+        {pageRows.map(row => {
           const rowActions = actions?.(row);
           return (
           <li key={rowKey(row)} className="border border-border rounded-lg p-4 flex flex-col gap-4 bg-surface-card">
@@ -335,6 +339,7 @@ function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
           );
         })}
       </ul>
+      <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={rows.length} onPageChange={setPage} />
     </>
   );
 }
@@ -850,6 +855,7 @@ export const Users = () => {
               </div>
             ) : activeTab === 'pending' ? (
               <DataList
+                resetKey={`${activeTab}|${searchTerm}|${roleFilter}`}
                 rows={pendingRequests}
                 rowKey={(r) => r.id}
                 identity={requestIdentity}
@@ -886,6 +892,7 @@ export const Users = () => {
               />
             ) : activeTab === 'rejected' ? (
               <DataList
+                resetKey={`${activeTab}|${searchTerm}|${roleFilter}`}
                 rows={rejectedRequests}
                 rowKey={(r) => r.id}
                 identity={requestIdentity}
@@ -913,6 +920,7 @@ export const Users = () => {
               />
             ) : (
               <DataList
+                resetKey={`${activeTab}|${searchTerm}|${roleFilter}`}
                 rows={approvedUsers}
                 rowKey={(u) => u.id}
                 identity={{

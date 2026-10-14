@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { SystemLogSkeleton } from '../../components/SkeletonLoaders';
-import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
+import { usePagedRows } from '../../hooks/usePagedRows';
 import type { AlertEvent } from '../../lib/supabase';
 import { FileText, RefreshCw, Flame, ThermometerSun } from 'lucide-react';
 
@@ -54,6 +55,7 @@ export const ResidentSystemLog = () => {
     if (filter === 'resolved') return !!a.resolved_at;
     return true;
   });
+  const { page, setPage, pageRows } = usePagedRows(filtered, filter);
 
   const activeCount = alerts.filter(a => !a.resolved_at).length;
   const resolvedCount = alerts.filter(a => !!a.resolved_at).length;
@@ -121,7 +123,7 @@ export const ResidentSystemLog = () => {
               </tr>
             </thead>
             <tbody>
-              {filtered.length > 0 ? filtered.map(alert => (
+              {filtered.length > 0 ? pageRows.map(alert => (
                 <tr key={alert.id} className={TR}>
                   <td className={TD}>
                     <div className="flex items-center gap-2">
@@ -166,9 +168,10 @@ export const ResidentSystemLog = () => {
             </tbody>
           </table>
         </TableScroll>
+        <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={filtered.length} onPageChange={setPage} />
       </div>
 
-      <p className="text-xs text-[#A1A1AA]">Showing {filtered.length} of {alerts.length} events (max 50)</p>
+      <p className="text-xs text-[#A1A1AA]">Only the 50 most recent events are kept here.</p>
     </div>
   );
 };
