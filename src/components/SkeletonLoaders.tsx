@@ -126,24 +126,32 @@ export const ResponderDashboardSkeleton = () => (
 export const ResidentHomeSkeleton = () => (
   <div className="flex flex-col gap-6 pb-12 animate-fade-in">
     {/* Header */}
-    <div className="flex flex-wrap justify-between items-start gap-4">
+    <div className="flex flex-wrap justify-between items-end gap-4">
       <div className="flex flex-col gap-2">
-        <Skeleton className="h-3 w-20" />
-        <Skeleton className="h-8 w-44 rounded-md" />
+        <Skeleton className="h-10 w-48 rounded-md" />
         <Skeleton className="h-4 w-72 max-w-full" />
       </div>
-      <Skeleton className="h-8 w-28 rounded" />
+      <Skeleton className="h-10 w-28 rounded-lg" />
     </div>
 
-    {/* 4 Stat Cards */}
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-      {[...Array(4)].map((_, i) => (
-        <div key={i} className="bg-white border border-border rounded-lg p-4 sm:p-5 flex flex-col gap-3">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-8 w-20 rounded-md" />
-          <Skeleton className="h-3 w-28" />
+    {/* Status panel */}
+    <div className="bg-white border border-border rounded-lg flex flex-col">
+      <div className="flex-1 p-5 sm:p-6 flex gap-4">
+        <Skeleton className="w-14 h-14 rounded-full shrink-0" />
+        <div className="flex-1 flex flex-col gap-3">
+          <Skeleton className="h-7 w-40 rounded-md" />
+          <Skeleton className="h-4 w-full max-w-lg" />
+          <Skeleton className="h-4 w-2/3 max-w-sm" />
         </div>
-      ))}
+      </div>
+      <div className="grid grid-cols-3 border-t border-border">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="px-4 sm:px-6 py-3 flex flex-col gap-2">
+            <Skeleton className="h-2.5 w-16" />
+            <Skeleton className="h-5 w-20" />
+          </div>
+        ))}
+      </div>
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -151,26 +159,18 @@ export const ResidentHomeSkeleton = () => (
       <div className="lg:col-span-2 flex flex-col gap-6">
         {/* Readings */}
         <div className="bg-white rounded-lg border border-border p-5 sm:p-6">
-          <Skeleton className="h-5 w-40 mb-2" />
-          <Skeleton className="h-3 w-56 mb-8" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
+          <Skeleton className="h-5 w-32 mb-2" />
+          <Skeleton className="h-3 w-56 mb-5" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[...Array(2)].map((_, i) => (
-              <div key={i} className="flex flex-col gap-3">
-                <Skeleton className="h-3 w-36" />
-                <Skeleton className="h-3 w-full rounded-full" />
-                <Skeleton className="h-3 w-24" />
+              <div key={i} className="border border-border rounded-lg p-4 flex flex-col gap-3">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-9 w-24 rounded-md" />
+                <Skeleton className="h-2 w-full rounded-full" />
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Reading History */}
-        <div className="bg-white rounded-lg border border-border p-5 sm:p-6">
-          <div className="flex justify-between items-center mb-8">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-8 w-40 rounded-lg" />
-          </div>
-          <div className="h-44 flex items-end justify-between gap-[2px] ml-12">
+          <div className="h-44 flex items-end justify-between gap-[2px] ml-12 mt-12">
             {[...Array(24)].map((_, i) => (
               <Skeleton key={i} className="w-full rounded-t" style={{ height: `${30 + ((i * 37) % 40)}%` }} />
             ))}
@@ -187,35 +187,25 @@ export const ResidentHomeSkeleton = () => (
         </div>
       </div>
 
-      {/* Side Column */}
+      {/* Side Column: Notifications, Device Health, Install Location */}
       <div className="lg:col-span-1 flex flex-col gap-6">
-        {/* Device Health */}
-        <div className="bg-white rounded-lg p-5 sm:p-6 border border-border">
-          <Skeleton className="h-5 w-36 mb-2" />
-          <Skeleton className="h-3 w-32 mb-6" />
-          <div className="flex flex-col gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-4 w-4 rounded" />
-                  <Skeleton className="h-3 w-20" />
+        {[3, 3, 1].map((rows, c) => (
+          <div key={c} className="bg-white rounded-lg p-5 sm:p-6 border border-border">
+            <Skeleton className="h-5 w-36 mb-2" />
+            <Skeleton className="h-3 w-32 mb-6" />
+            <div className="flex flex-col gap-4">
+              {[...Array(rows)].map((_, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <Skeleton className="h-6 w-16 rounded-full" />
                 </div>
-                <Skeleton className="h-6 w-16 rounded-full" />
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Install Location */}
-        <div className="bg-white rounded-lg p-5 sm:p-6 border border-border">
-          <Skeleton className="h-5 w-36 mb-2" />
-          <Skeleton className="h-3 w-24 mb-4" />
-          <Skeleton className="h-48 w-full rounded mb-4" />
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-4 w-4 rounded" />
-            <Skeleton className="h-3 w-40" />
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   </div>

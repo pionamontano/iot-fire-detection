@@ -4,40 +4,34 @@ import { supabase } from '../../lib/supabase';
 import type { Device, AlertEvent, SensorReading } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  Wifi, WifiOff, ShieldAlert, BellRing, Clock, MapPin, Signal, Zap,
-  RefreshCw, Cpu, Loader2, Flame, ThermometerSun, AlertTriangle, ArrowRight,
-  FileText, Gauge,
+  Wifi, WifiOff, MapPin, Zap, RefreshCw, Cpu, Loader2, Flame, ThermometerSun,
+  AlertTriangle, ArrowRight, FileText, Gauge, ShieldCheck, Power,
+  Send, BellRing, Phone, Check, Wind, Thermometer,
 } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
 import { ResidentHomeSkeleton } from '../../components/SkeletonLoaders';
 import { BTN_SECONDARY, PILL_OK, PILL_WARN, PILL_OFF } from '../../components/ui';
 import { PageHeader } from '../../components/PageHeader';
 import { TABLE_CARD, TABLE_TOOLBAR, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
-import { resolveDeviceLocation, markerOpacity, displayAddress, isValidCoordinate } from '../../lib/location';
-import { DEVICE_STATUS, getConnectivityStatus, formatAgo } from '../../lib/deviceStatus';
+import { resolveDeviceLocation, displayAddress, isValidCoordinate } from '../../lib/location';
+import { DEVICE_STATUS, getConnectivityStatus, getDeviceStatus, formatAgo } from '../../lib/deviceStatus';
+import type { DeviceStatus } from '../../lib/deviceStatus';
 import { formatEventTime } from '../../lib/alertText';
-import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
+import { getPushSubscription } from '../../lib/pushNotifications';
+import { LocationBadge } from '../../components/LocationBadge';
 
-// The resident's home page: is my device reporting, is anything wrong right
-// now, what has it measured, and where is it. Connectivity uses the shared
-// 2 / 15 minute rule (lib/deviceStatus) like every other page, and readings
-// from a device that stopped reporting are labelled as old, never as live.
-
-const markerIcon = new L.Icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+// The resident's home page, in the order a resident asks: is my home OK right
+// now (status panel), what is the device measuring (readings), will I be told
+// if something happens (notifications), and what happened before (alerts).
+// Connectivity uses the shared 2 / 15 minute rule (lib/deviceStatus) like every
+// other page, and readings from a device that stopped reporting are labelled as
+// old, never as live.
 
 // Rows shown in Recent Alerts; the full list lives on Alert History.
 const RECENT_ALERT_ROWS = 5;
+// Window for the "alerts" count in the status panel.
+const ALERT_COUNT_DAYS = 7;
 
-// One card / heading style for every section on this page (same as the other resident pages).
+// One card / heading style for every section on this page.
 const CARD = 'bg-white rounded-lg border border-border p-5 sm:p-6';
 const CARD_TITLE = 'text-lg font-bold tracking-[-0.01em] text-text';
 
@@ -55,28 +49,6 @@ const AddressField = ({ label, value, onChange }: { label: string; value: string
   </label>
 );
 
-// Summary tile in the resident palette (same layout as the admin StatCard).
-// Red only when `urgent`, so a red "0" never reads as an alarm.
-const SummaryCard = ({ label, value, icon: Icon, hint, urgent = false }: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-  hint: string;
-  urgent?: boolean;
-}) => (
-  <div className={`rounded-lg border p-4 sm:p-5 flex flex-col gap-2 min-w-0 ${
-    urgent ? 'bg-tier2-bg/50 border-tier2-border/30 border-b-4 border-b-primary' : 'bg-white border-border'
-  }`}>
-    <div className="flex items-start justify-between gap-2">
-      <span className={`text-[10px] font-bold tracking-[0.1em] uppercase ${urgent ? 'text-primary' : 'text-text-body'}`}>{label}</span>
-      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${urgent ? 'text-primary' : 'text-text-faint'}`} />
-    </div>
-    <span className={`font-black text-[28px] leading-8 sm:text-[36px] sm:leading-10 tracking-tighter ${urgent ? 'text-primary' : 'text-text'}`}>
-      {value}
-    </span>
-    <span className={`text-xs font-medium ${urgent ? 'text-primary' : 'text-text-subtle'}`}>{hint}</span>
-  </div>
-);
 
 const SectionHeader = ({ title, meta, action }: { title: string; meta?: React.ReactNode; action?: React.ReactNode }) => (
   <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
@@ -94,68 +66,172 @@ const SectionLink = ({ to, children }: { to: string; children: React.ReactNode }
   </Link>
 );
 
-// Full-width notice above the page for things the resident must act on.
-const Notice = ({ tone, icon: Icon, title, children, action }: {
-  tone: 'fire' | 'warning' | 'offline';
+// Responder progress on an open alert, from the incident fields responders update.
+const INCIDENT_STEP: Record<string, string> = {
+  active: 'Waiting for a responder',
+  acknowledged: 'A responder has acknowledged',
+  responding: 'Responders are on the way',
+};
+
+// Status pill for an alert row: open alerts show the responder step, closed ones how they ended.
+const alertStatusPill = (a: AlertEvent): { label: string; className: string } => {
+  if (a.incident_status === 'false_alarm') return { label: 'False alarm', className: 'bg-surface-cream text-text-body' };
+  if (a.resolved_at) return { label: 'Resolved', className: 'bg-surface-cream text-text-body' };
+  if (a.incident_status === 'responding') return { label: 'Responding', className: 'bg-primary text-white' };
+  if (a.incident_status === 'acknowledged') return { label: 'Acknowledged', className: 'bg-primary text-white' };
+  return { label: 'Active', className: 'bg-primary text-white' };
+};
+
+// The one panel that answers "is my home OK?". Colors follow the shared
+// device-status vocabulary: red fire, amber warning, green online, blue
+// reconnecting, grey offline, near-black disabled.
+const HERO_STYLE: Record<DeviceStatus, { box: string; icon: string; title: string }> = {
+  fire: { box: 'bg-tier2-bg border-tier2-border/40', icon: 'bg-primary text-white', title: 'text-tier2-text' },
+  warning: { box: 'bg-tier1-bg border-amber-light/50', icon: 'bg-amber-light text-white', title: 'text-tier1-text' },
+  online: { box: 'bg-white border-border', icon: `${DEVICE_STATUS.online.badgeBg} ${DEVICE_STATUS.online.badgeText}`, title: 'text-text' },
+  reconnecting: { box: 'bg-white border-border', icon: `${DEVICE_STATUS.reconnecting.badgeBg} ${DEVICE_STATUS.reconnecting.badgeText}`, title: 'text-text' },
+  offline: { box: 'bg-surface-alt border-border', icon: `${DEVICE_STATUS.offline.badgeBg} ${DEVICE_STATUS.offline.badgeText}`, title: 'text-text' },
+  disabled: { box: 'bg-surface-alt border-border', icon: 'bg-text text-white', title: 'text-text' },
+};
+
+const StatusHero = ({ status, icon: Icon, title, children, action, facts }: {
+  status: DeviceStatus;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   children: React.ReactNode;
   action?: React.ReactNode;
+  facts: { label: string; value: string; sub?: string }[];
 }) => {
-  const styles = {
-    fire: 'bg-tier2-bg border-primary text-tier2-text',
-    warning: 'bg-tier1-bg border-amber-light text-tier1-text',
-    offline: 'bg-surface-alt border-text-faint text-text-body',
-  }[tone];
+  const style = HERO_STYLE[status];
+  const urgent = status === 'fire' || status === 'warning';
   return (
-    <div role={tone === 'offline' ? 'status' : 'alert'} className={`border-l-4 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${styles}`}>
-      <Icon className="w-5 h-5 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="font-bold text-sm">{title}</p>
-        <p className="text-xs mt-0.5 opacity-90">{children}</p>
+    <section
+      role={urgent ? 'alert' : 'status'}
+      aria-label="Device status"
+      className={`rounded-lg border shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col ${style.box}`}
+    >
+      <div className="flex-1 min-w-0 p-5 sm:p-6 flex gap-4">
+        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shrink-0 ${style.icon} ${status === 'fire' ? 'animate-pulse' : ''}`}>
+          <Icon className="w-6 h-6 sm:w-7 sm:h-7" />
+        </div>
+        <div className="min-w-0 flex flex-col gap-2">
+          <h2 className={`text-2xl sm:text-[28px] sm:leading-8 font-extrabold tracking-[-0.02em] ${style.title}`}>{title}</h2>
+          <div className="text-sm text-text-body leading-relaxed flex flex-col gap-2">{children}</div>
+          {action && <div className="pt-1">{action}</div>}
+        </div>
       </div>
-      {action}
-    </div>
+      <dl className={`grid grid-cols-3 border-t ${urgent ? 'border-black/10' : 'border-border'}`}>
+        {facts.map((f, i) => (
+          <div key={f.label} className={`px-4 sm:px-6 py-3 flex flex-col justify-center min-w-0 ${i > 0 ? `border-l ${urgent ? 'border-black/10' : 'border-border'}` : ''}`}>
+            <dt className="text-[10px] font-bold tracking-[0.1em] uppercase text-text-body">{f.label}</dt>
+            <dd className="text-base sm:text-lg font-extrabold text-text truncate">{f.value}</dd>
+            {f.sub && <dd className="text-[11px] text-text-subtle truncate">{f.sub}</dd>}
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 };
 
-// Current value against its alert threshold. `stale` greys it out when the
-// device has stopped reporting, so an old value never reads as current.
-const ReadingGauge = ({ label, value, unit, max, threshold, stale }: {
+// One reading against its alert level. Doubles as the chart toggle: pressing it
+// shows that reading's history below. `stale` greys it out when the device has
+// stopped reporting, so an old value never reads as current.
+const MetricTile = ({ label, icon: Icon, value, unit, max, threshold, stale, warmingUp, selected, onSelect }: {
   label: string;
+  icon: React.ComponentType<{ className?: string }>;
   value: number;
   unit: string;
   max: number;
   threshold: number;
   stale: boolean;
+  warmingUp: boolean;
+  selected: boolean;
+  onSelect: () => void;
 }) => {
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
   const thresholdPercentage = Math.min(100, Math.max(0, (threshold / max) * 100));
-  const over = value >= threshold;
+  const over = !warmingUp && value >= threshold;
   const fill = stale ? 'bg-border' : over ? 'bg-primary' : 'bg-teal-light';
-
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex justify-between items-end gap-3">
-        <span className="text-[10px] font-bold tracking-widest uppercase text-text-body">{label}</span>
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`text-left rounded-lg border p-4 flex flex-col gap-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+        selected ? 'border-primary/40 bg-surface ring-1 ring-primary/20' : 'border-border bg-white hover:border-text-faint'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.1em] uppercase text-text-body">
+          <Icon className="w-3.5 h-3.5" />{label}
+        </span>
+        {over && !stale && <span className="text-[10px] font-bold uppercase tracking-wide text-primary">Over alert level</span>}
+      </div>
+      {warmingUp ? (
+        <div className="flex items-center gap-2 h-10 text-sm font-semibold text-text-body">
+          <Loader2 className="w-4 h-4 animate-spin text-teal-light" /> Warming up
+        </div>
+      ) : (
         <div className="flex items-baseline gap-1">
-          <span className={`text-3xl font-black tracking-tighter tabular-nums ${stale ? 'text-text-faint' : over ? 'text-primary' : 'text-text'}`}>
+          <span className={`text-[36px] leading-10 font-extrabold tracking-[-0.04em] tabular-nums ${stale ? 'text-text-faint' : over ? 'text-primary' : 'text-text'}`}>
             {value.toFixed(1)}
           </span>
           <span className={`text-sm font-bold ${stale ? 'text-text-faint' : 'text-text-body'}`}>{unit}</span>
         </div>
+      )}
+      <div>
+        <div className="relative h-2 bg-surface-alt rounded-full overflow-hidden">
+          {!warmingUp && <div className={`absolute left-0 top-0 bottom-0 rounded-full transition-all duration-700 ${fill}`} style={{ width: `${percentage}%` }} />}
+          <div className="absolute top-0 bottom-0 w-0.5 bg-primary z-10" style={{ left: `${thresholdPercentage}%` }} />
+        </div>
+        <div className="flex justify-between text-[10px] font-semibold text-text-faint tabular-nums mt-1.5">
+          <span>0</span>
+          <span className="text-primary">Alert at {threshold} {unit}</span>
+          <span>{max}</span>
+        </div>
       </div>
-      <div className="relative h-2.5 bg-surface-alt rounded-full overflow-hidden">
-        <div className={`absolute left-0 top-0 bottom-0 rounded-full transition-all duration-700 ${fill}`} style={{ width: `${percentage}%` }} />
-        <div className="absolute top-0 bottom-0 w-0.5 bg-primary z-10" style={{ left: `${thresholdPercentage}%` }} />
-      </div>
-      <div className="flex justify-between text-[10px] font-semibold text-text-faint tabular-nums">
-        <span>0</span>
-        <span className="text-primary">Alert at {threshold} {unit}</span>
-        <span>{max} {unit}</span>
+    </button>
+  );
+};
+
+// A label / value row with a status pill (Device Health, Notifications).
+type Tone = 'ok' | 'warn' | 'none';
+const TONE_PILL: Record<Tone, string> = { ok: PILL_OK, warn: PILL_WARN, none: PILL_OFF };
+const TONE_ICON: Record<Tone, string> = { ok: 'text-success-dark', warn: 'text-[#B45309]', none: 'text-text-faint' };
+
+const StatusRow = ({ icon: Icon, label, detail, status, tone }: {
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  detail?: string;
+  status: string;
+  tone: Tone;
+}) => (
+  <li className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+    <div className="flex items-center gap-3 min-w-0">
+      <Icon size={16} className={`shrink-0 ${TONE_ICON[tone]}`} />
+      <div className="min-w-0">
+        <span className="block text-sm font-bold text-text">{label}</span>
+        {detail && <span className="block text-[11px] text-text-subtle truncate">{detail}</span>}
       </div>
     </div>
-  );
+    <span className={`${TONE_PILL[tone]} shrink-0`}>{status}</span>
+  </li>
+);
+
+type PushState = 'checking' | 'on' | 'off' | 'unavailable';
+
+// Push is per browser. navigator.serviceWorker.ready never settles when no
+// worker is registered, so give up after a few seconds instead of hanging.
+const checkPush = async (): Promise<PushState> => {
+  if (!('serviceWorker' in navigator && 'PushManager' in window)) return 'unavailable';
+  const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 4000));
+  try {
+    const sub = await Promise.race([getPushSubscription(), timeout]);
+    if (sub === 'timeout') return 'unavailable';
+    return sub ? 'on' : 'off';
+  } catch {
+    return 'unavailable';
+  }
 };
 
 type Metric = 'temp' | 'co';
@@ -231,7 +307,7 @@ const ReadingHistoryChart = ({ readings, metric, threshold, now }: {
         <span>{formatEventTime(readings[0].recorded_at, now)}</span>
         <span>{formatEventTime(readings[readings.length - 1].recorded_at, now)}</span>
       </div>
-      <div className="flex items-center gap-4 text-[11px] font-medium text-text-body mt-4 pl-12">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] font-medium text-text-body mt-4 pl-12 [&>span]:whitespace-nowrap">
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-teal-light" />Below alert level</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-primary" />At or above</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-primary" />Alert level ({threshold} {unit})</span>
@@ -239,6 +315,7 @@ const ReadingHistoryChart = ({ readings, metric, threshold, now }: {
     </div>
   );
 };
+
 
 export const ResidentHome = () => {
   const { profile } = useAuth();
@@ -249,7 +326,8 @@ export const ResidentHome = () => {
   // longer than the newest few rows, and must still count as active).
   const [recentAlerts, setRecentAlerts] = useState<AlertEvent[]>([]);
   const [openAlerts, setOpenAlerts] = useState<AlertEvent[]>([]);
-  const [alertsToday, setAlertsToday] = useState(0);
+  const [alertsInWindow, setAlertsInWindow] = useState(0);
+  const [pushState, setPushState] = useState<PushState>('checking');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
@@ -270,14 +348,13 @@ export const ResidentHome = () => {
 
   const fetchData = useCallback(async (deviceId: string) => {
     try {
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      const [deviceRes, historyRes, recentRes, openRes, todayRes, discrepancyRes] = await Promise.all([
+      const windowStart = new Date(Date.now() - ALERT_COUNT_DAYS * 86_400_000);
+      const [deviceRes, historyRes, recentRes, openRes, countRes, discrepancyRes] = await Promise.all([
         supabase.from('devices_safe').select('*').eq('id', deviceId).single(),
         supabase.from('sensor_readings').select('*').eq('device_id', deviceId).order('recorded_at', { ascending: false }).limit(24),
         supabase.from('alert_events').select('*').eq('device_id', deviceId).order('triggered_at', { ascending: false }).limit(RECENT_ALERT_ROWS),
         supabase.from('alert_events').select('*').eq('device_id', deviceId).is('resolved_at', null).order('triggered_at', { ascending: false }),
-        supabase.from('alert_events').select('id', { count: 'exact', head: true }).eq('device_id', deviceId).gte('triggered_at', startOfToday.toISOString()),
+        supabase.from('alert_events').select('id', { count: 'exact', head: true }).eq('device_id', deviceId).gte('triggered_at', windowStart.toISOString()),
         supabase.from('address_discrepancies').select('*').eq('device_id', deviceId).eq('status', 'pending').order('created_at', { ascending: false }).limit(1).maybeSingle()
       ]);
 
@@ -288,13 +365,17 @@ export const ResidentHome = () => {
       }
       if (recentRes.data) setRecentAlerts(recentRes.data);
       if (openRes.data) setOpenAlerts(openRes.data);
-      if (todayRes.count !== null) setAlertsToday(todayRes.count);
+      if (countRes.count !== null) setAlertsInWindow(countRes.count);
       setDiscrepancy(discrepancyRes.data ?? null);
       setLastRefreshed(new Date());
       setNow(Date.now());
     } catch (error) {
       console.error("Error fetching device data", error);
     }
+  }, []);
+
+  useEffect(() => {
+    checkPush().then(setPushState);
   }, []);
 
   useEffect(() => {
@@ -361,6 +442,7 @@ export const ResidentHome = () => {
     await fetchData(profile.device_id);
     setRefreshing(false);
   };
+
 
   const handleLinkDevice = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -435,7 +517,7 @@ export const ResidentHome = () => {
   }
 
   const connectivity = getConnectivityStatus(device.last_seen_at, now);
-  const connInfo = DEVICE_STATUS[connectivity];
+  const status = getDeviceStatus(device, openAlerts, now);
   const isOffline = connectivity === 'offline';
   // Readings, sensor, GPS and power only describe the device while it is
   // reporting; once offline they are history, not current state.
@@ -443,22 +525,93 @@ export const ResidentHome = () => {
   const warmingUp = hasLiveData && latestReading?.sensor_ready === false;
 
   const openFire = openAlerts.find(a => a.alert_tier === 2);
-  const openWarning = !openFire ? openAlerts.find(a => a.alert_tier === 1) : undefined;
-
-  const lastReportValue = device.last_seen_at ? capitalize(formatAgo(device.last_seen_at, now)) : 'Never';
-  const lastReportHint = device.last_seen_at ? formatEventTime(device.last_seen_at, now) : 'No report received yet';
+  const openAlert = openFire ?? openAlerts[0];
+  const lastReportAgo = device.last_seen_at ? formatAgo(device.last_seen_at, now) : null;
 
   const secondsSinceRefresh = Math.max(0, Math.floor((now - lastRefreshed.getTime()) / 1000));
   const refreshedLabel = secondsSinceRefresh < 15 ? 'just now' : secondsSinceRefresh < 60 ? `${secondsSinceRefresh}s ago` : `${Math.floor(secondsSinceRefresh / 60)} min ago`;
 
-  // Device health rows, one per thing the device reports about itself.
-  type Health = { label: string; icon: React.ComponentType<{ size?: number; className?: string }>; status: string; tone: 'ok' | 'warn' | 'none' };
-  const health: Health[] = [
-    {
-      label: 'Connection', icon: Signal, status: connInfo.label,
-      // Grey when offline, like the shared status colors (grey = not reporting).
-      tone: connectivity === 'online' ? 'ok' : connectivity === 'reconnecting' ? 'warn' : 'none',
-    },
+  const heroFacts = [
+    { label: 'Last report', value: lastReportAgo ? capitalize(lastReportAgo) : 'Never', sub: device.last_seen_at ? formatEventTime(device.last_seen_at, now) : undefined },
+    { label: `${ALERT_COUNT_DAYS}-day alerts`, value: String(alertsInWindow), sub: openAlerts.length > 0 ? `${openAlerts.length} open` : 'None open' },
+    { label: 'Device', value: device.device_code, sub: device.label || undefined },
+  ];
+
+  // Responder progress and "BFP notified" for the open alert, when there is one.
+  const responderLine = openAlert && (
+    <div className="flex flex-wrap gap-2">
+      {openAlert.sms_sent_bfp && (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 border border-black/10 px-2.5 py-1 text-xs font-bold text-text">
+          <Check className="w-3.5 h-3.5 text-success-dark" /> BFP notified by SMS
+        </span>
+      )}
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 border border-black/10 px-2.5 py-1 text-xs font-bold text-text">
+        <ShieldCheck className="w-3.5 h-3.5 text-primary" /> {INCIDENT_STEP[openAlert.incident_status ?? 'active'] ?? INCIDENT_STEP.active}
+      </span>
+    </div>
+  );
+  const offlineDuringAlert = openAlert && isOffline && (
+    <p className="text-xs font-semibold">Your device is also offline (last report {lastReportAgo ?? 'never'}), so these readings may be out of date.</p>
+  );
+
+  const hero = (() => {
+    switch (status) {
+      case 'fire':
+        return (
+          <StatusHero status={status} icon={Flame} title="Fire alert" facts={heroFacts} action={<SectionLink to="/home/alerts">View alert</SectionLink>}>
+            <p>
+              Temperature and carbon monoxide are both over their alert levels
+              ({openFire!.temp_celsius?.toFixed(1)} °C, {openFire!.co_ppm?.toFixed(0)} ppm, {formatEventTime(openFire!.triggered_at, now)}).
+            </p>
+            <p className="font-bold text-tier2-text">If you see fire or smoke, get everyone out and call 911.</p>
+            {responderLine}
+            {offlineDuringAlert}
+          </StatusHero>
+        );
+      case 'warning':
+        return (
+          <StatusHero status={status} icon={ThermometerSun} title="Warning" facts={heroFacts} action={<SectionLink to="/home/alerts">View alert</SectionLink>}>
+            <p>
+              A reading went over its alert level ({openAlert!.temp_celsius?.toFixed(1)} °C, {openAlert!.co_ppm?.toFixed(0)} ppm, {formatEventTime(openAlert!.triggered_at, now)}).
+              Check the room for heat, smoke or a gas source.
+            </p>
+            {responderLine}
+            {offlineDuringAlert}
+          </StatusHero>
+        );
+      case 'online':
+        return (
+          <StatusHero status={status} icon={ShieldCheck} title="All clear" facts={heroFacts}>
+            <p>{warmingUp
+              ? 'Your device is online. Its carbon monoxide sensor is still warming up; readings appear once it is ready.'
+              : 'Your device is reporting and its readings are within your alert levels.'}</p>
+          </StatusHero>
+        );
+      case 'reconnecting':
+        return (
+          <StatusHero status={status} icon={Wifi} title="Reconnecting" facts={heroFacts}>
+            <p>Your device last reported {lastReportAgo}. This usually recovers on its own. If it lasts more than 15 minutes, check its power and Wi-Fi.</p>
+          </StatusHero>
+        );
+      case 'disabled':
+        return (
+          <StatusHero status={status} icon={Power} title="Device switched off" facts={heroFacts} action={<SectionLink to="/account">Contact your administrator</SectionLink>}>
+            <p>{DEVICE_STATUS.disabled.description}</p>
+          </StatusHero>
+        );
+      default:
+        return (
+          <StatusHero status={status} icon={WifiOff} title={device.last_seen_at ? 'Device offline' : 'Waiting for your device'} facts={heroFacts} action={<SectionLink to="/home/devices">Device information</SectionLink>}>
+            <p>
+              {device.last_seen_at ? `No report for ${lastReportAgo!.replace(' ago', '')}. ` : 'Your device has not reported yet. '}
+              While it is offline, no new readings or fire alerts can reach you or responders. Check that it has power and Wi-Fi.
+            </p>
+          </StatusHero>
+        );
+    }
+  })();
+
+  const health: { label: string; icon: React.ComponentType<{ size?: number; className?: string }>; status: string; tone: Tone }[] = [
     {
       label: 'Sensors', icon: Gauge,
       status: !hasLiveData ? 'No data' : warmingUp ? 'Warming up' : 'Ready',
@@ -475,14 +628,11 @@ export const ResidentHome = () => {
       tone: !hasLiveData ? 'none' : latestReading?.on_battery ? 'warn' : 'ok',
     },
   ];
-  const TONE_PILL = { ok: PILL_OK, warn: PILL_WARN, none: PILL_OFF };
-  const TONE_ICON = { ok: 'text-success-dark', warn: 'text-[#B45309]', none: 'text-text-faint' };
 
   const historyOldestFirst = [...recentReadings].reverse();
 
-  // Where to show the device. Live GPS / last-known GPS / registered install coordinates / unavailable -
-  // never an invented position. Re-evaluated on each render (30 s poll), so a fix older than 15 minutes
-  // stops being labelled live. Newest-first: the realtime reading, then the recent history window.
+  // Live GPS / last-known GPS / registered install coordinates / unavailable -
+  // never an invented position. Newest-first: the realtime reading, then the history window.
   const location = resolveDeviceLocation({
     readings: [latestReading, ...recentReadings],
     device,
@@ -529,46 +679,22 @@ export const ResidentHome = () => {
     }
   };
 
+
   return (
     <div className="flex flex-col gap-6 pb-12">
       <PageHeader
         title="Dashboard"
-        description={<>Status and readings from your device <span className="font-bold text-text">{device.device_code}</span>{device.label ? ` (${device.label})` : ''}.</>}
+        description="Your home's fire monitoring at a glance."
         actions={<>
           <span className="text-xs text-text-faint hidden sm:inline">Updated {refreshedLabel}</span>
           <button type="button" onClick={handleRefresh} disabled={refreshing} className={BTN_SECONDARY}>
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </>}
       />
 
-      {/* What needs attention right now */}
-      {openFire && (
-        <Notice
-          tone="fire" icon={Flame} title="Fire alert active"
-          action={<SectionLink to="/home/alerts">View alert</SectionLink>}
-        >
-          Your device detected high temperature and carbon monoxide together ({formatEventTime(openFire.triggered_at, now)}). Check your home now.
-        </Notice>
-      )}
-      {openWarning && (
-        <Notice
-          tone="warning" icon={ThermometerSun} title="Warning active"
-          action={<SectionLink to="/home/alerts">View alert</SectionLink>}
-        >
-          A reading went over its alert level ({formatEventTime(openWarning.triggered_at, now)}): {openWarning.temp_celsius?.toFixed(1)} °C, {openWarning.co_ppm?.toFixed(0)} ppm.
-        </Notice>
-      )}
-      {isOffline && (
-        <Notice
-          tone="offline" icon={WifiOff}
-          title={device.last_seen_at ? `Device offline: ${formatAgo(device.last_seen_at, now).replace(' ago', '')} without a report` : 'Device has never reported'}
-          action={<SectionLink to="/home/devices">Device information</SectionLink>}
-        >
-          While it is offline, no new readings or fire alerts can reach you or responders. Check that the device has power and Wi-Fi.
-        </Notice>
-      )}
+      {hero}
 
       {discrepancy && (
         <div className="bg-tier1-bg border border-amber-light p-4 rounded-lg flex flex-col gap-4">
@@ -598,34 +724,16 @@ export const ResidentHome = () => {
         </div>
       )}
 
-      {/* Summary tiles (red only when something is actually wrong) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <SummaryCard
-          label="Device Status"
-          value={connInfo.label}
-          icon={connectivity === 'offline' ? WifiOff : Wifi}
-          hint={connectivity === 'online' ? 'Reporting normally' : connectivity === 'reconnecting' ? 'Connection interrupted' : 'Not reporting'}
-        />
-        <SummaryCard
-          label="Active Alerts"
-          value={String(openAlerts.length)}
-          icon={ShieldAlert}
-          urgent={openAlerts.length > 0}
-          hint={openFire ? 'Fire alert open' : openWarning ? 'Warning open' : 'Nothing open'}
-        />
-        <SummaryCard label="Alerts Today" value={String(alertsToday)} icon={BellRing} hint="Since midnight" />
-        <SummaryCard label="Last Report" value={lastReportValue} icon={Clock} hint={lastReportHint} />
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Main column (2/3) */}
         <div className="lg:col-span-2 flex flex-col gap-6 min-w-0">
 
-          {/* Readings */}
+          {/* Readings: current values (also the chart toggle) + last 24 readings */}
           <section className={CARD}>
             <SectionHeader
-              title={hasLiveData ? 'Current Readings' : 'Last Reading'}
+              title={hasLiveData ? 'Readings' : 'Last Readings'}
               meta={latestReading
                 ? `Recorded ${formatEventTime(latestReading.recorded_at, now)} (${formatAgo(latestReading.recorded_at, now)})`
                 : 'No readings received yet'}
@@ -636,15 +744,6 @@ export const ResidentHome = () => {
                 <Gauge className="w-8 h-8" />
                 <span className="text-sm font-medium text-text-body">Your device hasn't sent a reading yet.</span>
               </div>
-            ) : warmingUp ? (
-              // MQ-7 warm-up window (spec SW-2.1.1/SW-2.4.5): raw values and
-              // threshold bars are unreliable/unset until sensor_ready flips
-              // true, so show a placeholder instead of misleading numbers.
-              <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-                <Loader2 className="w-6 h-6 text-teal-light animate-spin" />
-                <span className="text-sm font-bold text-text-body">Sensors warming up</span>
-                <span className="text-xs text-text-faint max-w-xs">The carbon monoxide sensor is calibrating. Readings will appear once it is ready.</span>
-              </div>
             ) : (
               <>
                 {!hasLiveData && (
@@ -652,64 +751,35 @@ export const ResidentHome = () => {
                     These values are from the device's last report and may not match conditions now.
                   </p>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 mt-6">
-                  <ReadingGauge
-                    label="Temperature"
-                    value={latestReading.temp_celsius ?? 0}
-                    unit="°C"
-                    max={100}
-                    threshold={device.temp_threshold}
-                    stale={!hasLiveData}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
+                  <MetricTile
+                    label="Temperature" icon={Thermometer}
+                    value={latestReading.temp_celsius ?? 0} unit="°C" max={100} threshold={device.temp_threshold}
+                    stale={!hasLiveData} warmingUp={false}
+                    selected={metric === 'temp'} onSelect={() => setMetric('temp')}
                   />
-                  <ReadingGauge
-                    label="Carbon Monoxide (CO)"
-                    value={latestReading.co_ppm ?? 0}
-                    unit="ppm"
-                    max={1000}
-                    threshold={device.co_threshold}
-                    stale={!hasLiveData}
+                  {/* MQ-7 warm-up (spec SW-2.1.1/SW-2.4.5): the CO value is unreliable until sensor_ready. */}
+                  <MetricTile
+                    label="Carbon Monoxide" icon={Wind}
+                    value={latestReading.co_ppm ?? 0} unit="ppm" max={1000} threshold={device.co_threshold}
+                    stale={!hasLiveData} warmingUp={warmingUp}
+                    selected={metric === 'co'} onSelect={() => setMetric('co')}
+                  />
+                </div>
+
+                <div className="mt-6 pt-5 border-t border-border-warm">
+                  <p className="text-xs font-bold text-text mb-6">
+                    {metric === 'temp' ? 'Temperature' : 'Carbon monoxide'}, last {recentReadings.length} readings
+                  </p>
+                  <ReadingHistoryChart
+                    readings={historyOldestFirst}
+                    metric={metric}
+                    threshold={metric === 'temp' ? device.temp_threshold : device.co_threshold}
+                    now={now}
                   />
                 </div>
               </>
             )}
-          </section>
-
-          {/* Reading history */}
-          <section className={CARD}>
-            <SectionHeader
-              title="Reading History"
-              meta={recentReadings.length > 0 ? `Last ${recentReadings.length} readings` : undefined}
-              action={
-                <div role="radiogroup" aria-label="Reading to chart" className="inline-flex rounded-lg border border-border p-0.5 bg-surface-alt">
-                  {(['temp', 'co'] as const).map(m => (
-                    <button
-                      key={m}
-                      type="button"
-                      role="radio"
-                      aria-checked={metric === m}
-                      onClick={() => setMetric(m)}
-                      className={`px-3 h-7 rounded-md text-xs font-bold transition-colors ${metric === m ? 'bg-white text-text shadow-sm' : 'text-text-subtle hover:text-text'}`}
-                    >
-                      {m === 'temp' ? 'Temperature' : 'CO'}
-                    </button>
-                  ))}
-                </div>
-              }
-            />
-            <div className="mt-8">
-              {historyOldestFirst.length > 0 ? (
-                <ReadingHistoryChart
-                  readings={historyOldestFirst}
-                  metric={metric}
-                  threshold={metric === 'temp' ? device.temp_threshold : device.co_threshold}
-                  now={now}
-                />
-              ) : (
-                <div className="h-44 flex items-center justify-center text-sm font-medium text-text-faint">
-                  No reading history yet
-                </div>
-              )}
-            </div>
           </section>
 
           {/* Recent alerts */}
@@ -734,28 +804,29 @@ export const ResidentHome = () => {
                     <TableEmpty colSpan={5} icon={<FileText className="w-10 h-10" />}>
                       No alerts yet. Your device hasn't raised any.
                     </TableEmpty>
-                  ) : recentAlerts.map(alert => (
-                    <tr key={alert.id} className={TR}>
-                      <td className={TD}>
-                        <div className="flex items-center gap-2">
-                          {alert.alert_tier === 2
-                            ? <Flame className="w-4 h-4 text-primary shrink-0" />
-                            : <ThermometerSun className="w-4 h-4 text-amber-light shrink-0" />}
-                          <span className="text-sm font-bold text-text whitespace-nowrap">
-                            {alert.alert_tier === 2 ? 'Tier 2 Alert' : 'Tier 1 Warning'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className={TD}>
-                        <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${alert.resolved_at ? 'bg-surface-cream text-text-body' : 'bg-primary text-white'}`}>
-                          {alert.resolved_at ? 'Resolved' : 'Active'}
-                        </span>
-                      </td>
-                      <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>{formatEventTime(alert.triggered_at, now)}</td>
-                      <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.temp_celsius?.toFixed(1)}°C</td>
-                      <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.co_ppm?.toFixed(0)} ppm</td>
-                    </tr>
-                  ))}
+                  ) : recentAlerts.map(alert => {
+                    const pill = alertStatusPill(alert);
+                    return (
+                      <tr key={alert.id} className={TR}>
+                        <td className={TD}>
+                          <div className="flex items-center gap-2">
+                            {alert.alert_tier === 2
+                              ? <Flame className="w-4 h-4 text-primary shrink-0" />
+                              : <ThermometerSun className="w-4 h-4 text-amber-light shrink-0" />}
+                            <span className="text-sm font-bold text-text whitespace-nowrap">
+                              {alert.alert_tier === 2 ? 'Tier 2 Alert' : 'Tier 1 Warning'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className={TD}>
+                          <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase whitespace-nowrap ${pill.className}`}>{pill.label}</span>
+                        </td>
+                        <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>{formatEventTime(alert.triggered_at, now)}</td>
+                        <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.temp_celsius?.toFixed(1)}°C</td>
+                        <td className={`${TD} text-right font-mono text-xs font-bold text-text whitespace-nowrap`}>{alert.co_ppm?.toFixed(0)} ppm</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </TableScroll>
@@ -766,6 +837,32 @@ export const ResidentHome = () => {
         {/* Side column (1/3) */}
         <div className="lg:col-span-1 flex flex-col gap-6 min-w-0">
 
+          {/* Notifications: will the resident actually be told? */}
+          <section className={CARD}>
+            <SectionHeader title="Notifications" meta="Where your alerts are sent" />
+            <ul className="mt-5 flex flex-col divide-y divide-border-warm">
+              <StatusRow
+                icon={Phone} label="SMS"
+                detail={profile?.contact_number ? `${profile.contact_number} · fire alerts` : 'Add a mobile number for fire alerts'}
+                status={profile?.contact_number ? 'Set' : 'Not set'}
+                tone={profile?.contact_number ? 'ok' : 'warn'}
+              />
+              <StatusRow
+                icon={Send} label="Telegram"
+                status={profile?.telegram_chat_id ? 'Linked' : 'Not linked'}
+                tone={profile?.telegram_chat_id ? 'ok' : 'warn'}
+              />
+              <StatusRow
+                icon={BellRing} label="Push" detail="On this browser"
+                status={pushState === 'checking' ? 'Checking' : pushState === 'on' ? 'On' : pushState === 'off' ? 'Off' : 'Unavailable'}
+                tone={pushState === 'on' ? 'ok' : pushState === 'off' ? 'warn' : 'none'}
+              />
+            </ul>
+            <div className="mt-5 pt-4 border-t border-border-warm">
+              <SectionLink to="/home/settings">Alert settings</SectionLink>
+            </div>
+          </section>
+
           {/* Device health */}
           <section className={CARD}>
             <SectionHeader
@@ -774,61 +871,28 @@ export const ResidentHome = () => {
             />
             <ul className="mt-5 flex flex-col divide-y divide-border-warm">
               {health.map(item => (
-                <li key={item.label} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                  <div className="flex items-center gap-3">
-                    <item.icon size={16} className={TONE_ICON[item.tone]} />
-                    <span className="text-sm font-bold text-text">{item.label}</span>
-                  </div>
-                  <span className={TONE_PILL[item.tone]}>{item.status}</span>
-                </li>
+                <StatusRow key={item.label} icon={item.icon} label={item.label} status={item.status} tone={item.tone} />
               ))}
             </ul>
-            <div className="mt-5 pt-4 border-t border-border-warm">
-              <SectionLink to="/home/devices">Device information</SectionLink>
-            </div>
           </section>
 
-          {/* Install location */}
+          {/* Install location (the map lives on Device Information) */}
           <section className={CARD}>
-            <SectionHeader title="Install Location" meta={`Device ${device.device_code}`} />
-            <div className="mt-4">
-              {location.lat !== null && location.lng !== null ? (
-                <div className="h-48 rounded bg-gray-200 overflow-hidden z-0 relative">
-                  <MapContainer
-                    key={`${location.lat},${location.lng}`}
-                    center={[location.lat, location.lng]}
-                    zoom={14}
-                    style={{ height: '100%', width: '100%' }}
-                    zoomControl={false}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <Marker position={[location.lat, location.lng]} icon={markerIcon} opacity={markerOpacity(location.kind)}>
-                      <Popup>
-                        <strong>{device.device_code}</strong><br />
-                        {displayAddress(device.location_desc)}
-                      </Popup>
-                    </Marker>
-                  </MapContainer>
-                </div>
-              ) : (
-                <LocationUnavailablePanel heightClass="h-48" />
-              )}
-            </div>
-            <LocationBadge location={location} now={now} />
+            <SectionHeader title="Install Location" />
             <div className="flex gap-2 items-start mt-4">
               <MapPin size={16} className="text-text-body mt-0.5 shrink-0" />
               <span className="text-sm font-semibold text-text">{displayAddress(device.location_desc)}</span>
             </div>
-            {!isValidCoordinate(device.latitude, device.longitude) && (
+            <LocationBadge location={location} now={now} />
+            {!isValidCoordinate(device.latitude, device.longitude) ? (
               <Link
                 to="/home/devices"
                 className="mt-4 block w-full text-center py-2.5 rounded bg-tier1-bg text-[#B45309] text-[11px] font-bold uppercase tracking-wide hover:bg-[#FDE68A] transition-colors"
               >
                 Set your install address and pin
               </Link>
+            ) : (
+              <div className="mt-4"><SectionLink to="/home/devices">View on map</SectionLink></div>
             )}
           </section>
 

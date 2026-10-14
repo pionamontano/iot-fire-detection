@@ -145,18 +145,22 @@ The first time you sign in, you must complete a short setup:
 
 ### 6.2 Dashboard
 
-Your home screen shows the live state of your device:
+Your home screen answers "is my home OK?" first, then shows the details:
 
-- **Notices at the top** when something needs you: a red **Fire alert active** or amber **Warning active** box (with **View alert**), and a grey **Device offline** box when the device has not reported for over 15 minutes. While it is offline, no new readings or fire alerts can reach you or responders, so check its power and Wi-Fi.
-- **Four summary tiles**: **Device Status**, **Active Alerts** (turns red only when an alert is open), **Alerts Today** and **Last Report** (how long ago the device last reported, and when).
-  - **Online** — heard from the device within the last 2 minutes.
-  - **Reconnecting** — last heard 2 to 15 minutes ago.
-  - **Offline** — not heard from for more than 15 minutes.
-- **Current Readings** — temperature and carbon monoxide (CO) against their alert levels. If the device is offline this card is titled **Last Reading**, the values are greyed out, and it says when they were recorded. You will see *"Sensors warming up"* during the warm-up period.
-- **Reading History** — the last 24 readings as a bar chart, switchable between **Temperature** and **CO**. The dashed red line is the alert level; bars at or above it are red. Point at (or tab to) a bar to see its value and time.
-- **Recent Alerts** — the five newest alerts; **View all** opens Alert History.
-- **Device Health** — **Connection**, **Sensors**, **GPS** and **Power** (**Mains** or **On battery**). *On battery* means the building has lost mains power and the device is running on its backup. These show *No data* while the device is offline.
-- **Install Location** — a map of where your device is and the address on file.
+- **Status panel** (top): one of
+  - **Fire alert** (red) — temperature and CO are both over their alert levels. It shows the readings, whether **BFP was notified by SMS**, and how far responders have got (*Waiting for a responder*, *A responder has acknowledged*, *Responders are on the way*). If you see fire or smoke, get everyone out and call **911**.
+  - **Warning** (amber) — one reading is over its alert level. Check the room for heat, smoke or a gas source.
+  - **All clear** (green) — the device is reporting and readings are within your alert levels.
+  - **Reconnecting** (blue) — last report 2 to 15 minutes ago; this usually recovers on its own.
+  - **Device offline** (grey) — no report for more than 15 minutes. While it is offline, no new readings or fire alerts can reach you or responders, so check its power and Wi-Fi.
+  - **Device switched off** — an administrator disabled it; its readings and alerts are ignored until it is enabled again.
+
+  Along the bottom: **Last report**, the number of alerts in the **last 7 days** (and how many are still open), and your **device** code.
+- **Readings** — temperature and carbon monoxide (CO) against their alert levels. Press either one to see its last 24 readings in the chart below; the dashed red line is the alert level and bars at or above it are red. Point at (or tab to) a bar to see its value and time. If the device is offline the values are greyed out and dated. *"Warming up"* shows while the CO sensor calibrates.
+- **Recent Alerts** — the five newest alerts with their status (*Active*, *Acknowledged*, *Responding*, *Resolved* or *False alarm*); **View all** opens Alert History.
+- **Notifications** — whether an **SMS** number is set (for fire alerts), **Telegram** is linked, and **push notifications** are on in this browser. **Alert settings** is where you change them.
+- **Device Health** — **Sensors**, **GPS** and **Power** (**Mains** or **On battery**). *On battery* means the building has lost mains power and the device is running on its backup. These show *No data* while the device is offline.
+- **Install Location** — the address on file and where the position comes from. **View on map** opens Device Information.
 
 **Location mismatch prompt.** If the device's GPS position is more than about 100 m from the address on file, a *"Location Discrepancy Detected"* box appears. Choose **Update** to save the new address, or **Keep Current** to leave it unchanged.
 
