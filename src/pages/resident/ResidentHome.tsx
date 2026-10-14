@@ -11,7 +11,6 @@ import {
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { ResidentHomeSkeleton } from '../../components/SkeletonLoaders';
-import { StatCard } from '../../components/StatCard';
 import { PILL_OK, PILL_WARN, PILL_OFF } from '../../components/ui';
 import { TABLE_CARD, TABLE_TOOLBAR, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty } from '../../components/Table';
 import { resolveDeviceLocation, markerOpacity, displayAddress, isValidCoordinate } from '../../lib/location';
@@ -53,6 +52,29 @@ const AddressField = ({ label, value, onChange }: { label: string; value: string
       className="w-full bg-white border border-[#F59E0B]/50 rounded px-3 py-2 text-sm text-[#231918] focus:outline-none focus:ring-2 focus:ring-[#D97706]/30 focus:border-[#D97706]"
     />
   </label>
+);
+
+// Summary tile in the resident palette (same layout as the admin StatCard).
+// Red only when `urgent`, so a red "0" never reads as an alarm.
+const SummaryCard = ({ label, value, icon: Icon, hint, urgent = false }: {
+  label: string;
+  value: string;
+  icon: React.ComponentType<{ className?: string }>;
+  hint: string;
+  urgent?: boolean;
+}) => (
+  <div className={`rounded-lg border p-4 sm:p-5 flex flex-col gap-2 min-w-0 ${
+    urgent ? 'bg-[#FEF2F2] border-[#FECACA] border-b-4 border-b-[#DC2626]' : 'bg-white border-[#E4E4E7]'
+  }`}>
+    <div className="flex items-start justify-between gap-2">
+      <span className={`text-[10px] font-bold tracking-[0.1em] uppercase ${urgent ? 'text-[#B91C1C]' : 'text-[#52525B]'}`}>{label}</span>
+      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${urgent ? 'text-[#DC2626]' : 'text-[#A1A1AA]'}`} />
+    </div>
+    <span className={`font-black text-[28px] leading-8 sm:text-[36px] sm:leading-10 tracking-tighter ${urgent ? 'text-[#B91C1C]' : 'text-[#18181B]'}`}>
+      {value}
+    </span>
+    <span className={`text-xs font-medium ${urgent ? 'text-[#B91C1C]' : 'text-[#71717A]'}`}>{hint}</span>
+  </div>
 );
 
 const SectionHeader = ({ title, meta, action }: { title: string; meta?: React.ReactNode; action?: React.ReactNode }) => (
@@ -588,23 +610,23 @@ export const ResidentHome = () => {
         </div>
       )}
 
-      {/* Summary tiles (shared StatCard: red only when something is actually wrong) */}
+      {/* Summary tiles (red only when something is actually wrong) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard
+        <SummaryCard
           label="Device Status"
           value={connInfo.label}
           icon={connectivity === 'offline' ? WifiOff : Wifi}
           hint={connectivity === 'online' ? 'Reporting normally' : connectivity === 'reconnecting' ? 'Connection interrupted' : 'Not reporting'}
         />
-        <StatCard
+        <SummaryCard
           label="Active Alerts"
           value={String(openAlerts.length)}
           icon={ShieldAlert}
           urgent={openAlerts.length > 0}
           hint={openFire ? 'Fire alert open' : openWarning ? 'Warning open' : 'Nothing open'}
         />
-        <StatCard label="Alerts Today" value={String(alertsToday)} icon={BellRing} hint="Since midnight" />
-        <StatCard label="Last Report" value={lastReportValue} icon={Clock} hint={lastReportHint} />
+        <SummaryCard label="Alerts Today" value={String(alertsToday)} icon={BellRing} hint="Since midnight" />
+        <SummaryCard label="Last Report" value={lastReportValue} icon={Clock} hint={lastReportHint} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

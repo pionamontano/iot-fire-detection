@@ -1,16 +1,13 @@
 import React from 'react';
 
-// One summary tile for admin pages (Dashboard, System Log) and the resident
-// Dashboard. Turns red only
+// One summary tile for admin pages (Dashboard, System Log). Turns red only
 // when `urgent`, so a red "0" never reads as an alarm. With `onClick` it
 // becomes a button (e.g. to apply the matching filter); `active` marks the
-// tile whose filter is currently applied. `hint` is an optional small line
-// under the value (e.g. what the status means).
+// tile whose filter is currently applied.
 export const StatCard = ({
   label,
   value,
   icon: Icon,
-  hint,
   urgent = false,
   onClick,
   active = false,
@@ -18,7 +15,6 @@ export const StatCard = ({
   label: string;
   value: string;
   icon: React.ComponentType<{ className?: string }>;
-  hint?: React.ReactNode;
   urgent?: boolean;
   onClick?: () => void;
   active?: boolean;
@@ -39,9 +35,6 @@ export const StatCard = ({
       <span className={`font-extrabold text-[28px] leading-8 sm:text-[36px] sm:leading-10 tracking-[-0.04em] ${urgent ? 'text-primary-dark' : 'text-text'}`}>
         {value}
       </span>
-      {hint && (
-        <span className={`text-xs font-medium leading-4 ${urgent ? 'text-tier2-text' : 'text-text-subtle'}`}>{hint}</span>
-      )}
     </>
   );
   return onClick ? (

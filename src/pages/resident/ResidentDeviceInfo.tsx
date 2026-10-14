@@ -11,6 +11,8 @@ import L from 'leaflet';
 import { resolveDeviceLocation, markerOpacity, displayAddress, isValidCoordinate } from '../../lib/location';
 import { LocationBadge, LocationUnavailablePanel } from '../../components/LocationBadge';
 import { DeviceLocationEditor } from '../../components/DeviceLocationEditor';
+import { StatusBadge } from '../../components/StatusBadge';
+import { DEVICE_STATUS, getConnectivityStatus } from '../../lib/deviceStatus';
 
 const markerIcon = new L.Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -66,7 +68,9 @@ export const ResidentDeviceInfo = () => {
   if (loading) return <DeviceInfoSkeleton />;
   if (!device) return <div className="p-8 font-bold text-[#DC2626]">No device registered to your account.</div>;
 
-  const isOnline = device.last_seen_at && (Date.now() - new Date(device.last_seen_at).getTime() < 5 * 60 * 1000);
+  // Shared 2 / 15 minute rule and status colors, same as the Dashboard and admin pages.
+  const connectivity = getConnectivityStatus(device.last_seen_at);
+  const connInfo = DEVICE_STATUS[connectivity];
 
   // Live GPS / last-known GPS / registered install coordinates / unavailable - never an invented position.
   // `readings` is newest first (the 20 most recent), so a last-known position can come from an earlier one.
@@ -99,16 +103,14 @@ export const ResidentDeviceInfo = () => {
           {/* Device Card */}
           <div className="bg-white border border-[#E4E4E7] rounded-lg p-6">
             <div className="flex items-center gap-4 mb-6">
-              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${isOnline ? 'bg-[#E0F2FE] text-[#00799C]' : 'bg-[#FEE2E2] text-[#DC2626]'}`}>
-                {isOnline ? <Wifi className="w-6 h-6" /> : <WifiOff className="w-6 h-6" />}
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${connInfo.badgeBg} ${connInfo.badgeText}`}>
+                {connectivity === 'offline' ? <WifiOff className="w-6 h-6" /> : <Wifi className="w-6 h-6" />}
               </div>
               <div>
                 <h2 className="text-xl font-black text-[#18181B]">{device.device_code}</h2>
                 <p className="text-xs text-[#52525B]">{device.label}</p>
               </div>
-              <span className={`ml-auto text-[9px] font-bold px-3 py-1 rounded-full uppercase ${isOnline ? 'bg-[#E0F2FE] text-[#00799C]' : 'bg-[#FEE2E2] text-[#DC2626]'}`}>
-                {isOnline ? 'ONLINE' : 'OFFLINE'}
-              </span>
+              <span className="ml-auto"><StatusBadge status={connectivity} /></span>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
