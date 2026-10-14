@@ -1,7 +1,8 @@
 import React, { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Eye, EyeOff, Lock, Radio, ShieldCheck } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Eye, EyeOff, GraduationCap, Lock, Radio, ShieldCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { PROJECT_INFO } from '../lib/projectInfo';
 
 // Shared shell and form pieces for the signed-out pages (sign in, register,
 // password reset, pending approval, session expired) so they share one
@@ -30,42 +31,91 @@ type AuthLayoutProps = {
   children: React.ReactNode;
 };
 
+const { label, year, school, program, team, area } = PROJECT_INFO;
+const affiliation = [program, school].filter(Boolean).join(', ');
+
+const CapstoneBadge = ({ className = '' }: { className?: string }) => (
+  <span className={`inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-primary shadow-sm whitespace-nowrap ${className}`}>
+    <GraduationCap className="w-3.5 h-3.5" />
+    {label} {year}
+  </span>
+);
+
+const CapstoneCard = () => (
+  <div className="rounded-xl bg-black/20 ring-1 ring-white/15 p-5">
+    <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-white/60">About this project</p>
+    <p className="mt-2 text-sm leading-relaxed text-white/85">
+      AgapSense is a student capstone project: an IoT fire detection and alert system
+      designed for homes in the {area}.
+    </p>
+    {affiliation && <p className="mt-2 text-sm font-semibold">{affiliation}</p>}
+    {team.length > 0 && (
+      <p className="mt-1 text-xs leading-relaxed text-white/70">{team.join(' \u00b7 ')}</p>
+    )}
+    <p className="mt-3 text-[11px] leading-relaxed text-white/55">
+      Academic prototype. Not an official Bureau of Fire Protection service.
+    </p>
+  </div>
+);
+
+// Faint "sensor signal" rings radiating from a corner, in place of a photo.
+const SignalRings = () => (
+  <div aria-hidden="true" className="pointer-events-none absolute -right-24 -bottom-24 lg:-right-40 lg:-bottom-40">
+    {[160, 280, 400, 520, 640].map((d, i) => (
+      <span
+        key={d}
+        className="absolute rounded-full border border-white"
+        style={{ width: d, height: d, right: -d / 2, bottom: -d / 2, opacity: 0.18 - i * 0.03 }}
+      />
+    ))}
+  </div>
+);
+
 export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: AuthLayoutProps) => (
   <div className="min-h-dvh bg-surface font-['Inter',_sans-serif] lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-    {/* Brand panel: a short band on phones/tablets, a full-height column on desktop. */}
-    <aside className="relative overflow-hidden bg-[#4D2120] text-white lg:sticky lg:top-0 lg:h-dvh">
-      <img src="/login_bg.png" alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
-      <div className="absolute inset-0 bg-gradient-to-b from-[#4D2120]/40 via-[#4D2120]/60 to-[#2A1110]/90" />
+    {/* Brand panel in the app's header red: a short band on phones/tablets, a full-height column on desktop. */}
+    <aside className="relative overflow-hidden bg-gradient-to-br from-primary via-[#A51818] to-[#7F1212] text-white lg:sticky lg:top-0 lg:h-dvh">
+      <SignalRings />
 
-      <div className="relative z-10 flex h-full flex-col px-5 py-6 sm:px-8 lg:px-12 lg:py-12">
-        <div className="flex items-center gap-3">
-          <Flame />
-          <span className="font-black text-2xl tracking-[-0.05em] uppercase">AgapSense</span>
+      <div className="relative z-10 flex h-full flex-col px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10 xl:px-16">
+        <div className="flex flex-wrap items-center justify-between lg:justify-start gap-x-4 gap-y-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
+              <Flame size={16} />
+            </span>
+            <span className="font-extrabold text-xl lg:text-2xl tracking-[-0.03em]">AgapSense</span>
+          </div>
+          <CapstoneBadge />
         </div>
 
-        <h1 className="mt-4 font-black tracking-[-0.025em] text-2xl leading-tight sm:text-3xl lg:mt-10 lg:text-[44px] lg:leading-[1.15]">
-          Smarter detection,{' '}
-          <br className="hidden lg:block" />
-          <span className="text-accent-light lg:text-accent">faster response.</span>
-        </h1>
+        <div className="lg:my-auto lg:py-8">
+          <h1 className="mt-5 font-black tracking-[-0.03em] text-[26px] leading-tight sm:text-3xl lg:mt-0 lg:text-[40px] lg:leading-[1.1] 2xl:text-5xl">
+            Smarter detection,{' '}
+            <br className="hidden lg:block" />
+            <span className="text-[#FFC9B5]">faster response.</span>
+          </h1>
+          <p className="mt-2 text-sm text-white/80 sm:text-base lg:mt-4 lg:max-w-sm">
+            IoT smoke and heat monitoring that alerts residents and BFP responders the moment a fire starts.
+          </p>
 
-        <ul className="hidden lg:flex flex-col gap-6 mt-12 max-w-sm">
-          {FEATURES.map(({ icon: Icon, title: t, text }) => (
-            <li key={t} className="flex gap-4">
-              <span className="w-10 h-10 shrink-0 rounded-lg bg-white/10 flex items-center justify-center">
-                <Icon className="w-5 h-5 text-[#FF8A65]" />
-              </span>
-              <div>
-                <p className="font-bold text-sm">{t}</p>
-                <p className="text-sm text-white/70 leading-relaxed">{text}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+          <ul className="hidden lg:[@media(min-height:820px)]:flex flex-col gap-5 mt-10 max-w-sm">
+            {FEATURES.map(({ icon: Icon, title: t, text }) => (
+              <li key={t} className="flex gap-4">
+                <span className="w-10 h-10 shrink-0 rounded-lg bg-white/15 ring-1 ring-white/20 flex items-center justify-center">
+                  <Icon className="w-5 h-5" />
+                </span>
+                <div>
+                  <p className="font-bold text-sm">{t}</p>
+                  <p className="text-sm text-white/75 leading-relaxed">{text}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        <p className="hidden lg:block mt-auto pt-12 text-xs text-white/50">
-          IoT fire detection and alert system
-        </p>
+        <div className="hidden lg:block max-w-sm">
+          <CapstoneCard />
+        </div>
       </div>
     </aside>
 
@@ -77,6 +127,13 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
           {subtitle && <p className="mt-2 text-sm leading-relaxed text-[#534341]">{subtitle}</p>}
         </div>
         {children}
+
+        <footer className="lg:hidden mt-12 pt-6 border-t border-border text-xs leading-relaxed text-text-warm">
+          <p className="font-semibold text-[#534341]">AgapSense · {label} {year}</p>
+          {affiliation && <p>{affiliation}</p>}
+          {team.length > 0 && <p>{team.join(' \u00b7 ')}</p>}
+          <p className="mt-1">Academic prototype. Not an official Bureau of Fire Protection service.</p>
+        </footer>
       </div>
     </main>
   </div>
