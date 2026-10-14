@@ -10,6 +10,9 @@ import { usePagedRows } from '../../hooks/usePagedRows';
 // The resident's one alert page (it replaced the separate resident System
 // Log): every alert their device raised, filtered by date range, tier and
 // open/resolved, with readings, notifications sent and when it was resolved.
+// Active alerts always show, whatever the dates: one can stay open for weeks
+// (e.g. the device went offline mid-alert and could not auto-resolve), and
+// the resident must never see "no alerts" while one is still open.
 
 type TierFilter = 'all' | '1' | '2';
 type StatusFilter = 'all' | 'active' | 'resolved';
@@ -33,7 +36,11 @@ const LABEL = 'text-xs font-bold text-[#52525B] uppercase tracking-wider';
 
 export const ResidentAlerts = () => {
   const { profile } = useAuth();
+  // Active alerts first (any date), then everything else in the date range.
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
+  // Active alerts that fall outside the picked dates, to explain why they show.
+  const [activeOutsideRange, setActiveOutsideRange] = useState(0);
+  const [hitFetchLimit, setHitFetchLimit] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -51,26 +58,42 @@ export const ResidentAlerts = () => {
   const fetchAlerts = useCallback(async () => {
     if (!deviceId) return;
     const id = ++requestId.current;
-    let query = supabase
+    let ranged = supabase
       .from('alert_events')
       .select('*')
       .eq('device_id', deviceId)
       .order('triggered_at', { ascending: false })
       .limit(FETCH_LIMIT);
     // Whole local days: from 00:00 on the From date to the end of the To date.
-    if (fromDate) query = query.gte('triggered_at', new Date(`${fromDate}T00:00:00`).toISOString());
+    if (fromDate) ranged = ranged.gte('triggered_at', new Date(`${fromDate}T00:00:00`).toISOString());
     if (toDate) {
       const end = new Date(`${toDate}T00:00:00`);
       end.setDate(end.getDate() + 1);
-      query = query.lt('triggered_at', end.toISOString());
+      ranged = ranged.lt('triggered_at', end.toISOString());
     }
-    if (tierFilter !== 'all') query = query.eq('alert_tier', Number(tierFilter));
+    let active = supabase
+      .from('alert_events')
+      .select('*')
+      .eq('device_id', deviceId)
+      .is('resolved_at', null)
+      .order('triggered_at', { ascending: false });
+    if (tierFilter !== 'all') {
+      ranged = ranged.eq('alert_tier', Number(tierFilter));
+      active = active.eq('alert_tier', Number(tierFilter));
+    }
 
-    const { data, error } = await query;
+    const [rangedRes, activeRes] = await Promise.all([ranged, active]);
     if (id !== requestId.current) return;
+    const error = rangedRes.error ?? activeRes.error;
     if (error) console.error('Error fetching alert history:', error);
     setLoadFailed(!!error);
-    setAlerts((data as AlertEvent[]) || []);
+
+    const inRange = (rangedRes.data as AlertEvent[]) || [];
+    const open = (activeRes.data as AlertEvent[]) || [];
+    const inRangeIds = new Set(inRange.map(a => a.id));
+    setActiveOutsideRange(open.filter(a => !inRangeIds.has(a.id)).length);
+    setHitFetchLimit(inRange.length === FETCH_LIMIT);
+    setAlerts([...open, ...inRange.filter(a => a.resolved_at)]);
   }, [deviceId, fromDate, toDate, tierFilter]);
 
   useEffect(() => {
@@ -149,6 +172,12 @@ export const ResidentAlerts = () => {
             </div>
           </div>
         </div>
+
+        {activeOutsideRange > 0 && (
+          <p className="text-xs font-medium text-[#B91C1C]">
+            Includes {activeOutsideRange} active {activeOutsideRange === 1 ? 'alert' : 'alerts'} from outside these dates. Active alerts always show until they are resolved.
+          </p>
+        )}
 
         <div role="radiogroup" aria-label="Filter by status" className="flex flex-wrap gap-2">
           {statusChips.map(c => {
@@ -240,7 +269,7 @@ export const ResidentAlerts = () => {
         <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={filtered.length} onPageChange={setPage} />
       </div>
 
-      {alerts.length === FETCH_LIMIT && (
+      {hitFetchLimit && (
         <p className="text-xs text-[#A1A1AA]">Only the {FETCH_LIMIT} most recent alerts in this range are shown. Narrow the dates to see older ones.</p>
       )}
     </div>
