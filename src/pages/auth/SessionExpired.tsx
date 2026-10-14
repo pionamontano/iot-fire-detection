@@ -1,30 +1,16 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AlertCircle, LogIn } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { LogIn } from 'lucide-react';
+import { AuthLayout, AuthAlert, AUTH_BTN_PRIMARY } from '../../components/AuthLayout';
 
-export const SessionExpired = () => {
-  const navigate = useNavigate();
-
-  return (
-    <div className="min-h-screen bg-[#F4F4F5] flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white border border-[#E4E4E7] rounded-lg p-8 text-center shadow-sm">
-        <div className="w-16 h-16 bg-[#FEE2E2] rounded-full flex items-center justify-center mx-auto mb-6">
-          <AlertCircle className="w-8 h-8 text-[#DC2626]" />
-        </div>
-        
-        <h1 className="text-2xl font-black text-[#18181B] mb-2">Session Expired</h1>
-        <p className="text-[#52525B] text-sm mb-8">
-          For your security, your session has timed out due to inactivity. Please sign in again to continue.
-        </p>
-
-        <button
-          onClick={() => navigate('/login')}
-          className="w-full flex items-center justify-center gap-2 bg-primary text-white py-3 px-4 rounded-lg font-bold text-sm hover:bg-primary-dark transition-colors"
-        >
-          <LogIn className="w-4 h-4" />
-          Return to Login
-        </button>
-      </div>
+export const SessionExpired = () => (
+  <AuthLayout title="Session expired">
+    <div className="space-y-6">
+      <AuthAlert tone="warning">
+        For your security, you were signed out after a period of inactivity. Sign in again to continue.
+      </AuthAlert>
+      <Link to="/login" className={AUTH_BTN_PRIMARY}>
+        <LogIn className="w-4 h-4" /> Sign in again
+      </Link>
     </div>
-  );
-};
+  </AuthLayout>
+);
