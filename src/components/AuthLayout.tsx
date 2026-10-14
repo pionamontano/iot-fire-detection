@@ -1,6 +1,6 @@
 import React, { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Eye, EyeOff, GraduationCap, Lock, Radio, ShieldCheck } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Eye, EyeOff, Lock, Radio, ShieldCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { PROJECT_INFO } from '../lib/projectInfo';
 
@@ -31,19 +31,12 @@ type AuthLayoutProps = {
   children: React.ReactNode;
 };
 
-const { label, year, title: projectTitle, school, program, section, team, area } = PROJECT_INFO;
+const { title: projectTitle, school, program, section, team, area } = PROJECT_INFO;
 
 const TeamList = ({ className = '' }: { className?: string }) => (
   <ul className={`grid grid-cols-1 min-[360px]:grid-cols-2 gap-x-4 gap-y-0.5 ${className}`}>
     {team.map((name) => <li key={name}>{name}</li>)}
   </ul>
-);
-
-const CapstoneBadge = ({ className = '' }: { className?: string }) => (
-  <span className={`inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-primary shadow-sm whitespace-nowrap ${className}`}>
-    <GraduationCap className="w-3.5 h-3.5" />
-    {label} {year}
-  </span>
 );
 
 const CapstoneCard = () => (
@@ -91,14 +84,11 @@ export const AuthLayout = ({ title, subtitle, wide, backToLogin, children }: Aut
       <SignalRings />
 
       <div className="relative z-10 flex h-full flex-col lg:overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10 xl:px-16">
-        <div className="flex flex-wrap items-center justify-between lg:justify-start gap-x-4 gap-y-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
-              <Flame size={16} />
-            </span>
-            <span className="font-extrabold text-xl lg:text-2xl tracking-[-0.03em]">AgapSense</span>
-          </div>
-          <CapstoneBadge />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
+            <Flame size={16} />
+          </span>
+          <span className="font-extrabold text-xl lg:text-2xl tracking-[-0.03em]">AgapSense</span>
         </div>
 
         <div className="lg:my-auto lg:py-8">

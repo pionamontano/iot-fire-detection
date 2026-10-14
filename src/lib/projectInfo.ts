@@ -1,8 +1,6 @@
 // Capstone credits shown on the sign-in and registration pages.
 // Empty fields are simply left off the page.
 export const PROJECT_INFO = {
-  label: 'Capstone Project',
-  year: '2026',
   title: 'IoT-Based Fire Detection and Location Tracking System Using Multi-Sensor Fusion and Dual-Path Communication',
   /** e.g. 'Bulacan State University' */
   school: '',
