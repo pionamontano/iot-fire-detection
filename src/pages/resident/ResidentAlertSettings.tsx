@@ -265,6 +265,11 @@ const handleConnectTelegram = async () => {
                     <span className="text-[10px] font-bold">{coWarning}</span>
                   </div>
                 )}
+                {/* The MQ-7 reports a resistance change that the firmware converts to ppm
+                    with the datasheet curve and an uncalibrated baseline, so values are estimates. */}
+                <p className="text-[11px] text-text-subtle leading-relaxed mt-3">
+                  CO readings are approximate. The gas sensor estimates ppm from its datasheet curve, so use this as an alert level rather than an exact measurement.
+                </p>
               </div>
             </div>
 

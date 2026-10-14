@@ -171,7 +171,7 @@ To narrow the list, pick a **From** and **To** date (the last 30 days by default
 Here you control **when** the device alerts and **how** you are notified.
 
 - **Temperature Threshold** (°C): the temperature at which the heat sensor counts as "over limit".
-- **CO Threshold** (ppm): the carbon monoxide level at which the gas sensor counts as "over limit".
+- **CO Threshold** (ppm): the carbon monoxide level at which the gas sensor counts as "over limit". CO readings are approximate: the MQ-7 gas sensor estimates ppm from its datasheet curve rather than measuring it exactly, so treat the number as an alert level, not a precise measurement.
 - **Primary SMS Recipient**: the mobile number that receives Tier 2 SMS alerts (`09XXXXXXXXX`).
 - **Web Push Alerts**: press **Enable Push Notifications** and allow notifications in your browser to get alerts on that device. Press **Disable Push Notifications** to stop them.
 - **Telegram Alerts**: press **Link Telegram Account** and follow the prompt to link your Telegram. *(Currently, Telegram fire alerts are sent to the shared BFP station chat; personal Telegram alerts are not yet delivered by the system.)*
