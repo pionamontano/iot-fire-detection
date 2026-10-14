@@ -10,7 +10,6 @@ import {
   XCircle,
   CheckCircle2,
   List,
-  Plus,
   Pencil,
   Power,
   ShieldCheck,
@@ -268,10 +267,6 @@ export const Alerts = () => {
                   </button>
                 )}
               </div>
-              <Link to="/admin/devices?register=1" className="flex items-center gap-2 px-3 py-1.5 bg-primary rounded text-white text-xs font-bold transition-colors hover:bg-primary-dark">
-                <Plus className="w-3.5 h-3.5" />
-                Register Device
-              </Link>
             </div>
           </div>
 
@@ -315,8 +310,14 @@ export const Alerts = () => {
                 <tr>
                   <td colSpan={5} className="text-center py-14">
                     <p className="font-medium text-sm text-[#5B403D]">
-                      {q ? `No devices match “${searchQuery}”.` : statusFilter !== 'all' ? 'No devices with this status.' : 'No devices found.'}
+                      {q ? `No devices match “${searchQuery}”.` : statusFilter !== 'all' ? 'No devices with this status.' : 'No devices registered yet.'}
                     </p>
+                    {/* Registration lives on the Devices page only; this is just a pointer for an empty fleet. */}
+                    {devices.length === 0 && (
+                      <Link to="/admin/devices?register=1" className="inline-block mt-2 text-xs font-bold text-primary hover:underline">
+                        Register a device on the Devices page
+                      </Link>
+                    )}
                   </td>
                 </tr>
               ) : (
