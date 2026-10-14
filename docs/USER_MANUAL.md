@@ -147,15 +147,16 @@ The first time you sign in, you must complete a short setup:
 
 Your home screen shows the live state of your device:
 
-- **Device status**: online, reconnecting or offline.
+- **Notices at the top** when something needs you: a red **Fire alert active** or amber **Warning active** box (with **View alert**), and a grey **Device offline** box when the device has not reported for over 15 minutes. While it is offline, no new readings or fire alerts can reach you or responders, so check its power and Wi-Fi.
+- **Four summary tiles**: **Device Status**, **Active Alerts** (turns red only when an alert is open), **Alerts Today** and **Last Report** (how long ago the device last reported, and when).
   - **Online** — heard from the device within the last 2 minutes.
-  - **Reconnecting** — last heard 2 to 15 minutes ago ("Last seen X min ago").
+  - **Reconnecting** — last heard 2 to 15 minutes ago.
   - **Offline** — not heard from for more than 15 minutes.
-- **Active alarms** and **alerts today**.
-- **Last seen** — when the device last reported.
-- **Real-time telemetry** — temperature and gas (CO) readings. You will see *"Initializing sensors..."* during the warm-up period.
-- **GPS status, connection and sensor** health cards, and a **Power** card (**Mains** or **Battery**). *Battery* means the building has lost mains power and the device is running on its backup.
-- **Recent Activity Log** and a **map** showing where your device is registered.
+- **Current Readings** — temperature and carbon monoxide (CO) against their alert levels. If the device is offline this card is titled **Last Reading**, the values are greyed out, and it says when they were recorded. You will see *"Sensors warming up"* during the warm-up period.
+- **Reading History** — the last 24 readings as a bar chart, switchable between **Temperature** and **CO**. The dashed red line is the alert level; bars at or above it are red. Point at (or tab to) a bar to see its value and time.
+- **Recent Alerts** — the five newest alerts; **View all** opens Alert History.
+- **Device Health** — **Connection**, **Sensors**, **GPS** and **Power** (**Mains** or **On battery**). *On battery* means the building has lost mains power and the device is running on its backup. These show *No data* while the device is offline.
+- **Install Location** — a map of where your device is and the address on file.
 
 **Location mismatch prompt.** If the device's GPS position is more than about 100 m from the address on file, a *"Location Discrepancy Detected"* box appears. Choose **Update** to save the new address, or **Keep Current** to leave it unchanged.
 

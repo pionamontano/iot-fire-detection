@@ -43,14 +43,14 @@ Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware 
 - **GSM path:** SIM800L is used for **SMS only** (2G). There is no data-over-GSM fallback; whether one is wanted is an open owner question (spec OQ-02).
 - **Captive portal:** with no saved credentials the ESP32 opens an **open** AP named `AgapSense-Setup` (WiFiManager); the user selects a network and enters the password, credentials are stored in NVS. The page is served by the ESP32, separate from the web app. The portal is relaunched after 30 s disconnected.
 - **Local indicators:** yellow LED = Tier 1, red LED + buzzer = Tier 2, blue LED = solid when online, blinking (500 ms) when Wi-Fi is up but the backend is unreachable (degraded), off when offline.
-- **Power:** mains with backup battery; the device reports `on_battery` (battery ADC < 4000 mV). Admin pages show a "Battery" badge; the resident home page shows a Power card (Mains / Battery).
+- **Power:** mains with backup battery; the device reports `on_battery` (battery ADC < 4000 mV). Admin pages show a "Battery" badge; the resident Dashboard shows Power (Mains / On battery) under Device Health.
 - **Firmware reliability:** alert POST retry with backoff, late-binding of SMS outcome to the correct incident, 30 s hardware watchdog, and OTA update when the backend's target firmware version differs (`FIRMWARE_VERSION` in `config.h`).
 - **No local buffering:** readings generated while offline are not queued and are lost.
 
 ### 6. Dashboards and Real-Time Monitoring
 - **Realtime:** the SPA uses Supabase Realtime (`postgres_changes`) for readings, alerts and device updates.
 - **Connectivity badge** (`src/lib/deviceStatus.ts`): *Online* (< 2 min since last contact), *Reconnecting* (2–15 min, "Last seen X min ago"), *Offline* (> 15 min or never). The status is re-evaluated on a client-side tick.
-- **Sensor initialisation:** while `sensor_ready` is false the resident home page shows "Initializing sensors..." in place of values. `sensor_ready` becomes true after the first complete MQ-7 cycle (60 s heating + 90 s measuring ≈ 150 s after power-on).
+- **Sensor initialisation:** while `sensor_ready` is false the resident Dashboard shows "Sensors warming up" in place of values. `sensor_ready` becomes true after the first complete MQ-7 cycle (60 s heating + 90 s measuring ≈ 150 s after power-on).
 - **Admin:** dashboard, map, devices (management table, registration, firmware releases), users, Device Status (fleet status, manual resolve), system log with export, security settings.
 - **Responder:** dashboard (state per device, unresolved incidents, map, audible alarm for unacknowledged fire), alert logs, settings (profile, Telegram link, station information).
 - **Resident:** mandatory first-login setup (mobile number, then install address and pin if a device is linked), home (status, readings, last 24 readings, alerts, address prompts), alert settings (thresholds, Web Push, Telegram link), device info, system log, account.
