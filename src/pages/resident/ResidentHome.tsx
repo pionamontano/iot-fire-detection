@@ -906,10 +906,8 @@ export const ResidentHome = () => {
           {/* Install location (the map lives on Device Information) */}
           <section className={CARD}>
             <SectionHeader title="Install Location" />
-            <div className="flex gap-2 items-start mt-4">
-              <MapPin size={16} className="text-text-body mt-0.5 shrink-0" />
-              <span className="text-sm font-semibold text-text">{displayAddress(device.location_desc)}</span>
-            </div>
+            {/* No pin here: the card title says what this is, and the badge below already carries one. */}
+            <p className="text-sm font-semibold text-text mt-4">{displayAddress(device.location_desc)}</p>
             <LocationBadge location={location} now={now} />
             {!isValidCoordinate(device.latitude, device.longitude) ? (
               <Link

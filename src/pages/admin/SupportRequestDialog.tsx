@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import type { SupportRequest, Device, Role } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { ROLE_OPTIONS } from '../../lib/roles';
-import { formatDateTime, getRoleLabel } from '../../lib/supportRequests';
+import { formatDateTime, getRoleLabel, DEVICE_REQUEST_CATEGORY } from '../../lib/supportRequests';
 import { OptionList, DevicePicker } from '../../components/pickers';
 import type { Option } from '../../components/pickers';
 import {
@@ -25,11 +25,12 @@ type ActionId = 'none' | 'role' | 'reset_link' | 'temp_password' | 'unlock' | 'd
 
 const EMPTY = '—';
 
-// Same categories as AdminSupportModal's picker; anything else falls back to grey.
+// Categories from supportCategoriesFor() (both roles' lists, plus ones older requests may carry); anything else falls back to grey.
 const CATEGORY_BADGE: Record<string, string> = {
   'Role Change': 'bg-blue-100 text-blue-800 border-blue-200',
   'Password Reset': 'bg-purple-100 text-purple-800 border-purple-200',
   'Station Assignment': 'bg-green-100 text-green-800 border-green-200',
+  [DEVICE_REQUEST_CATEGORY]: 'bg-green-100 text-green-800 border-green-200',
   'Account Access / Permissions': 'bg-amber-100 text-amber-800 border-amber-200',
 };
 
@@ -76,6 +77,8 @@ const defaultAction = (req: SupportRequestRow): ActionId => {
     case 'Role Change': return 'role';
     case 'Password Reset': return req.contact_email ? 'reset_link' : 'temp_password';
     case 'Account Access / Permissions': return req.contact_email ? 'unlock' : 'none';
+    case DEVICE_REQUEST_CATEGORY: return 'device';
+    // Residents used to pick this to ask for a device; keep those older requests working.
     case 'Station Assignment': return req.requester?.role === 'resident' ? 'device' : 'none';
     default: return 'none';
   }
