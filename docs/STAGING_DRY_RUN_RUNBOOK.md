@@ -139,7 +139,7 @@ expect the same id with `created:false`. Confirm no provider is contacted (check
 ## Phase 5 - frontend against staging (local only)
 Run the app locally with staging credentials (do not deploy it):
 `VITE_SUPABASE_URL=https://<STAGING_REF>.supabase.co VITE_SUPABASE_ANON_KEY=<staging anon key> npm run dev`.
-Check as admin, responder and resident: login, admin Users/Devices/Alerts/Logs load without error banners; the responder dashboard
+Check as admin, responder and resident: login, admin Users/Devices/Device Status/Logs load without error banners; the responder dashboard
 Acknowledge / Resolve / False alarm actions go through `transition_incident` and the incident closes with `resolved_at` set;
 GPS labels (live within 15 minutes / last known / registered / unavailable) look right; admin dashboard still receives profile changes (Realtime).
 

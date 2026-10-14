@@ -68,7 +68,7 @@
 | **Resident Home**: live CO and temperature, status card, Power card (Mains/Battery), last 24 readings. | "The resident home page shows live readings streamed in real time, the device status, and whether the node is on mains or backup battery." |
 | Point out the connectivity badge: Online / Reconnecting / Offline. | "A connectivity badge shows whether the device is online, reconnecting, or offline, with the last-seen time." |
 | **Alert Settings**: adjust the CO and temperature thresholds, enable Web Push, link Telegram. | "Residents tune their own alert thresholds, enable push notifications, and link Telegram — and the node picks up the new values within minutes, without re-flashing." |
-| Briefly show **Device Info** and **System Log**. | "Everything the device has reported is available in the log." |
+| Briefly show **Device Info** and **Alert History**. | "Every alert the device has raised is listed here, with what was sent and when it was resolved." |
 
 ---
 
@@ -104,7 +104,7 @@ Use a **split-screen**: Resident dashboard · Responder dashboard · Node close-
 | Change status to **Responding**. | "Then marks the team as responding." |
 | Change status to **Resolved** (or **False alarm**). Pin turns back to green. | "Once the situation is under control, they mark it resolved — or a false alarm. A closed incident is locked and can't be edited afterwards, so the audit trail is trustworthy." |
 | **Alert Logs** page: delivery status for Telegram, SMS-owner, SMS-BFP. | "The log records whether each Telegram and SMS message was actually delivered, based on the modem's real result." |
-| Admin window: **System Overview** → manual close option; mention auto-resolve. | "If readings return to safe levels, the system can resolve the incident automatically, and admins can also close one manually." |
+| Admin window: **Device Status** → manual close option; mention auto-resolve. | "If readings return to safe levels, the system can resolve the incident automatically, and admins can also close one manually." |
 
 ---
 

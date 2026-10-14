@@ -1,6 +1,7 @@
-// Shared device status (used by the dashboard, map and System Overview):
+// Shared device status (used by the dashboard, map and Device Status):
 // Tier 2 = fire, Tier 1 = warning (spec SW-2.3.1), otherwise connectivity
-// decides online / reconnecting / offline (spec SW-2.4.3).
+// decides online / reconnecting / offline (spec SW-2.4.3); a device an admin
+// switched off is disabled.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getDeviceStatus, getStatusNote, formatLastSeen } from '../src/lib/deviceStatus.ts';
@@ -30,11 +31,13 @@ test('getDeviceStatus: connectivity decides online / reconnecting / offline', ()
   assert.equal(getDeviceStatus(device({ last_seen_at: ago(5 * 60_000) }), [], NOW), 'reconnecting');
   assert.equal(getDeviceStatus(device({ last_seen_at: ago(20 * 60_000) }), [], NOW), 'offline');
   assert.equal(getDeviceStatus(device({ last_seen_at: null }), [], NOW), 'offline');
-  assert.equal(getDeviceStatus(device({ is_active: false }), [], NOW), 'offline');
+  // Switched off by an admin: its own status, never mistaken for offline.
+  assert.equal(getDeviceStatus(device({ is_active: false }), [], NOW), 'disabled');
+  assert.equal(getDeviceStatus(device({ is_active: false, last_seen_at: null }), [], NOW), 'disabled');
 });
 
-test('getStatusNote: disabled devices say so; others show last seen', () => {
-  assert.equal(getStatusNote(device({ is_active: false }), 'offline', NOW), 'Disabled by admin');
+test('getStatusNote: last seen for offline, reconnecting and disabled devices', () => {
+  assert.equal(getStatusNote(device({ is_active: false, last_seen_at: ago(3 * 3600_000) }), 'disabled', NOW), 'Last seen 3 h ago');
   assert.equal(getStatusNote(device({ last_seen_at: ago(5 * 60_000) }), 'reconnecting', NOW), 'Last seen 5 min ago');
   assert.equal(getStatusNote(device({ last_seen_at: null }), 'offline', NOW), 'Never seen');
   assert.equal(getStatusNote(device(), 'online', NOW), null);

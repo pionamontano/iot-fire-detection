@@ -1,7 +1,7 @@
 // @ts-nocheck
 // deno-lint-ignore-file
 
-// Admin-only account management for the User Management page:
+// Admin-only account management for the Users page:
 //   list        -> login email + last sign-in for every account (profiles has no email column)
 //   update      -> name, contact number, address, role, login email, temporary password
 //   set_active  -> deactivate / reactivate an account

@@ -106,12 +106,13 @@ export const InteractiveMap = () => {
   // Filter devices to display
   const displayedDevices = mapDevices.filter(d => {
     const status = getDeviceStatus(d, activeAlerts, now);
-    return !(hideOffline && status === 'offline');
+    return !(hideOffline && (status === 'offline' || status === 'disabled'));
   });
   const locatedDevices = mapDevices.filter(d => d.location.kind !== 'unavailable');
   const shownCount = displayedDevices.filter(d => d.location.kind !== 'unavailable').length;
   const legendCounts = countByStatus(mapDevices, activeAlerts, now);
-  const offlineCount = legendCounts.offline ?? 0;
+  // Disabled devices don't report either, so the offline toggle covers them too.
+  const offlineCount = (legendCounts.offline ?? 0) + (legendCounts.disabled ?? 0);
 
   // Filter feed alerts. Tier 2 = dual-sensor confirmed fire; Tier 1 =
   // single-sensor warning (spec SW-2.3.1). Tier 1 was previously labeled
@@ -159,7 +160,7 @@ export const InteractiveMap = () => {
           devices={displayedDevices}
           activeAlerts={activeAlerts}
           now={now}
-          onViewDetails={(d) => navigate(`/admin/alerts?q=${encodeURIComponent(d.device_code)}&device=${d.id}`)}
+          onViewDetails={(d) => navigate(`/admin/status?q=${encodeURIComponent(d.device_code)}&device=${d.id}`)}
           selectedDeviceId={selectedDeviceId}
           onSelectionHandled={() => setSelectedDeviceId(null)}
         >

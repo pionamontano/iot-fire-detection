@@ -119,7 +119,7 @@ sequenceDiagram
 2. **Intended Roles:** Admin.
 3. **Entry Route:** `src/pages/admin/Dashboard.tsx`.
 4. **Main UI Components:** Stat cards, map preview, recent alerts feed.
-5. **User Actions:** View aggregate metrics; related admin pages are Map, Devices, Users, System Overview (`Alerts.tsx`: rename, power toggle, manual resolve via `transition_incident`), Logs and Security Settings.
+5. **User Actions:** View aggregate metrics; related admin pages are Map, Devices, Users, Device Status (`DeviceStatus.tsx`: fleet status, manual resolve via `transition_incident`), Logs and Security Settings.
 6. **Business Rules:** Shows device connectivity (Online < 2 min, Reconnecting 2–15 min, Offline > 15 min via `src/lib/deviceStatus.ts`), active alerts, user count, recent readings and a battery badge when the device reports `on_battery`.
 7. **Input Validation:** None.
 8. **Data Sources:** `devices`, `alert_events`, `profiles`, `sensor_readings`.
@@ -147,7 +147,7 @@ sequenceDiagram
 ### C. Resident Dashboard
 1. **Module Name and Purpose:** Resident Home (`/home`). Real-time device telemetry.
 2. **Intended Roles:** Resident.
-3. **Entry Route:** `src/pages/resident/ResidentHome.tsx` (also `ResidentSetup`, `ResidentAlertSettings`, `ResidentDeviceInfo`, `ResidentSystemLog`, `ResidentAccount`).
+3. **Entry Route:** `src/pages/resident/ResidentHome.tsx` (also `ResidentSetup`, `ResidentAlertSettings`, `ResidentDeviceInfo`, `ResidentAlerts`, `ResidentAccount`).
 4. **Main UI Components:** Live sensor cards (CO, Temp) — replaced by "Initializing sensors..." while `sensor_ready` is false — power card (Mains / Battery), last 24 readings, active alerts list.
 5. **User Actions:** Complete mandatory first-login setup (mobile number), link a device, edit thresholds and contact number, enable Web Push / Telegram link, approve/reject address discrepancies.
 6. **Business Rules:** Can only view data where `device_id` matches their own profile's `device_id`.

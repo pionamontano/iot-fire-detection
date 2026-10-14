@@ -2,12 +2,11 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Device } from '../../lib/supabase';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { useSearchParams } from 'react-router-dom';
 import {
   Download,
   Eye,
-  ChevronLeft,
-  ChevronRight,
   AlertTriangle,
   Shield,
   Zap,
@@ -64,7 +63,7 @@ export const ResponderAlertLogs = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [avgResponseSeconds, setAvgResponseSeconds] = useState<number | null>(null);
   const [selectedLog, setSelectedLog] = useState<LogRow | null>(null);
-  const itemsPerPage = 15;
+  const itemsPerPage = TABLE_PAGE_SIZE;
 
   useEffect(() => {
     fetchData();
@@ -150,7 +149,6 @@ export const ResponderAlertLogs = () => {
     return filtered;
   }, [logs, statusFilter, deviceFilter, dateFilter]);
 
-  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage) || 1;
   const paginatedLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const unresolvedCount = logs.filter(l => l.status === 'FIRE ALERT (CRITICAL)' || l.status === 'ELEVATED TEMP').length;
@@ -258,25 +256,23 @@ export const ResponderAlertLogs = () => {
       </div>
 
       {/* ─── Data Table ─── */}
-      <div className="bg-white border border-[#E5E2E1] rounded-lg overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      <div className={TABLE_CARD}>
+        <TableScroll>
+          <table className={TABLE}>
             <thead>
-              <tr className="border-b border-[#E5E2E1]">
-                <th className="text-left px-6 py-4 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Timestamp</th>
-                <th className="text-left px-6 py-4 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Device Name</th>
-                <th className="text-left px-6 py-4 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Location</th>
-                <th className="text-left px-6 py-4 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Telemetry Status</th>
-                <th className="text-center px-6 py-4 text-[#5B403D] font-bold text-[10px] tracking-[0.05em] uppercase">Actions</th>
+              <tr className={THEAD_ROW}>
+                <th className={TH}>Timestamp</th>
+                <th className={TH}>Device Name</th>
+                <th className={TH}>Location</th>
+                <th className={TH}>Telemetry Status</th>
+                <th className={`${TH} !text-center`}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <TableBodySkeleton cols={5} rows={5} />
               ) : paginatedLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center py-16 text-[#A1A1AA] text-sm">No records found.</td>
-                </tr>
+                <TableEmpty colSpan={5}>No records found.</TableEmpty>
               ) : (
                 paginatedLogs.map(log => {
                   const cfg = statusConfig[log.status];
@@ -285,8 +281,8 @@ export const ResponderAlertLogs = () => {
                   const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
 
                   return (
-                    <tr key={log.id} className="border-b border-[#E5E2E1] last:border-0 hover:bg-[#FCF9F8] transition-colors">
-                      <td className="px-6 py-4">
+                    <tr key={log.id} className={TR}>
+                      <td className={TD}>
                         <div className="flex flex-col">
                           <span className={`font-mono text-xs font-bold ${log.isCritical ? 'text-[#DC2626]' : 'text-[#1C1B1B]'}`}>
                             {timeStr}
@@ -294,19 +290,19 @@ export const ResponderAlertLogs = () => {
                           <span className="text-[10px] text-[#A1A1AA] mt-0.5">{dateStr}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className={TD}>
                         <span className="text-[#1C1B1B] font-bold text-xs">{log.deviceName}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className={TD}>
                         <span className="text-[#5B403D] text-xs">{log.location}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className={TD}>
                         <span className="inline-flex items-center gap-1.5 text-xs font-bold" style={{ color: cfg.color }}>
                           <span className={`w-2 h-2 rounded-full ${cfg.dot}`}></span>
                           {log.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className={`${TD} text-center`}>
                         <button
                           onClick={() => setSelectedLog(log)}
                           title="View details"
@@ -322,33 +318,8 @@ export const ResponderAlertLogs = () => {
               )}
             </tbody>
           </table>
-        </div>
-
-        {/* Pagination Footer */}
-        <div className="px-6 py-4 border-t border-[#E5E2E1] flex items-center justify-between">
-          <span className="text-[#5B403D] text-[10px] font-bold tracking-[0.05em] uppercase">
-            Showing {Math.min(filteredLogs.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(currentPage * itemsPerPage, filteredLogs.length)} of {filteredLogs.length.toLocaleString()} records
-          </span>
-          <div className="flex items-center gap-3 text-xs">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="w-6 h-6 flex items-center justify-center text-[#5B403D] hover:bg-gray-100 rounded disabled:opacity-40"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-[#1C1B1B] font-bold text-xs">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="w-6 h-6 flex items-center justify-center text-[#5B403D] hover:bg-gray-100 rounded disabled:opacity-40"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+        </TableScroll>
+        <TablePager page={currentPage} pageSize={itemsPerPage} total={filteredLogs.length} onPageChange={setCurrentPage} />
       </div>
 
       {/* ─── Footer Summary Cards ─── */}

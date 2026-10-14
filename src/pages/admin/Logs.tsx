@@ -5,8 +5,9 @@ import type { Device } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
-import { Download, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Zap, History, Filter,  } from 'lucide-react';
+import { Download, ChevronDown, AlertTriangle, Zap, History, Filter } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 
 type LogEvent = {
   id: string;
@@ -38,7 +39,6 @@ export const Logs = () => {
   const [eventTypeFilter, setEventTypeFilter] = useState<string>('All Event Types');
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
-  const itemsPerPage = 25;
   const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
 
   useEffect(() => {
@@ -154,11 +154,10 @@ export const Logs = () => {
   }, [logs, eventTypeFilter]);
 
   const paginatedLogs = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredLogs.slice(startIndex, startIndex + itemsPerPage);
+    const startIndex = (currentPage - 1) * TABLE_PAGE_SIZE;
+    return filteredLogs.slice(startIndex, startIndex + TABLE_PAGE_SIZE);
   }, [filteredLogs, currentPage]);
 
-  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage) || 1;
 
   const eventTypeOptions = ['All Event Types', 'Fire Alert', 'User Action', 'Device Reg', 'Login'];
 
@@ -243,27 +242,23 @@ export const Logs = () => {
       />
 
       {/* ─── Main Log Table ─── */}
-      <div className="bg-[#F6F3F2] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      <div className={TABLE_CARD}>
+        <TableScroll>
+          <table className={TABLE}>
             <thead>
-              <tr className="border-b border-[#E5E2E1]">
-                <th className="text-left px-6 py-5 text-[#5B403D] font-bold text-[11px] tracking-[0.05em] uppercase whitespace-nowrap w-[15%]">Timestamp</th>
-                <th className="text-left px-6 py-5 text-[#5B403D] font-bold text-[11px] tracking-[0.05em] uppercase whitespace-nowrap w-[15%]">Event Type</th>
-                <th className="text-left px-6 py-5 text-[#5B403D] font-bold text-[11px] tracking-[0.05em] uppercase whitespace-nowrap w-[20%]">Initiator</th>
-                <th className="text-left px-6 py-5 text-[#5B403D] font-bold text-[11px] tracking-[0.05em] uppercase w-[40%]">Description</th>
-                <th className="text-right px-6 py-5 text-[#5B403D] font-bold text-[11px] tracking-[0.05em] uppercase whitespace-nowrap w-[10%]">Status</th>
+              <tr className={THEAD_ROW}>
+                <th className={`${TH} w-[15%]`}>Timestamp</th>
+                <th className={`${TH} w-[15%]`}>Event Type</th>
+                <th className={`${TH} w-[20%]`}>Initiator</th>
+                <th className={`${TH} w-[40%]`}>Description</th>
+                <th className={`${TH} w-[10%] !text-right`}>Status</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <TableBodySkeleton cols={5} rows={5} />
-              ) : logs.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center py-16 text-[#A1A1AA]">
-                    <p className="font-medium text-sm text-[#5B403D]">No logs found.</p>
-                  </td>
-                </tr>
+              ) : paginatedLogs.length === 0 ? (
+                <TableEmpty colSpan={5}>No logs found.</TableEmpty>
               ) : (
                 paginatedLogs.map((log) => {
                   const cfg = eventConfig[log.type];
@@ -274,30 +269,30 @@ export const Logs = () => {
                   const timeStr = d.toTimeString().split(' ')[0] + '.' + String(d.getMilliseconds()).padStart(2, '0').substring(0,2);
 
                   return (
-                    <tr key={log.id} className="hover:bg-[#FCF9F8] transition-colors border-b border-[#E5E2E1] last:border-0">
-                      <td className="px-6 py-5 align-top">
+                    <tr key={log.id} className={TR}>
+                      <td className={TD}>
                         <div className="flex flex-col">
                           <span className="font-mono text-xs text-[#1C1B1B] font-medium">{dateStr}</span>
                           <span className="font-mono text-xs text-[#5B403D] mt-0.5">{timeStr}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-5 align-top">
+                      <td className={TD}>
                         <span className={`inline-flex items-center gap-2 font-bold text-xs ${cfg.text}`}>
                           <span className={`w-2 h-2 rounded-full ${cfg.dot}`}></span>
                           <span className="whitespace-nowrap">{log.type}</span>
                         </span>
                       </td>
-                      <td className="px-6 py-5 align-top">
+                      <td className={TD}>
                         <span className="text-[#1C1B1B] font-bold text-xs">
                           {log.initiator}
                         </span>
                       </td>
-                      <td className="px-6 py-5 align-top">
+                      <td className={TD}>
                         <p className="text-[#5B403D] text-[13px] leading-tight max-w-[90%]">
                           {log.description}
                         </p>
                       </td>
-                      <td className="px-6 py-5 align-top text-right">
+                      <td className={`${TD} text-right`}>
                         <span className={`inline-block px-2 py-1 rounded font-bold text-[9px] tracking-[0.05em] uppercase ${badgeCfg.bg} ${badgeCfg.text}`}>
                           {log.status}
                         </span>
@@ -308,51 +303,8 @@ export const Logs = () => {
               )}
             </tbody>
           </table>
-        </div>
-        
-        {/* Pagination Footer */}
-        <div className="p-6 flex items-center justify-between mt-auto">
-          <span className="text-[#5B403D] text-xs font-medium">
-            Showing {Math.min(filteredLogs.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(currentPage * itemsPerPage, filteredLogs.length)} of {filteredLogs.length} entries
-          </span>
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <button 
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="w-7 h-7 flex items-center justify-center text-[#5B403D] hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            
-            {Array.from({ length: Math.min(3, totalPages) }).map((_, i) => {
-              let pageNum = i + 1;
-              if (totalPages > 3 && currentPage > 2) {
-                pageNum = currentPage - 1 + i;
-                if (pageNum > totalPages) pageNum = totalPages - (2 - i);
-              }
-              const isActive = currentPage === pageNum;
-              return (
-                <button 
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
-                    isActive ? 'bg-[#DC2626] text-white' : 'text-[#5B403D] hover:bg-gray-200'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-            
-            <button 
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="w-7 h-7 flex items-center justify-center text-[#5B403D] hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+        </TableScroll>
+        <TablePager page={currentPage} pageSize={TABLE_PAGE_SIZE} total={filteredLogs.length} onPageChange={setCurrentPage} />
       </div>
 
       {/* ─── Footer Summary Cards ─── */}

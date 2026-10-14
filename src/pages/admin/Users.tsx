@@ -12,6 +12,8 @@ import {
   Search, X, AlertCircle, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
+import { usePagedRows } from '../../hooks/usePagedRows';
 
 // One placeholder for every missing value on this page.
 const EMPTY = '—';
@@ -32,8 +34,6 @@ const DEFAULT_REJECT_NOTE = 'Rejected';
 
 // ─── Shared styles (theme tokens from index.css, same as Dashboard) ───
 
-const CARD = 'bg-surface-card border border-border rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.04)]';
-const TH = 'px-4 first:pl-6 last:pr-6 py-3 text-text-body font-black text-[10px] uppercase tracking-[0.1em]';
 const LABEL = 'block text-sm font-bold text-text mb-1';
 const FIELD = 'w-full h-10 px-3 border border-border rounded-lg bg-surface-card text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary';
 const BTN = 'h-10 px-4 rounded-lg font-bold text-sm transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-50';
@@ -278,8 +278,10 @@ type Column<T> = {
 
 // One list per tab, one definition per list: a table from 2xl up (where the
 // sidebar still leaves room for every column), labelled cards below it.
-function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
+function DataList<T>({ rows, rowKey, identity, columns, actions, empty, resetKey }: {
   rows: T[];
+  // Back to page 1 when this changes (tab, search, filter).
+  resetKey: string;
   rowKey: (row: T) => string;
   identity: Column<T>;
   columns: Column<T>[];
@@ -287,27 +289,28 @@ function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
   actions?: (row: T) => React.ReactNode;
   empty: React.ReactNode;
 }) {
+  const { page, setPage, pageRows } = usePagedRows(rows, resetKey);
   if (rows.length === 0) {
-    return <div className="px-6 py-12 text-center text-text-body">{empty}</div>;
+    return <div className="px-5 py-14 text-center font-medium text-sm text-text-body">{empty}</div>;
   }
   return (
     <>
       <div className="hidden 2xl:block overflow-x-auto">
-      <table className="min-w-full divide-y divide-border">
-        <thead className="bg-surface">
-          <tr>
-            {[identity, ...columns].map(c => <th key={c.header} className={`${TH} text-left`}>{c.header}</th>)}
-            {actions && <th className={`${TH} text-right`}>Actions</th>}
+      <table className={TABLE}>
+        <thead>
+          <tr className={THEAD_ROW}>
+            {[identity, ...columns].map(c => <th key={c.header} className={TH}>{c.header}</th>)}
+            {actions && <th className={`${TH} !text-right`}>Actions</th>}
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map(row => (
-            <tr key={rowKey(row)} className="hover:bg-surface/60 transition-colors">
+        <tbody>
+          {pageRows.map(row => (
+            <tr key={rowKey(row)} className={TR}>
               {[identity, ...columns].map(c => (
-                <td key={c.header} className={`px-4 first:pl-6 py-4 text-sm text-text ${c.wrap ? 'max-w-xs' : 'whitespace-nowrap'}`}>{c.cell(row)}</td>
+                <td key={c.header} className={`${TD} text-text ${c.wrap ? 'max-w-xs' : 'whitespace-nowrap'}`}>{c.cell(row)}</td>
               ))}
               {actions && (
-                <td className="pl-4 pr-6 py-4 whitespace-nowrap text-right">
+                <td className={`${TD} whitespace-nowrap text-right`}>
                   <div className="inline-flex items-center gap-2">{actions(row) ?? <Empty />}</div>
                 </td>
               )}
@@ -318,7 +321,7 @@ function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
       </div>
 
       <ul className="2xl:hidden grid grid-cols-1 lg:grid-cols-2 gap-3 p-3 sm:p-4">
-        {rows.map(row => {
+        {pageRows.map(row => {
           const rowActions = actions?.(row);
           return (
           <li key={rowKey(row)} className="border border-border rounded-lg p-4 flex flex-col gap-4 bg-surface-card">
@@ -336,6 +339,7 @@ function DataList<T>({ rows, rowKey, identity, columns, actions, empty }: {
           );
         })}
       </ul>
+      <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={rows.length} onPageChange={setPage} />
     </>
   );
 }
@@ -786,7 +790,7 @@ export const Users = () => {
     <>
       <div className="space-y-6 md:space-y-8">
         <PageHeader
-          title="User Management"
+          title="Users"
           description="Manage accounts and registration requests."
           actions={
             <button
@@ -827,8 +831,8 @@ export const Users = () => {
             ))}
           </div>
 
-          <div className={`${CARD} overflow-hidden`}>
-            <div className="p-3 sm:p-4 border-b border-border bg-surface flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className={TABLE_CARD}>
+            <div className="p-3 sm:p-5 border-b border-border flex flex-col lg:flex-row lg:items-center gap-3">
               <div className="relative w-full lg:max-w-sm">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-faint pointer-events-none" />
                 <input
@@ -851,6 +855,7 @@ export const Users = () => {
               </div>
             ) : activeTab === 'pending' ? (
               <DataList
+                resetKey={`${activeTab}|${searchTerm}|${roleFilter}`}
                 rows={pendingRequests}
                 rowKey={(r) => r.id}
                 identity={requestIdentity}
@@ -887,6 +892,7 @@ export const Users = () => {
               />
             ) : activeTab === 'rejected' ? (
               <DataList
+                resetKey={`${activeTab}|${searchTerm}|${roleFilter}`}
                 rows={rejectedRequests}
                 rowKey={(r) => r.id}
                 identity={requestIdentity}
@@ -914,6 +920,7 @@ export const Users = () => {
               />
             ) : (
               <DataList
+                resetKey={`${activeTab}|${searchTerm}|${roleFilter}`}
                 rows={approvedUsers}
                 rowKey={(u) => u.id}
                 identity={{

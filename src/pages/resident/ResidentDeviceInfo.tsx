@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { DeviceInfoSkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE_TOOLBAR, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
+import { usePagedRows } from '../../hooks/usePagedRows';
 import type { Device, SensorReading } from '../../lib/supabase';
 import { MapPin, Thermometer, Wind, Clock, Wifi, WifiOff, CheckCircle2, XCircle, RefreshCw, Pencil, ShieldCheck } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -58,6 +60,8 @@ export const ResidentDeviceInfo = () => {
     await fetchData(profile.device_id);
     setRefreshing(false);
   };
+
+  const { page, setPage, pageRows } = usePagedRows(readings);
 
   if (loading) return <DeviceInfoSkeleton />;
   if (!device) return <div className="p-8 font-bold text-[#DC2626]">No device registered to your account.</div>;
@@ -162,41 +166,42 @@ export const ResidentDeviceInfo = () => {
           )}
 
           {/* Recent Readings Table */}
-          <div className="bg-white border border-[#E4E4E7] rounded-lg overflow-hidden">
-            <div className="p-6 border-b border-[#F4F4F5]">
-              <h2 className="text-lg font-black tracking-tight text-[#18181B]">Recent Sensor Readings</h2>
-              <p className="text-[10px] text-[#A1A1AA] uppercase tracking-wider mt-1">Last {readings.length} readings</p>
+          <div className={TABLE_CARD}>
+            <div className={TABLE_TOOLBAR}>
+              <div>
+                <h2 className="text-lg font-black tracking-tight text-[#18181B]">Recent Sensor Readings</h2>
+                <p className="text-[10px] text-[#A1A1AA] uppercase tracking-wider mt-1">Last {readings.length} readings</p>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-[#FCF9F8] border-b border-[#E4E4E7]">
-                  <tr>
-                    <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Timestamp</th>
-                    <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Temp</th>
-                    <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">CO</th>
-                    <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">GPS</th>
-                    <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Power</th>
-                    <th className="px-6 py-3 text-[10px] font-bold text-[#52525B] uppercase tracking-wider">Sensor</th>
+            <TableScroll>
+              <table className={TABLE}>
+                <thead>
+                  <tr className={THEAD_ROW}>
+                    <th className={TH}>Timestamp</th>
+                    <th className={TH}>Temp</th>
+                    <th className={TH}>CO</th>
+                    <th className={TH}>GPS</th>
+                    <th className={TH}>Power</th>
+                    <th className={TH}>Sensor</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#F4F4F5]">
-                  {readings.length > 0 ? readings.map(r => (
-                    <tr key={r.id} className="hover:bg-[#F9FAFB]">
-                      <td className="px-6 py-3 text-xs text-[#52525B]">{new Date(r.recorded_at).toLocaleString()}</td>
-                      <td className={`px-6 py-3 text-xs font-bold ${r.temp_celsius >= device.temp_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.temp_celsius.toFixed(1)}°C</td>
-                      <td className={`px-6 py-3 text-xs font-bold ${r.co_ppm >= device.co_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.co_ppm.toFixed(0)} ppm</td>
-                      <td className="px-6 py-3 text-xs">{r.gps_valid ? <CheckCircle2 className="w-4 h-4 text-[#00799C]" /> : <XCircle className="w-4 h-4 text-[#A1A1AA]" />}</td>
-                      <td className="px-6 py-3 text-xs text-[#18181B]">{r.on_battery ? 'Battery' : 'Mains'}</td>
-                      <td className="px-6 py-3 text-xs">{r.sensor_ready ? <CheckCircle2 className="w-4 h-4 text-[#00799C]" /> : <XCircle className="w-4 h-4 text-[#DC2626]" />}</td>
+                <tbody>
+                  {readings.length > 0 ? pageRows.map(r => (
+                    <tr key={r.id} className={TR}>
+                      <td className={`${TD} text-xs text-[#52525B]`}>{new Date(r.recorded_at).toLocaleString()}</td>
+                      <td className={`${TD} text-xs font-bold ${r.temp_celsius >= device.temp_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.temp_celsius.toFixed(1)}°C</td>
+                      <td className={`${TD} text-xs font-bold ${r.co_ppm >= device.co_threshold ? 'text-[#DC2626]' : 'text-[#18181B]'}`}>{r.co_ppm.toFixed(0)} ppm</td>
+                      <td className={`${TD} text-xs`}>{r.gps_valid ? <CheckCircle2 className="w-4 h-4 text-[#00799C]" /> : <XCircle className="w-4 h-4 text-[#A1A1AA]" />}</td>
+                      <td className={`${TD} text-xs text-[#18181B]`}>{r.on_battery ? 'Battery' : 'Mains'}</td>
+                      <td className={`${TD} text-xs`}>{r.sensor_ready ? <CheckCircle2 className="w-4 h-4 text-[#00799C]" /> : <XCircle className="w-4 h-4 text-[#DC2626]" />}</td>
                     </tr>
                   )) : (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-[#A1A1AA]">No sensor readings available.</td>
-                    </tr>
+                    <TableEmpty colSpan={6}>No sensor readings available.</TableEmpty>
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableScroll>
+            <TablePager page={page} pageSize={TABLE_PAGE_SIZE} total={readings.length} onPageChange={setPage} />
           </div>
         </div>
 

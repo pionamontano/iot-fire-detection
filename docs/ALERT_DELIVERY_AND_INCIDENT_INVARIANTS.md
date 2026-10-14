@@ -60,7 +60,7 @@ hidden** (the responder dashboard filters out `incident_status = 'resolved'`).
 | 1 | `trigger-alert` update of the open alert | service | tier, readings, coordinates, `telegram_sent` | n/a | Compatible. |
 | 2 | `trigger-alert` insert | service | new row (`active`) | n/a | Today it does select-then-insert; a racing duplicate now fails with `23505` (previously a silent duplicate). `raise_alert()` replaces it in Step 5.2. |
 | 3 | `ingest-reading` auto-resolve | service | `resolved_at` only | **Yes** | Closes correctly. Leaves `incident_status` stale and also closes acknowledged/responding incidents (owner decision pending, Step 6). |
-| 4 | Admin `Alerts.handleResolveAlert` | admin | `resolved_at` only | **Yes** | Closes correctly. Leaves `incident_status = 'active'` on the closed row (cosmetic, fixed in Step 6). |
+| 4 | Admin `DeviceStatus.handleResolveAlert` (formerly `Alerts`) | admin | `resolved_at` only | **Yes** | Closes correctly. Leaves `incident_status = 'active'` on the closed row (cosmetic, fixed in Step 6). |
 | 5 | Responder `handleAcknowledge` | responder | `incident_status`, `acknowledged_by/at` | n/a | Compatible: stays the same open incident. |
 | 6 | Responder `handleUpdateStatus` (`responding`) | responder | `incident_status` | n/a | Compatible. |
 | 7 | Responder `handleUpdateStatus` (`resolved`, `false_alarm`) | responder | `incident_status` **only** | **No: defect** | The row stays open to the index. **Confirmed by test.** Mitigated by the stopgap below. **Fixed at write time by the 6.1 guard trigger** (section 3); the UI itself is changed in 6.2. |

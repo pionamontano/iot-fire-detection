@@ -205,7 +205,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
 // ─── Search Bar ───
 // ═══════════════════════════════════════════
 interface HeaderSearchBarProps {
-  /** Page for one picked device (e.g. System Overview filtered to it). */
+  /** Page for one picked device (e.g. Device Status filtered to it). */
   resultPath: (device: Device) => string;
   /** Page listing every device matching the typed text. Omit if the portal has none. */
   allResultsPath?: (query: string) => string;
@@ -319,7 +319,7 @@ export const HeaderSearchBar: React.FC<HeaderSearchBarProps> = ({ resultPath, al
           ) : (
             <ul id={listId} role="listbox" className="max-h-[300px] overflow-y-auto thin-scroll">
               {results.map((device, i) => {
-                const connectivity: DeviceStatus = device.is_active ? getConnectivityStatus(device.last_seen_at) : 'offline';
+                const connectivity: DeviceStatus = device.is_active ? getConnectivityStatus(device.last_seen_at) : 'disabled';
                 const st = DEVICE_STATUS[connectivity];
                 return (
                   <li

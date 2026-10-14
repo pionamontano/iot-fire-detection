@@ -48,10 +48,11 @@ To keep the code DRY (Don't Repeat Yourself), each role has a dedicated layout c
 ### Admin Module
 The Admin routes are mounted under `/admin` or `/dashboard`.
 - Dashboard (`Dashboard.tsx`): The high-level overview of system health, total alerts, and active devices.
-- Interactive Map (`InteractiveMap.tsx`): A real-time geographical view (using Leaflet) showing device locations and active fire hotspots.
-- Device Management (`Devices.tsx`): CRUD operations for hardware sensors connected to the system.
-- User Management (`Users.tsx`): Allows the admin to approve, reject, or manage BFP Responders and Residents.
-- Alerts & Logs (`Alerts.tsx`, `Logs.tsx`): A master view of all historical and active alerts and system logs.
+- Live Map (`InteractiveMap.tsx`): A real-time geographical view (using Leaflet) showing device locations and active fire hotspots.
+- Devices (`Devices.tsx`): CRUD operations for hardware sensors connected to the system.
+- Users (`Users.tsx`): Allows the admin to approve, reject, or manage BFP Responders and Residents.
+- Device Status (`DeviceStatus.tsx`): Live status of every device, with filters, enable/disable and manual alert resolve.
+- System Log (`Logs.tsx`): A chronological record of alerts, logins and device registrations, with CSV export.
 
 ### BFP Responder Module
 The Responder routes are mounted under `/responder`.
@@ -64,8 +65,9 @@ The Responder routes are mounted under `/responder`.
 The Resident routes are mounted under `/home` or `/account`.
 - Setup (`ResidentSetup.tsx`): Initial onboarding flow for new users to register their location and devices.
 - Resident Home (`ResidentHome.tsx`): The primary view showing the status of their specific home and devices.
+- Alert History (`ResidentAlerts.tsx`): The resident's alerts, filtered by date range, tier and active/resolved, with notifications sent.
 - Alert Settings (`ResidentAlertSettings.tsx`): Configuration for how they receive notifications (e.g., SMS, push notifications).
-- Device Info & Logs (`ResidentDeviceInfo.tsx`, `ResidentSystemLog.tsx`): Localized monitoring of their own hardware sensors.
+- Device Information (`ResidentDeviceInfo.tsx`): Localized monitoring of their own hardware sensors.
 
 ---
 

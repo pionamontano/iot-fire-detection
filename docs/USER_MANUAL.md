@@ -133,7 +133,7 @@ Enter your email and password on the login page.
 
 ## 6. Resident guide
 
-Your menu has four pages plus **Account**: **Dashboard**, **Alert Settings**, **Device Information**, **System Log**.
+Your menu has four pages plus **Account**: **Dashboard**, **Alert History**, **Alert Settings**, **Device Information**.
 
 ### 6.1 First sign-in setup
 
@@ -159,7 +159,13 @@ Your home screen shows the live state of your device:
 
 **Location mismatch prompt.** If the device's GPS position is more than about 100 m from the address on file, a *"Location Discrepancy Detected"* box appears. Choose **Update** to save the new address, or **Keep Current** to leave it unchanged.
 
-### 6.3 Alert Settings
+### 6.3 Alert History
+
+Every alert and warning your device has raised, newest first. Each row shows the **tier** (*Tier 1 Warning* or *Tier 2 Alert*), whether it is **Active** or **Resolved**, when it was **triggered**, the **temperature** and **CO** readings at that moment, which **notifications** went out (*SMS* to you, *BFP* for the fire station, *TG* for Telegram), and when it was **resolved**.
+
+To narrow the list, pick a **From** and **To** date (the last 30 days by default), a **Tier**, or one of **All / Active / Resolved** (each shows how many alerts it has). **Active alerts always show at the top, whatever dates you pick**, until they are resolved; the dates only limit the resolved ones. If an active alert is older than your From date, a red note under the filters says so. Ten alerts show per page; use the arrows at the bottom of the table to see more. Press **Refresh** to load new alerts. **View all alerts** in the notification bell also opens this page.
+
+### 6.4 Alert Settings
 
 Here you control **when** the device alerts and **how** you are notified.
 
@@ -184,13 +190,9 @@ Here you control **when** the device alerts and **how** you are notified.
 
 The device picks up new settings automatically within about **10 minutes**.
 
-### 6.4 Device Information
+### 6.5 Device Information
 
 Shows your device's details: name, **Location** (use the pencil icon, or **Set pin** / **Move pin** under the map, to change the address and map pin), temperature and CO thresholds, **Last Seen**, **Recent Sensor Readings** (table with time and values), a **map** with the status of your install pin (*not set*, *waiting for confirmation* or *confirmed*), and device specs. Any change you make to the address or pin goes back to an administrator to confirm. If you see *"No device registered to your account"*, your device is not linked yet — contact your administrator.
-
-### 6.5 System Log
-
-The complete **history of alerts** for your device: when each was **triggered**, whether notifications were sent, and when it was **resolved**.
 
 ### 6.6 Account
 
@@ -292,7 +294,7 @@ Messages include a navigation link of the form `maps.google.com/?q=<latitude>,<l
 | App says **Offline** | Power off, router off, or Wi-Fi password changed | Check device power and the router. If the Wi-Fi password changed, reconnect to `AgapSense-Setup` and re-enter it |
 | Blue LED **blinking** | Wi-Fi works but no internet | Restart the router; check your internet provider |
 | **"Initializing sensors..."** | Normal 2½-minute warm-up | Wait. If it lasts more than 10 minutes, power-cycle the device and contact your administrator |
-| **Frequent false alarms** | Thresholds too low, or the device is near a stove, shower or vent | Raise thresholds slightly (see [6.3](#63-alert-settings)) or ask your administrator to move the device |
+| **Frequent false alarms** | Thresholds too low, or the device is near a stove, shower or vent | Raise thresholds slightly (see [6.4](#64-alert-settings)) or ask your administrator to move the device |
 | **Not receiving SMS** | Wrong number, SIM out of credit or no signal | Check your number in Alert Settings; report to your administrator so the SIM can be checked |
 | **No push notifications** | Permission blocked in browser | Re-enable notifications for the site in your browser settings, then press **Enable Push Notifications** |
 | **Power card shows "Battery"** | Mains power lost | Check the power outlet or breaker |

@@ -8,8 +8,9 @@ import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import type { Device, FirmwareRelease, AlertEvent } from '../../lib/supabase';
 import { isValidCoordinate, displayAddress } from '../../lib/location';
-import { Cpu, ChevronRight, ChevronLeft, ChevronDown, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket, MapPin, ShieldCheck, CheckCircle2, Plus, Search, Filter, Map as MapIcon } from 'lucide-react';
+import { Cpu, ChevronDown, Info, Loader2, AlertTriangle, Pencil, BatteryWarning, X, KeyRound, Copy, Check, Rocket, MapPin, ShieldCheck, CheckCircle2, Plus, Search, Filter, Map as MapIcon } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
+import { TABLE_CARD, TABLE_TOOLBAR, TABLE_TITLE, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { StatusBadge } from '../../components/StatusBadge';
 import { getDeviceStatus, getStatusNote } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
@@ -51,7 +52,6 @@ const FILTER_OPTIONS: { value: DeviceFilter; label: string }[] = [
   { value: 'unassigned', label: 'No resident linked' },
   { value: 'disabled', label: 'Disabled' },
 ];
-const PAGE_SIZE = 10;
 
 const timeAgo = (dateStr: string) => {
   const seconds = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 1000);
@@ -78,7 +78,7 @@ export const Devices = () => {
   const now = useNowTick();
 
   // Table controls. ?edit=<id> opens that device's Edit window and ?register=1 the Register window,
-  // so System Overview and other pages can link straight to them.
+  // so Device Status and other pages can link straight to them.
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<DeviceFilter>('all');
@@ -89,6 +89,10 @@ export const Devices = () => {
   // Editing an already-registered device's thresholds + BFP contact
   // (spec HW-1.1.5 / SW-2.5.5) — previously only settable at creation.
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
+  // Disable needs the device code typed back; enable is one click (it is safe).
+  const [disableConfirmOpen, setDisableConfirmOpen] = useState(false);
+  const [disableTyped, setDisableTyped] = useState('');
+  const [togglingActive, setTogglingActive] = useState(false);
   const [editForm, setEditForm] = useState({
     label: '',
     location_desc: '',
@@ -259,6 +263,27 @@ export const Devices = () => {
     });
     setNewApiKey(null);
     setKeyCopied(false);
+    setDisableConfirmOpen(false);
+    setDisableTyped('');
+  };
+
+  // Disabling makes the backend reject this device's readings and fire
+  // alerts (ingest-reading, trigger-alert and get-device-config all check
+  // is_active). Only is_active changes: last_seen_at is left alone, so a
+  // re-enabled device shows its real status until it actually reports.
+  const setDeviceActive = async (active: boolean) => {
+    if (!editingDevice) return;
+    setTogglingActive(true);
+    const { error } = await supabase.from('devices').update({ is_active: active }).eq('id', editingDevice.id);
+    setTogglingActive(false);
+    if (error) {
+      alert(`Failed to ${active ? 'enable' : 'disable'} device: ` + error.message);
+      return;
+    }
+    setEditingDevice({ ...editingDevice, is_active: active });
+    setDisableConfirmOpen(false);
+    setDisableTyped('');
+    fetchDevices();
   };
 
   const handleRegenerateKey = async () => {
@@ -400,7 +425,7 @@ export const Devices = () => {
   // All of them, not just one page: a resident can move an old device's pin at any time.
   const awaitingConfirmation = devices.filter(d => locationState(d) === 'unverified');
 
-  // Deep links: ?edit=<device id> and ?register=1 (used by System Overview).
+  // Deep links: ?edit=<device id> and ?register=1 (used by Device Status).
   const editParam = searchParams.get('edit');
   const registerParam = searchParams.get('register');
   useEffect(() => {
@@ -428,9 +453,9 @@ export const Devices = () => {
     return !q || [d.device_code, d.label, d.location_desc, residentNameByDevice[d.id]].some(v => v?.toLowerCase().includes(q));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [devices, filter, q, residentNameByDevice, latestRelease]);
-  const totalPages = Math.max(1, Math.ceil(filteredDevices.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredDevices.length / TABLE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const pageDevices = filteredDevices.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageDevices = filteredDevices.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
   const changeFilter = (f: DeviceFilter) => { setFilter(f); setFilterOpen(false); setPage(1); };
 
   const closeRegister = () => { setRegisterOpen(false); setRegistered(null); setRegisterError(null); };
@@ -475,9 +500,9 @@ export const Devices = () => {
       )}
 
       {/* ─── Device table ─── */}
-      <div className="bg-white border border-[#E5E2E1] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-[#E5E2E1]">
-          <h3 className="text-[#1C1B1B] font-bold text-sm tracking-[0.02em]">
+      <div className={TABLE_CARD}>
+        <div className={TABLE_TOOLBAR}>
+          <h3 className={TABLE_TITLE}>
             All Devices <span className="text-[#A1A1AA] font-medium">({devices.length})</span>
           </h3>
           <div className="flex flex-wrap items-center gap-3">
@@ -524,12 +549,12 @@ export const Devices = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <TableScroll>
+          <table className={TABLE}>
             <thead>
-              <tr className="bg-[#F6F3F2] border-b border-[#E5E2E1]">
+              <tr className={THEAD_ROW}>
                 {['Device', 'Resident', 'Install Location', 'Status', 'Firmware', 'Registered', ''].map((h, i) => (
-                  <th key={i} className="text-left px-5 py-3 text-[#5B403D] font-semibold text-[10px] tracking-[0.05em] uppercase whitespace-nowrap">{h}</th>
+                  <th key={i} className={TH}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -537,16 +562,11 @@ export const Devices = () => {
               {loading ? (
                 <TableBodySkeleton cols={7} rows={5} />
               ) : pageDevices.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-14">
-                    <Cpu className="w-10 h-10 mx-auto mb-3 text-[#E5E2E1]" />
-                    <p className="font-medium text-sm text-[#5B403D]">
-                      {devices.length === 0
-                        ? 'No devices registered yet. Use Register Device to add the first one.'
-                        : 'No devices match this search or filter.'}
-                    </p>
-                  </td>
-                </tr>
+                <TableEmpty colSpan={7} icon={<Cpu className="w-10 h-10" />}>
+                  {devices.length === 0
+                    ? 'No devices registered yet. Use Register Device to add the first one.'
+                    : 'No devices match this search or filter.'}
+                </TableEmpty>
               ) : pageDevices.map(device => {
                 const status = getDeviceStatus(device, activeAlerts, now);
                 const note = getStatusNote(device, status, now);
@@ -555,20 +575,20 @@ export const Devices = () => {
                   <tr
                     key={device.id}
                     onClick={() => openEditDevice(device)}
-                    className="border-b border-[#E5E2E1] last:border-0 hover:bg-[#FCF9F8] transition-colors cursor-pointer"
+                    className={`${TR} cursor-pointer`}
                   >
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       <span className="block font-mono font-semibold text-xs text-[#1C1B1B] whitespace-nowrap">{device.device_code}</span>
                       {device.label && device.label !== device.device_code && (
                         <span className="block text-[11px] text-[#5B403D] max-w-[180px] leading-tight mt-0.5">{device.label}</span>
                       )}
                     </td>
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       {resident
                         ? <span className="text-xs font-bold text-[#1C1B1B] whitespace-nowrap">{resident}</span>
                         : <span className="text-xs text-[#A1A1AA]">Not linked</span>}
                     </td>
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       <span className="block text-xs text-[#5B403D] max-w-[220px] leading-tight">{displayAddress(device.location_desc)}</span>
                       <div className="mt-1">
                         {locationState(device) === 'verified'
@@ -576,7 +596,7 @@ export const Devices = () => {
                           : <LocationStateBadge state={locationState(device)} />}
                       </div>
                     </td>
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       <div className="flex flex-col gap-1 items-start">
                         <StatusBadge status={status} />
                         {note && <span className="text-[10px] text-[#71717A] whitespace-nowrap">{note}</span>}
@@ -587,7 +607,7 @@ export const Devices = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-4 align-top whitespace-nowrap">
+                    <td className={`${TD} whitespace-nowrap`}>
                       <span className="block font-mono text-xs text-[#1C1B1B]">{device.firmware_version_reported ? `v${device.firmware_version_reported}` : '—'}</span>
                       {isOutdated(device) ? (
                         <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-[rgba(245,158,11,0.15)] text-[#B45309] text-[9px] font-bold uppercase tracking-wide">Outdated</span>
@@ -595,10 +615,10 @@ export const Devices = () => {
                         <span className="block text-[10px] text-[#71717A] mt-0.5">Target v{device.firmware_version}</span>
                       ) : null}
                     </td>
-                    <td className="px-5 py-4 align-top whitespace-nowrap">
+                    <td className={`${TD} whitespace-nowrap`}>
                       <span className="text-xs text-[#5B403D]" title={new Date(device.created_at).toLocaleString()}>{timeAgo(device.created_at)}</span>
                     </td>
-                    <td className="px-5 py-4 align-top">
+                    <td className={TD}>
                       <div className="flex items-center gap-3 text-[#A1A1AA]">
                         <Link
                           to={`/admin/map?device=${device.id}`}
@@ -623,24 +643,9 @@ export const Devices = () => {
               })}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
 
-        {filteredDevices.length > PAGE_SIZE && (
-          <div className="p-4 border-t border-[#E5E2E1] flex items-center justify-between text-xs">
-            <span className="text-[#A1A1AA] font-medium">
-              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(filteredDevices.length, currentPage * PAGE_SIZE)} of {filteredDevices.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 1} aria-label="Previous page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="font-bold text-[#1C1B1B]">{currentPage} / {totalPages}</span>
-              <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage === totalPages} aria-label="Next page" className="w-7 h-7 flex items-center justify-center rounded text-[#5B403D] hover:bg-gray-100 disabled:opacity-40">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        <TablePager page={currentPage} pageSize={TABLE_PAGE_SIZE} total={filteredDevices.length} onPageChange={setPage} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -1093,6 +1098,78 @@ export const Devices = () => {
                     </button>
                   )}
                 </FormField>
+              </div>
+
+              {/* Enable / disable: kept apart from the other settings and behind a typed confirmation. */}
+              <div className="border-t border-[#E5E2E1] pt-6">
+                {editingDevice.is_active ? (
+                  <div className="border border-[#FECACA] rounded-lg p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-[#1C1B1B]">Disable device</p>
+                      <p className="text-xs text-[#5B403D] mt-1">
+                        Stops accepting this device's readings and fire alerts. While disabled, a fire at this location will <span className="font-bold">not</span> alert the resident or BFP. Use it only for a unit that has been removed, lost, or is sending bad data.
+                      </p>
+                    </div>
+                    {!disableConfirmOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => setDisableConfirmOpen(true)}
+                        className="px-4 py-2 rounded border border-[#DC2626] text-[#DC2626] text-sm font-bold hover:bg-[#FEF2F2] transition-colors w-fit"
+                      >
+                        Disable device…
+                      </button>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <label htmlFor="disable-confirm" className="text-xs font-bold text-[#1C1B1B]">
+                          Type <span className="font-mono">{editingDevice.device_code}</span> to confirm
+                        </label>
+                        <input
+                          id="disable-confirm"
+                          type="text"
+                          autoComplete="off"
+                          autoFocus
+                          value={disableTyped}
+                          onChange={e => setDisableTyped(e.target.value)}
+                          className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#DC2626]/30 focus:border-[#DC2626]"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setDisableConfirmOpen(false); setDisableTyped(''); }}
+                            className="px-4 py-2 rounded text-sm font-bold text-[#5B403D] hover:bg-[#F6F3F2] transition-colors"
+                          >
+                            Keep enabled
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeviceActive(false)}
+                            disabled={togglingActive || disableTyped.trim().toUpperCase() !== editingDevice.device_code.toUpperCase()}
+                            className="px-4 py-2 rounded bg-[#DC2626] text-white text-sm font-bold hover:bg-[#B91C1C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {togglingActive ? 'Disabling…' : `Disable ${editingDevice.device_code}`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-[#F4F4F5] border border-[#D4D4D8] rounded-lg p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-[#1C1B1B]">This device is disabled</p>
+                      <p className="text-xs text-[#5B403D] mt-1">
+                        Its readings and fire alerts are being ignored. Enable it to start accepting them again; it will show its real status once it next reports.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeviceActive(true)}
+                      disabled={togglingActive}
+                      className="px-4 py-2 rounded bg-[#047857] text-white text-sm font-bold hover:bg-[#065F46] transition-colors disabled:opacity-60 w-fit"
+                    >
+                      {togglingActive ? 'Enabling…' : 'Enable device'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

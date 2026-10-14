@@ -18,14 +18,14 @@
 // Column -> why the admin UI needs it (grep evidence in src/pages/admin/*):
 //   id             row identity, joins to alert_events/sensor_readings/profiles (all pages)
 //   device_code    shown/searched everywhere; Users assign-device dropdown
-//   label          device name shown in Dashboard, Devices, Alerts, Map
-//   location_desc  address text in Devices, Alerts, Logs, Map popups/search
+//   label          device name shown in Dashboard, Devices, Device Status, Map
+//   location_desc  address text in Devices, Device Status, Logs, Map popups/search
 //   co_threshold   Devices edit form                                         (Devices)
 //   temp_threshold Devices edit form                                         (Devices)
 //   bfp_contact    Devices edit form                                         (Devices)
-//   is_active      status badge/power toggle (Dashboard, Alerts, Map)
-//   created_at     ordering and "registered" logs (Dashboard, Devices, Alerts, Users, Logs)
-//   last_seen_at   connectivity status via deviceStatus.ts (Dashboard, Alerts, Map)
+//   is_active      status badge/power toggle (Dashboard, Device Status, Map)
+//   created_at     ordering and "registered" logs (Dashboard, Devices, Device Status, Users, Logs)
+//   last_seen_at   connectivity status via deviceStatus.ts (Dashboard, Device Status, Map)
 //   latitude       registered install coordinates (Devices form, Map)
 //   longitude      registered install coordinates (Devices form, Map)
 //   local_ip       Device type / Devices page

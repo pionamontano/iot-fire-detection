@@ -1,12 +1,18 @@
 import React, { useEffect } from 'react';
 import { registerServiceWorker } from './lib/pushNotifications';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
 import { AuthGuard } from './components/AuthGuard';
 import { AdminLayout } from './components/AdminLayout';
 import { ResponderLayout } from './components/ResponderLayout';
 import { ResidentLayout } from './components/ResidentLayout';
+
+// Redirect that keeps ?query (e.g. ?q=AGS-001&device=…) on the new address.
+const RedirectKeepingQuery = ({ to }: { to: string }) => {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+};
 
 // Pages - Auth
 import { Login } from './pages/auth/Login';
@@ -21,7 +27,7 @@ import { SessionExpired } from './pages/auth/SessionExpired';
 import { Dashboard } from './pages/admin/Dashboard';
 import { Devices } from './pages/admin/Devices';
 import { Users } from './pages/admin/Users';
-import { Alerts } from './pages/admin/Alerts';
+import { DeviceStatusPage } from './pages/admin/DeviceStatus';
 import { Logs } from './pages/admin/Logs';
 import { SupportRequests } from './pages/admin/SupportRequests';
 import { InteractiveMap } from './pages/admin/InteractiveMap';
@@ -37,7 +43,7 @@ import { ResidentHome } from './pages/resident/ResidentHome';
 import { ResidentSetup } from './pages/resident/ResidentSetup';
 import { ResidentAlertSettings } from './pages/resident/ResidentAlertSettings';
 import { ResidentDeviceInfo } from './pages/resident/ResidentDeviceInfo';
-import { ResidentSystemLog } from './pages/resident/ResidentSystemLog';
+import { ResidentAlerts } from './pages/resident/ResidentAlerts';
 import { ResidentAccount } from './pages/resident/ResidentAccount';
 
 // Pages - Common
@@ -69,7 +75,9 @@ function App() {
               <Route path="/admin/map" element={<InteractiveMap />} />
               <Route path="/admin/devices" element={<Devices />} />
               <Route path="/admin/users" element={<Users />} />
-              <Route path="/admin/alerts" element={<Alerts />} />
+              <Route path="/admin/status" element={<DeviceStatusPage />} />
+              {/* Old address of Device Status (was "System Overview"); kept so bookmarks and links still work. */}
+              <Route path="/admin/alerts" element={<RedirectKeepingQuery to="/admin/status" />} />
               <Route path="/admin/logs" element={<Logs />} />
               <Route path="/admin/support" element={<SupportRequests />} />
               <Route path="/admin/settings/security" element={<Settings />} />
@@ -90,9 +98,11 @@ function App() {
             <Route path="/setup" element={<ResidentSetup />} />
             <Route element={<ResidentLayout />}>
               <Route path="/home" element={<ResidentHome />} />
+              <Route path="/home/alerts" element={<ResidentAlerts />} />
               <Route path="/home/settings" element={<ResidentAlertSettings />} />
               <Route path="/home/devices" element={<ResidentDeviceInfo />} />
-              <Route path="/home/logs" element={<ResidentSystemLog />} />
+              {/* The resident System Log was merged into Alert History. */}
+              <Route path="/home/logs" element={<RedirectKeepingQuery to="/home/alerts" />} />
               <Route path="/account" element={<ResidentAccount />} />
             </Route>
           </Route>

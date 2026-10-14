@@ -183,7 +183,7 @@ Roles are exactly those in `profiles.role` CHECK (`20260717000000_init.sql:29`):
 | Aspect | Detail | Evidence |
 |---|---|---|
 | Purpose | Approve users, manage devices/thresholds, monitor all incidents, security settings | |
-| UI pages | `/dashboard`, `/admin/map`, `/admin/devices`, `/admin/users`, `/admin/alerts` ("System Overview"), `/admin/logs`, `/admin/settings/security` | `App.tsx:64-75`; nav `AdminLayout.tsx:21-32` (map has route but no sidebar entry — navigation reaches it from elsewhere; not traced) |
+| UI pages | `/dashboard`, `/admin/map`, `/admin/devices`, `/admin/users`, `/admin/status` ("Device Status"; `/admin/alerts` redirects there), `/admin/logs`, `/admin/settings/security` | `App.tsx:64-75`; nav `AdminLayout.tsx:21-32` (map has route but no sidebar entry — navigation reaches it from elsewhere; not traced) |
 | Backend authority | RLS `FOR ALL` via `get_auth_role()='admin'` on `devices`, `alert_events` (incl. DELETE), `settings`, `station_settings`, `registration_requests`, `address_discrepancies`, `login_lockout_overrides`; read on `sensor_readings`, `login_attempts`; sole reader of other users' profiles (`is_approved_admin()`); executes `manage-registration`, `create-user`, `assign-device`, `regenerate_device_api_key`, `admin_unlock_login` | init.sql:278-352; `20261019000000`; function files |
 | Data visibility | Everything, including `devices.api_key` (via `get_device_api_key_secure` in `devices_safe`) | `20261015000000` |
 | Restrictions | Cannot self-register; admin bootstrap is a manual SQL insert (`init.sql:372-378`). Manual close of an incident is admin-only from `active` (`transition_incident`) | |
@@ -205,7 +205,7 @@ Roles are exactly those in `profiles.role` CHECK (`20260717000000_init.sql:29`):
 | Aspect | Detail | Evidence |
 |---|---|---|
 | Purpose | Monitor own device, edit its thresholds, review location-drift prompts, manage own contact | |
-| UI pages | `/setup` (mandatory first), `/home`, `/home/settings`, `/home/devices`, `/home/logs`, `/account` | `App.tsx:87-95` |
+| UI pages | `/setup` (mandatory first), `/home`, `/home/alerts`, `/home/settings`, `/home/devices`, `/account` (`/home/logs` redirects to `/home/alerts`) | `App.tsx:87-95` |
 | Backend authority | Read own device (`devices_safe`/column grants), own `sensor_readings`/`alert_events` (`device_id = own`); `update_own_device_alert_settings()` (CO 0–1000, temp 0–100; approved resident only); `resolve_address_discrepancy()` (own rows; approval overwrites the device's registered address and coordinates); self-update of own profile (non-protected columns); `link-device` Edge Function | `20260917080000`, `20261016000000`, `link-device/index.ts` |
 | Prohibited | Other residents' data; role/status/device_id changes via direct update (trigger resets them) | `protect_profile_fields` init.sql:236-261 |
 | Concerns | `protect_profile_fields` does not cover `is_active`, `setup_complete`, `telegram_chat_id` (KI-10). A resident's approval of a drift prompt changes the *device-wide* registered location used by all subsequent drift checks (design as implemented) | |
@@ -246,7 +246,7 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | FR-ADMIN-001 | Dashboard: device list with connectivity state, active (unresolved) alerts, user count, recent readings, with Realtime refresh | C | Partially Verified | `Dashboard.tsx:56-96` | Counts match DB; new alert appears without reload | Realtime not verifiable offline |
 | FR-ADMIN-002 | User management: list profiles and registration requests; approve (optionally assigning a device), reject, delete (auth-user delete cascades); create a pre-approved user; assign/unassign a device | C | Verified (code) | `Users.tsx:76-250`; `manage-registration/index.ts:67-126`; `create-user/index.ts`; `assign-device/index.ts` | Approve → profile `approved`, request marked reviewed | `create-user` inserts without `status`, so new rows take DB default `approved` (init.sql:33) — intended per "pre-approved" comment; role value validated only by DB CHECK |
 | FR-ADMIN-003 | Device registration: create (code, label, address text, coordinates, thresholds, BFP contact), edit thresholds/contact, activate/deactivate, regenerate API key (RPC, admin-only, key shown once in UI) | C | Verified (code) | `Devices.tsx:97-176`; `20260924000000`; `20260924050000` (CHECK 0–1000 / 0–100) | New device appears with server-generated key (`sk_`+48 hex, `20260917050000`) | Key stored plaintext in `devices.api_key` (existing design) |
-| FR-ADMIN-004 | "System Overview": fleet status, rename device, power (is_active) toggle, manual resolve through `transition_incident` | C | Verified (code) [R for resolve] | `Alerts.tsx:132-172` | Resolve → incident closed with `resolved_by` set | Direct `devices.update` from the browser relies on admin RLS |
+| FR-ADMIN-004 | "Device Status" (formerly "System Overview"): fleet status, manual resolve through `transition_incident`. Enable/disable (`is_active`) moved to Devices → Edit device, behind a typed confirmation; disabled devices have their own "Disabled" status | C | Verified (code) [R for resolve] | `DeviceStatus.tsx:158-167` | Resolve → incident closed with `resolved_by` set | Direct `devices.update` from the browser relies on admin RLS |
 | FR-ADMIN-005 | System Log merges recent alert events, login attempts, device registrations (50 each), with export | C | Partially Verified | `Logs.tsx:50-130,161` | Entries visible, export produces file | Fixed description text for every alert (KI-04); only latest 50 per source |
 | FR-ADMIN-006 | Interactive map of devices (live/last-known/registered markers) and a live alert feed | `A10` | Partially Verified | `InteractiveMap.tsx:111-132`; `lib/location.ts` | Markers distinct per state | Tiles external (B8) |
 | FR-ADMIN-007 | Security settings: session timeouts, unlock a locked login, push-notification toggle | `SW-2.6.x` | Verified (code) | `Settings.tsx:28-65` | Saved values appear in `settings` | Settings saved with client `upsert` (admin RLS) |
@@ -270,7 +270,7 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | FR-RES-003 | Home: device status, current readings, last 24 readings chart, latest 10 alerts, activity log, Realtime refresh | C | Partially Verified | `ResidentHome.tsx:101-143,254-283` | | "System Uptime" hard-coded (KI-01); online = 5 min (KI-03) |
 | FR-RES-004 | Edit CO and temperature thresholds of own device via `update_own_device_alert_settings` (CO 0–1000 ppm, temp 0–100 °C) | C | Verified | `20260917080000`; `ResidentAlertSettings.tsx:141-190` | Out-of-range → rejected | Residents can lower thresholds arbitrarily; no policy limit (Not Specified — Requires Approval) |
 | FR-RES-005 | Review "address discrepancy" prompts; approving copies GPS-derived address+coordinates onto the device's registered location | C | Verified (code) | `ResidentHome.tsx:303-330`; `20261016000000`; `20261018000000` | Approve → `devices.location_desc/latitude/longitude` updated | Changes the location used for all later drift checks; no admin review step |
-| FR-RES-006 | Device information page (recent readings) and System Log of own alerts | C | Partially Verified | `ResidentDeviceInfo.tsx:37-38`; `ResidentSystemLog.tsx` | | |
+| FR-RES-006 | Device information page (recent readings) and Alert History of own alerts | C | Partially Verified | `ResidentDeviceInfo.tsx:37-38`; `ResidentAlerts.tsx` | | |
 | FR-RES-007 | Account page: name/contact edit | C | Partially Verified | `ResidentAccount.tsx:47-70` | | Direct profile update, client-side validation only |
 | FR-RES-008 | Notification preferences: Web Push opt-in; Telegram link-token generation | C | Partially Verified | `ResidentAlertSettings.tsx:71-140`; `create_telegram_link_token` | Push subscribe row appears | Telegram link has no downstream alert use (KI-24) |
 
@@ -513,7 +513,7 @@ Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `supp
 | Admin | `InteractiveMap` | Map + alert feed | `devices`, `sensor_readings`, `alert_events` | View | same | Partial | no sidebar entry |
 | Admin | `Devices` ("Devices") | CRUD devices, keys | `devices`; RPC | Create, edit, toggle, regenerate key | same | Verified | |
 | Admin | `Users` | Approvals, create, assign | `profiles`, `registration_requests`, `devices`; Edge | Approve/reject/delete/create/assign | same | Verified | No UI to set `is_active` found |
-| Admin | `Alerts` ("System Overview") | Fleet + incident close | `devices`, `alert_events`, `sensor_readings` | Rename, power toggle, resolve | same | Verified | |
+| Admin | `DeviceStatus` ("Device Status") | Fleet + incident close | `devices`, `alert_events`, `sensor_readings` | Resolve | same | Verified | |
 | Admin | `Logs` ("System Log") | Event/log view + export | `alert_events`, `login_attempts`, `devices` | Filter, export | same | Partial | KI-04 |
 | Admin | `Settings` (`/admin/settings/security`) | Timeouts, unlock, push | `settings`; RPC | Save, unlock | same | Verified | |
 | Responder | `ResponderDashboard` | Live incidents/devices | `devices_safe`, `alert_events` | Acknowledge/responding/resolve/false alarm | AuthGuard(bfp) / RLS + RPC | Partial | KI-02, KI-03 |
@@ -522,7 +522,7 @@ Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `supp
 | Resident | `ResidentSetup` | First-run contact number | `profiles` | Save | AuthGuard(resident) | Verified | |
 | Resident | `ResidentHome` | Own device dashboard + link + drift prompt | `devices_safe`, `sensor_readings`, `alert_events`, `address_discrepancies`; Edge/RPC | Link device, refresh, approve/reject drift | same / RLS | Partial | KI-01, KI-03 |
 | Resident | `ResidentAlertSettings` | Thresholds, contact, push, Telegram | `devices_safe`, RPC, `profiles` | Save | same | Verified | KI-24 |
-| Resident | `ResidentDeviceInfo`, `ResidentSystemLog`, `ResidentAlerts` | Device info, log, alert list | `devices_safe`, `sensor_readings`, `alert_events` | Refresh | same | Partial | `ResidentAlerts.tsx` is not routed in `App.tsx` (unused page — Verified by route list) |
+| Resident | `ResidentDeviceInfo`, `ResidentAlerts` | Device info, alert history | `devices_safe`, `sensor_readings`, `alert_events` | Refresh | same | Verified | `ResidentAlerts.tsx` is routed at `/home/alerts` ("Alert History"); it replaced the resident System Log |
 | Resident | `ResidentAccount` | Name/contact | `profiles`, `devices_safe` | Save | same | Partial | |
 | Shared | `AdminLayout`/`ResponderLayout`/`ResidentLayout`, `HeaderWidgets` (search, bell, user menu), `AdminSupportModal`, `LoadErrorBanner`, `GlobalErrorBoundary`, `LocationBadge` | Shell and helpers | | | | | |
 
