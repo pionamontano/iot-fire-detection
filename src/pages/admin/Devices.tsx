@@ -745,7 +745,7 @@ export const Devices = () => {
               </button>
             </form>
           </div>
-          {/* Sensor warm-up (firmware sensors.cpp: alerts held until the MQ-7's first heat + measure cycle). */}
+          {/* Sensor warm-up (firmware sensors.cpp: alerts held until sensor_ready — MQ7_WARMUP_MS on MQ7_CONTINUOUS_5V builds, else the first heat + measure cycle). */}
           <div
             className="lg:col-span-5 self-start rounded-lg p-6 flex gap-4"
             style={{
@@ -761,8 +761,9 @@ export const Devices = () => {
                 Sensor Warm-up
               </h4>
               <p className="text-[#5B403D] text-xs leading-[19.5px] mt-1">
-                Each time the device powers on, its CO sensor needs one heat-and-measure cycle (about 2.5 minutes)
-                before its readings count. Alerts are held until then.
+                Each time the device powers on, its CO sensor needs to warm up before its readings count: about
+                1 minute on constant-5V boards, about 2.5 minutes (one heat-and-measure cycle) on the default build.
+                Alerts are held until then.
               </p>
             </div>
           </div>
