@@ -4,7 +4,7 @@ export const PROJECT_INFO = {
   title: 'IoT-Based Fire Detection and Location Tracking System Using Multi-Sensor Fusion and Dual-Path Communication',
   /** e.g. 'Bulacan State University' */
   school: '',
-  program: 'Bachelor of Science in Information Technology, major in Infrastructure Services',
+  program: 'Bachelor of Science in Information Technology, specializing in Infrastructure Services',
   section: 'BSIT 4C-G2',
   /** Proponents, shown in this order. */
   team: [
