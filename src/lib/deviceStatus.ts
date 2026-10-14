@@ -1,6 +1,6 @@
 // Shared device connectivity status logic (spec SW-2.4.3).
 //
-// Previously each page (Dashboard, Alerts, ResponderDevices, InteractiveMap)
+// Previously each page (Dashboard, Device Status, ResponderDevices, InteractiveMap)
 // computed "is this device online" independently, each with its own flat
 // 5-minute cutoff that matched neither spec boundary — and each missing the
 // spec's "Reconnecting" middle state entirely. This is the single source of

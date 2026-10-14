@@ -126,7 +126,7 @@ test('the UI never writes alert_events directly (all lifecycle writes go through
 });
 
 test('both pages that change incidents use the shared helper', () => {
-  for (const f of ['src/pages/responder/ResponderDashboard.tsx', 'src/pages/admin/Alerts.tsx'])
+  for (const f of ['src/pages/responder/ResponderDashboard.tsx', 'src/pages/admin/DeviceStatus.tsx'])
     assert.match(read(f), /transitionIncident\(supabase,/, f);
 });
 

@@ -51,7 +51,7 @@ Per-area: AUTH 10 · ADMIN 7 · RESP 5 · RES 8 · IOT 12 · ALERT 6 · LOC 5 ·
 | FR-ADMIN-001 | Dashboard overview with Realtime | C | `Dashboard.tsx` | UI test | Counts match DB; live update | Partially Verified | – | `Dashboard.tsx:56-96`; Realtime Cannot Verify |
 | FR-ADMIN-002 | User management (approve/reject/delete/create/assign) | C | `Users.tsx`, `manage-registration`, `create-user`, `assign-device` | Integration + UI | Status/ownership change as requested | Verified | L | Function files; `Users.tsx:124-250` |
 | FR-ADMIN-003 | Device registration, edit, activate, regenerate key | C | `Devices.tsx`, RPCs, column default | Integration | Key server-generated; regen admin-only | Verified | L | `Devices.tsx:97-176`; `20260924000000`; `20260924020000` |
-| FR-ADMIN-004 | Device Status (formerly System Overview): rename, power toggle, resolve | C | `Alerts.tsx`, `transition_incident` | UI + DB test | Closed incident has `resolved_by` | Verified | R (resolve) | `Alerts.tsx:132-172` |
+| FR-ADMIN-004 | Device Status (formerly System Overview): rename, power toggle, resolve | C | `DeviceStatus.tsx`, `transition_incident` | UI + DB test | Closed incident has `resolved_by` | Verified | R (resolve) | `DeviceStatus.tsx:157-184` |
 | FR-ADMIN-005 | System Log + export | C | `Logs.tsx` | UI test | Entries and file | Partially Verified | – | KI-04 text defect |
 | FR-ADMIN-006 | Interactive map and alert feed | C | `InteractiveMap.tsx` | UI test | Distinct live/last-known/registered markers | Partially Verified | – | Tiles Cannot Verify |
 | FR-ADMIN-007 | Security settings (timeouts, unlock, push) | SW-2.6.x | `Settings.tsx` | UI + DB | `settings` rows updated | Verified | L | `Settings.tsx:28-65` |

@@ -27,7 +27,7 @@ import { SessionExpired } from './pages/auth/SessionExpired';
 import { Dashboard } from './pages/admin/Dashboard';
 import { Devices } from './pages/admin/Devices';
 import { Users } from './pages/admin/Users';
-import { Alerts } from './pages/admin/Alerts';
+import { DeviceStatusPage } from './pages/admin/DeviceStatus';
 import { Logs } from './pages/admin/Logs';
 import { SupportRequests } from './pages/admin/SupportRequests';
 import { InteractiveMap } from './pages/admin/InteractiveMap';
@@ -75,7 +75,7 @@ function App() {
               <Route path="/admin/map" element={<InteractiveMap />} />
               <Route path="/admin/devices" element={<Devices />} />
               <Route path="/admin/users" element={<Users />} />
-              <Route path="/admin/status" element={<Alerts />} />
+              <Route path="/admin/status" element={<DeviceStatusPage />} />
               {/* Old address of Device Status (was "System Overview"); kept so bookmarks and links still work. */}
               <Route path="/admin/alerts" element={<RedirectKeepingQuery to="/admin/status" />} />
               <Route path="/admin/logs" element={<Logs />} />

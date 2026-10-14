@@ -39,7 +39,7 @@ const getDeviceStatus = (device: Device, activeAlerts: AlertEvent[], now: number
   activeAlert: activeAlerts.find(a => a.device_id === device.id),
 });
 
-export const Alerts = () => {
+export const DeviceStatusPage = () => {
   const [rawDevices, setRawDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
