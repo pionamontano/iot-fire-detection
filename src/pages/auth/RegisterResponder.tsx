@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { readFunctionError } from '../../lib/functionError';
+import { PHONE_PATTERN, PHONE_ERROR, normalizePhone } from '../../lib/phone';
 import { User, Mail, Phone, Building2, Briefcase, IdCard, Loader2 } from 'lucide-react';
 import {
   AuthLayout, AuthAlert, Field, FormSection, PasswordField, inputClass,
-  AUTH_BTN_PRIMARY, PHONE_PATTERN, PHONE_ERROR, PASSWORD_MIN,
+  AUTH_BTN_PRIMARY, PASSWORD_MIN,
 } from '../../components/AuthLayout';
 
 export const RegisterResponder = () => {
@@ -24,13 +25,24 @@ export const RegisterResponder = () => {
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const [contactNumberError, setContactNumberError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
+
+  // The submit button is at the bottom of a long form, so bring a server
+  // error (shown above the form) into view instead of leaving it off-screen.
+  useEffect(() => {
+    if (!error) return;
+    errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    errorRef.current?.focus({ preventScroll: true });
+  }, [error]);
   const navigate = useNavigate();
 
   const update = (field: keyof typeof formData) => (value: string) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    update('contactNumber')(e.target.value.replace(/\D/g, '').slice(0, 11));
+    update('contactNumber')(normalizePhone(e.target.value));
     if (contactNumberError) setContactNumberError(null);
   };
 
@@ -42,11 +54,13 @@ export const RegisterResponder = () => {
 
     if (formData.contactNumber && !PHONE_PATTERN.test(formData.contactNumber)) {
       setContactNumberError(PHONE_ERROR);
+      phoneRef.current?.focus();
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
       setConfirmPasswordError('Passwords do not match.');
+      confirmRef.current?.focus();
       return;
     }
 
@@ -83,7 +97,7 @@ export const RegisterResponder = () => {
       title="Register as a responder"
       subtitle="For Bureau of Fire Protection (BFP) personnel who respond to AgapSense fire alerts. An administrator verifies your details before you can sign in."
     >
-      {error && <AuthAlert tone="error" className="mb-6">{error}</AuthAlert>}
+      {error && <AuthAlert ref={errorRef} tone="error" className="mb-6">{error}</AuthAlert>}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         <FormSection title="Your details">
@@ -122,18 +136,18 @@ export const RegisterResponder = () => {
             <Field
               label="Mobile number"
               icon={Phone}
-              hint="11 digits, starts with 09."
+              hint="So the administrator can reach you about your request."
               error={contactNumberError}
             >
               {({ id, describedBy }) => (
                 <input
+                  ref={phoneRef}
                   id={id}
                   type="tel"
-                  inputMode="numeric"
-                  autoComplete="tel-national"
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={formData.contactNumber}
                   onChange={handlePhoneChange}
-                  maxLength={11}
                   aria-invalid={!!contactNumberError || undefined}
                   aria-describedby={describedBy}
                   className={inputClass(!!contactNumberError)}
@@ -205,6 +219,7 @@ export const RegisterResponder = () => {
             />
             <PasswordField
               label="Confirm password"
+              inputRef={confirmRef}
               value={formData.confirmPassword}
               onChange={(v) => { update('confirmPassword')(v); if (confirmPasswordError) setConfirmPasswordError(null); }}
               autoComplete="new-password"
