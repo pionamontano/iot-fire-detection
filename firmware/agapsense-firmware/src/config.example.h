@@ -86,7 +86,11 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 
 // Bumped per release. Compared against get-device-config's
 // firmware_version field; a mismatch triggers an OTA download.
-#define FIRMWARE_VERSION          "2.1.0"
+// Overridable via build_flags (see env:esp32dev_mq7_5v in platformio.ini)
+// so a hardware-variant build reports its own distinct version.
+#ifndef FIRMWARE_VERSION
+  #define FIRMWARE_VERSION        "2.1.0"
+#endif
 
 // ── SMS Recipients (fetched from DB at runtime; these are fallbacks) ──
 // Role-specific numbers per spec:
