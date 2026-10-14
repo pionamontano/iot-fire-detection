@@ -790,7 +790,7 @@ export const Users = () => {
     <>
       <div className="space-y-6 md:space-y-8">
         <PageHeader
-          title="User Management"
+          title="Users"
           description="Manage accounts and registration requests."
           actions={
             <button

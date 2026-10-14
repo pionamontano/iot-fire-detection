@@ -1,12 +1,18 @@
 import React, { useEffect } from 'react';
 import { registerServiceWorker } from './lib/pushNotifications';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
 import { AuthGuard } from './components/AuthGuard';
 import { AdminLayout } from './components/AdminLayout';
 import { ResponderLayout } from './components/ResponderLayout';
 import { ResidentLayout } from './components/ResidentLayout';
+
+// Redirect that keeps ?query (e.g. ?q=AGS-001&device=…) on the new address.
+const RedirectKeepingQuery = ({ to }: { to: string }) => {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+};
 
 // Pages - Auth
 import { Login } from './pages/auth/Login';
@@ -69,7 +75,9 @@ function App() {
               <Route path="/admin/map" element={<InteractiveMap />} />
               <Route path="/admin/devices" element={<Devices />} />
               <Route path="/admin/users" element={<Users />} />
-              <Route path="/admin/alerts" element={<Alerts />} />
+              <Route path="/admin/status" element={<Alerts />} />
+              {/* Old address of Device Status (was "System Overview"); kept so bookmarks and links still work. */}
+              <Route path="/admin/alerts" element={<RedirectKeepingQuery to="/admin/status" />} />
               <Route path="/admin/logs" element={<Logs />} />
               <Route path="/admin/support" element={<SupportRequests />} />
               <Route path="/admin/settings/security" element={<Settings />} />

@@ -159,7 +159,7 @@ export const InteractiveMap = () => {
           devices={displayedDevices}
           activeAlerts={activeAlerts}
           now={now}
-          onViewDetails={(d) => navigate(`/admin/alerts?q=${encodeURIComponent(d.device_code)}&device=${d.id}`)}
+          onViewDetails={(d) => navigate(`/admin/status?q=${encodeURIComponent(d.device_code)}&device=${d.id}`)}
           selectedDeviceId={selectedDeviceId}
           onSelectionHandled={() => setSelectedDeviceId(null)}
         >

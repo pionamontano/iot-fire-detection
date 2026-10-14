@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users,  Settings, Cpu, Menu, X, BarChart3, FileText, LifeBuoy, Map as MapIcon } from 'lucide-react';
+import { LayoutDashboard, Users,  Settings, Cpu, Menu, X, Activity, FileText, LifeBuoy, Map as MapIcon } from 'lucide-react';
 import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './HeaderWidgets';
 import { useAuth } from '../contexts/AuthContext';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
@@ -20,11 +20,12 @@ export const AdminLayout: React.FC = () => {
   };
 
   const mainNavItems = [
+    // Monitoring first, then setup, then records.
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Live Map', path: '/admin/map', icon: MapIcon },
-    { name: 'User Management', path: '/admin/users', icon: Users },
+    { name: 'Device Status', path: '/admin/status', icon: Activity },
     { name: 'Devices', path: '/admin/devices', icon: Cpu },
-    { name: 'System Overview', path: '/admin/alerts', icon: BarChart3 },
+    { name: 'Users', path: '/admin/users', icon: Users },
     { name: 'System Log', path: '/admin/logs', icon: FileText },
     { name: 'Support Requests', path: '/admin/support', icon: LifeBuoy },
   ];
@@ -45,13 +46,13 @@ export const AdminLayout: React.FC = () => {
         <div className="flex items-center gap-3 md:gap-6">
           {/* Search */}
           <HeaderSearchBar
-            resultPath={(d) => `/admin/alerts?q=${encodeURIComponent(d.device_code)}&device=${d.id}`}
-            allResultsPath={(q) => `/admin/alerts?q=${encodeURIComponent(q)}`}
+            resultPath={(d) => `/admin/status?q=${encodeURIComponent(d.device_code)}&device=${d.id}`}
+            allResultsPath={(q) => `/admin/status?q=${encodeURIComponent(q)}`}
             mapPath={(d) => `/admin/map?device=${d.id}`}
           />
 
           {/* Notification Bell */}
-          <NotificationDropdown alertsPath="/admin/alerts" />
+          <NotificationDropdown alertsPath="/admin/status" />
 
           {/* User Avatar */}
           <UserMenuDropdown settingsPath="/admin/settings/security" onSignOut={() => setShowLogoutModal(true)} />

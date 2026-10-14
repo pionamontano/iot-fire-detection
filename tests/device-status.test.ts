@@ -1,4 +1,4 @@
-// Shared device status (used by the dashboard, map and System Overview):
+// Shared device status (used by the dashboard, map and Device Status):
 // Tier 2 = fire, Tier 1 = warning (spec SW-2.3.1), otherwise connectivity
 // decides online / reconnecting / offline (spec SW-2.4.3).
 import test from 'node:test';

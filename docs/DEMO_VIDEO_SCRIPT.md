@@ -104,7 +104,7 @@ Use a **split-screen**: Resident dashboard · Responder dashboard · Node close-
 | Change status to **Responding**. | "Then marks the team as responding." |
 | Change status to **Resolved** (or **False alarm**). Pin turns back to green. | "Once the situation is under control, they mark it resolved — or a false alarm. A closed incident is locked and can't be edited afterwards, so the audit trail is trustworthy." |
 | **Alert Logs** page: delivery status for Telegram, SMS-owner, SMS-BFP. | "The log records whether each Telegram and SMS message was actually delivered, based on the modem's real result." |
-| Admin window: **System Overview** → manual close option; mention auto-resolve. | "If readings return to safe levels, the system can resolve the incident automatically, and admins can also close one manually." |
+| Admin window: **Device Status** → manual close option; mention auto-resolve. | "If readings return to safe levels, the system can resolve the incident automatically, and admins can also close one manually." |
 
 ---
 

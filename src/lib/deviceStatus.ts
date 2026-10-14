@@ -23,7 +23,7 @@ export const getConnectivityStatus = (
 };
 
 // ─── The one device status vocabulary used everywhere (dashboard, map,
-// System Overview, responder map). Tier 2 = dual-sensor confirmed fire;
+// Device Status, responder map). Tier 2 = dual-sensor confirmed fire;
 // Tier 1 = single-sensor warning (spec SW-2.3.1). Connectivity follows the
 // 2 / 15 minute thresholds above (spec SW-2.4.3 / FR-ALERT-005). A device an
 // admin switched off is Offline, with a "Disabled by admin" note rather than

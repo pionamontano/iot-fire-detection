@@ -210,7 +210,7 @@ export const Alerts = () => {
       )}
       {/* ─── Page Header & Stats Summary ─── */}
       <PageHeader
-        title="System Overview"
+        title="Device Status"
         description="Real-time status tracking for all deployed IoT environmental sensors."
         actions={
         <div className="grid grid-cols-2 gap-3 md:gap-4">

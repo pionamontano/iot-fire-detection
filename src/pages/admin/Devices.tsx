@@ -78,7 +78,7 @@ export const Devices = () => {
   const now = useNowTick();
 
   // Table controls. ?edit=<id> opens that device's Edit window and ?register=1 the Register window,
-  // so System Overview and other pages can link straight to them.
+  // so Device Status and other pages can link straight to them.
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<DeviceFilter>('all');
@@ -400,7 +400,7 @@ export const Devices = () => {
   // All of them, not just one page: a resident can move an old device's pin at any time.
   const awaitingConfirmation = devices.filter(d => locationState(d) === 'unverified');
 
-  // Deep links: ?edit=<device id> and ?register=1 (used by System Overview).
+  // Deep links: ?edit=<device id> and ?register=1 (used by Device Status).
   const editParam = searchParams.get('edit');
   const registerParam = searchParams.get('register');
   useEffect(() => {

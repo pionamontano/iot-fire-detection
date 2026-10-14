@@ -205,7 +205,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
 // ─── Search Bar ───
 // ═══════════════════════════════════════════
 interface HeaderSearchBarProps {
-  /** Page for one picked device (e.g. System Overview filtered to it). */
+  /** Page for one picked device (e.g. Device Status filtered to it). */
   resultPath: (device: Device) => string;
   /** Page listing every device matching the typed text. Omit if the portal has none. */
   allResultsPath?: (query: string) => string;
