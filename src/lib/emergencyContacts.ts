@@ -8,7 +8,7 @@
 
 export interface EmergencyContact {
   name: string;
-  /** As displayed, e.g. "0995 186 0370". */
+  /** As displayed, e.g. "0912 345 6789". */
   phone: string;
   detail?: string;
 }
@@ -20,12 +20,17 @@ export const EMERGENCY_HOTLINE: EmergencyContact = {
   detail: 'Police, fire and ambulance, nationwide',
 };
 
-/** The BFP station responsible for the deployment area (City of Malolos). */
-export const LOCAL_FIRE_STATION: EmergencyContact = {
-  name: 'Malolos City Fire Station',
-  phone: '0995 186 0370',
-  detail: 'BFP · Brgy. Mojon, Malolos',
-};
+/**
+ * The BFP station for the deployment area, shown next to 911 once set.
+ * Deliberately null during testing: a tester tapping a real station number
+ * on a simulated fire alert would actually call the station. Set it (e.g.
+ * { name: 'Malolos City Fire Station', phone: '...', detail: 'BFP · ...' })
+ * only at go-live.
+ */
+export const LOCAL_FIRE_STATION: EmergencyContact | null = null;
 
-/** tel: link for a displayed number ("0995 186 0370" -> "tel:09951860370"). */
+/** Every contact to list, in order (911 first; the station once set). */
+export const EMERGENCY_CONTACTS: EmergencyContact[] = [EMERGENCY_HOTLINE, ...(LOCAL_FIRE_STATION ? [LOCAL_FIRE_STATION] : [])];
+
+/** tel: link for a displayed number ("0912 345 6789" -> "tel:09123456789"). */
 export const telHref = (phone: string): string => `tel:${phone.replace(/[^\d+]/g, '')}`;

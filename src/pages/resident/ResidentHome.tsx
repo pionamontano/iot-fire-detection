@@ -18,7 +18,7 @@ import type { DeviceStatus } from '../../lib/deviceStatus';
 import { formatEventTime } from '../../lib/alertText';
 import { getPushSubscription } from '../../lib/pushNotifications';
 import { LocationBadge } from '../../components/LocationBadge';
-import { EMERGENCY_HOTLINE, LOCAL_FIRE_STATION, telHref } from '../../lib/emergencyContacts';
+import { EMERGENCY_HOTLINE, EMERGENCY_CONTACTS, LOCAL_FIRE_STATION, telHref } from '../../lib/emergencyContacts';
 
 // The resident's home page, in the order a resident asks: is my home OK right
 // now (status panel), what is the device measuring (readings), will I be told
@@ -567,8 +567,10 @@ export const ResidentHome = () => {
             <p className="font-bold text-tier2-text">
               If you see fire or smoke, get everyone out and call{' '}
               <a href={telHref(EMERGENCY_HOTLINE.phone)} className="underline underline-offset-2">{EMERGENCY_HOTLINE.phone}</a>
-              {' '}or the {LOCAL_FIRE_STATION.name} at{' '}
-              <a href={telHref(LOCAL_FIRE_STATION.phone)} className="underline underline-offset-2 whitespace-nowrap">{LOCAL_FIRE_STATION.phone}</a>.
+              {LOCAL_FIRE_STATION && (<>
+                {' '}or the {LOCAL_FIRE_STATION.name} at{' '}
+                <a href={telHref(LOCAL_FIRE_STATION.phone)} className="underline underline-offset-2 whitespace-nowrap">{LOCAL_FIRE_STATION.phone}</a>
+              </>)}.
             </p>
             {responderLine}
             {offlineDuringAlert}
@@ -845,9 +847,9 @@ export const ResidentHome = () => {
 
           {/* Emergency contacts: always visible, not only during an alert */}
           <section className={CARD}>
-            <SectionHeader title="Emergency Contacts" meta="Tap a number to call" />
+            <SectionHeader title="Emergency Contacts" meta="Tap to call" />
             <ul className="mt-5 flex flex-col divide-y divide-border-warm">
-              {[EMERGENCY_HOTLINE, LOCAL_FIRE_STATION].map(c => (
+              {EMERGENCY_CONTACTS.map(c => (
                 <li key={c.phone} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0">
                     <span className="block text-sm font-bold text-text">{c.name}</span>
