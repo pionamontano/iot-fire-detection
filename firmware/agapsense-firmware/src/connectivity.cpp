@@ -290,7 +290,11 @@ int postAlert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix, int
                 strncpy(ctx->ownerNumber, ownerStr, sizeof(ctx->ownerNumber) - 1);
                 ctx->ownerNumber[sizeof(ctx->ownerNumber) - 1] = '\0';
             }
-            if (bfpStr && strlen(bfpStr) > 0) {
+            // trigger-alert always sends bfp_contact; "" means an admin
+            // cleared it, so take it as-is instead of keeping the old number
+            // (which would otherwise keep being texted until the next config
+            // sync). gsmQueueSms() skips an empty number.
+            if (bfpStr) {
                 strncpy(ctx->bfpNumber, bfpStr, sizeof(ctx->bfpNumber) - 1);
                 ctx->bfpNumber[sizeof(ctx->bfpNumber) - 1] = '\0';
             }

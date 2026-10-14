@@ -15,6 +15,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { getDeviceStatus, getStatusNote } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
 import { PinMap } from '../../components/PinMap';
+import { PHONE_PATTERN, PHONE_ERROR, normalizePhone } from '../../lib/phone';
 
 // Fleet-wide firmware push. Safe because device ID / API key are stored per node (NVS) rather than compiled
 // into the image (docs/FIRMWARE_GUIDE.md, 5.1 and 8.6). Set to false to disable it again (e.g. while nodes still
@@ -107,6 +108,8 @@ export const Devices = () => {
     firmware_md5: '',
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  // Shown under the BFP contact field; the save is blocked while it is set.
+  const [bfpError, setBfpError] = useState<string | null>(null);
 
   // API key regeneration (spec SW-2.6.3) — shown once, right after
   // regenerating, since the raw key otherwise only appears in `devices`
@@ -261,6 +264,7 @@ export const Devices = () => {
       firmware_url: device.firmware_url || '',
       firmware_md5: device.firmware_md5 || '',
     });
+    setBfpError(null);
     setNewApiKey(null);
     setKeyCopied(false);
     setDisableConfirmOpen(false);
@@ -317,6 +321,14 @@ export const Devices = () => {
   const saveEditDevice = async () => {
     if (!editingDevice) return;
 
+    // The device texts this number on a Tier 2 alert, so only a valid PH mobile
+    // number (stored as 09XXXXXXXXX, like resident numbers) or blank (no BFP SMS).
+    const bfpContact = editForm.bfp_contact.trim() ? normalizePhone(editForm.bfp_contact) : '';
+    if (bfpContact && !PHONE_PATTERN.test(bfpContact)) {
+      setBfpError(PHONE_ERROR);
+      return;
+    }
+
     const md5 = editForm.firmware_md5.trim();
     if (md5 && !/^[0-9a-fA-F]{32}$/.test(md5)) {
       alert('Firmware MD5 must be exactly 32 hex characters, or left blank.');
@@ -368,7 +380,7 @@ export const Devices = () => {
         location_verified: editForm.location_verified,
         temp_threshold: editForm.temp_threshold,
         co_threshold: editForm.co_threshold,
-        bfp_contact: editForm.bfp_contact || null,
+        bfp_contact: bfpContact || null,
         firmware_version: editForm.firmware_version.trim() || null,
         firmware_url: editForm.firmware_url.trim() || null,
         firmware_md5: md5 || null,
@@ -912,14 +924,24 @@ export const Devices = () => {
                 warning={editForm.co_threshold < 100 ? 'Very sensitive — expect frequent alerts' : editForm.co_threshold > 800 ? 'Very high — a fire may go undetected' : undefined}
               />
 
-              <FormField label="BFP Responder Contact">
+              <FormField label="BFP Responder Contact" htmlFor="edit-bfp-contact">
                 <input
+                  id="edit-bfp-contact"
                   type="tel"
-                  placeholder="+639XXXXXXXXX"
+                  inputMode="tel"
+                  placeholder="09XXXXXXXXX"
                   value={editForm.bfp_contact}
-                  onChange={e => setEditForm({ ...editForm, bfp_contact: e.target.value })}
-                  className="w-full border border-[#E5E2E1] rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A]"
+                  onChange={e => { setEditForm({ ...editForm, bfp_contact: e.target.value }); setBfpError(null); }}
+                  onBlur={() => { if (editForm.bfp_contact.trim()) setEditForm({ ...editForm, bfp_contact: normalizePhone(editForm.bfp_contact) }); }}
+                  aria-invalid={!!bfpError}
+                  aria-describedby="edit-bfp-contact-help"
+                  className={`w-full border rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A] ${bfpError ? 'border-[#AF101A]' : 'border-[#E5E2E1]'}`}
                 />
+                {bfpError && <p role="alert" className="text-xs font-semibold text-[#AF101A]">{bfpError}</p>}
+                <p id="edit-bfp-contact-help" className="text-xs text-[#5B403D]">
+                  The mobile number this device texts on a Tier 2 fire alert. Leave blank to send no BFP SMS.
+                  A change reaches the device on its next alert, or within 10 minutes.
+                </p>
               </FormField>
 
               {/* Install location — set by the resident (update_own_device_location), confirmed here.

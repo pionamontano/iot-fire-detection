@@ -49,6 +49,7 @@ struct Server {
     bool noIdInAlertReply = false;   // 200 OK but no alert_event_id (e.g. an old deployed function)
     int smsLostResponses = 0;        // next N confirm-sms-status are APPLIED but the response is lost
     uint32_t latencyOnFail = 10000;  // how long a failing call blocks the device
+    std::string bfpContact = "+639222222222";   // devices.bfp_contact as an admin set it ("" = cleared)
     void closeIncident() { openId = 0; maxTier = 0; }
     std::string idStr() const { return "evt-" + std::to_string(openId); }
 };
@@ -62,7 +63,7 @@ static std::string field(const std::string& p, const char* key) {
 static int handle(const std::string& url, const std::string& payload, std::string& body, uint32_t& lat) {
     if (url.find("get-device-config") != std::string::npos) {
         if (srv.mode == DOWN) { lat = srv.latencyOnFail; return -1; }
-        body = "{\"co_alert_ppm\":200,\"temp_alert_c\":70,\"owner_number\":\"+639111111111\",\"bfp_number\":\"+639222222222\"}"; return 200;
+        body = "{\"co_alert_ppm\":200,\"temp_alert_c\":70,\"owner_number\":\"+639111111111\",\"bfp_number\":\"" + srv.bfpContact + "\"}"; return 200;
     }
     bool isAlert = url.find("trigger-alert") != std::string::npos;
     bool isSms = url.find("confirm-sms-status") != std::string::npos;
@@ -76,7 +77,7 @@ static int handle(const std::string& url, const std::string& payload, std::strin
         if (tier > srv.maxTier) srv.maxTier = tier;
         if (srv.mode == LOST) { lat = 10000; return -11; }
         if (srv.noIdInAlertReply) { body = "{\"success\":true}"; return 200; }
-        body = "{\"alert_event_id\":\"" + srv.idStr() + "\",\"owner_contact\":\"+639111111111\",\"bfp_contact\":\"+639222222222\","
+        body = "{\"alert_event_id\":\"" + srv.idStr() + "\",\"owner_contact\":\"+639111111111\",\"bfp_contact\":\"" + srv.bfpContact + "\","
                "\"address_resolved\":\"Test Street\",\"triggered_at\":\"2026-10-12T00:00:00Z\"}";
         return 200;
     }
@@ -125,6 +126,33 @@ static uint32_t maxWdtGap() { uint32_t m = 0; for (size_t i = 1; i < g_hal.wdtAt
 static int reportsFor(const std::string& id, const std::string& role) { int n = 0; for (auto& r : srv.reports) if (r.id == id && r.role == role) ++n; return n; }
 
 // ── scenarios ────────────────────────────────────────────────
+// BFP contact changes made by an admin on the Devices page (devices.bfp_contact). The device
+// loads the number at boot (get-device-config) and again from every trigger-alert reply.
+static bool textedNumber(const std::string& n) { for (auto& s : g_hal.smsSent) if (s == n) return true; return false; }
+static void b01_cleared_bfp_contact_is_not_texted() {
+    printf("B01 admin clears the BFP contact after boot: the next fire texts only the owner, never the old number\n");
+    world(); Dev d; d.boot(); d.run(10);                 // booted with the old number loaded
+    srv.bfpContact = ""; d.tier2(); d.run(30);
+    CHECK(srv.alertTiers.size() == 1, "alert still reported (got %zu)", srv.alertTiers.size());
+    CHECK(!textedNumber("+639222222222"), "old BFP number not texted");
+    CHECK(g_hal.smsSent.size() == 1 && g_hal.smsSent[0] == "+639111111111", "owner SMS only (got %zu)", g_hal.smsSent.size());
+    CHECK(reportsFor("evt-1", "owner") == 1 && reportsFor("evt-1", "bfp") == 0, "no BFP delivery reported (%zu)", srv.reports.size());
+}
+static void b02_replaced_bfp_contact_is_used_at_once() {
+    printf("B02 admin replaces the BFP contact after boot: the next fire texts the new number, not the old one\n");
+    world(); Dev d; d.boot(); d.run(10);
+    srv.bfpContact = "09333333333"; d.tier2(); d.run(30);
+    CHECK(textedNumber("09333333333"), "new BFP number texted");
+    CHECK(!textedNumber("+639222222222"), "old BFP number not texted");
+    CHECK(reportsFor("evt-1", "bfp") == 1, "BFP delivery reported once");
+}
+static void b03_cleared_at_boot_and_server_down() {
+    printf("B03 BFP contact already cleared when the device booted, server down during the fire: owner SMS only\n");
+    world(); srv.bfpContact = ""; Dev d; d.boot(); d.run(10);
+    srv.mode = DOWN; d.tier2(); d.run(30);
+    CHECK(g_hal.smsSent.size() == 1 && g_hal.smsSent[0] == "+639111111111", "owner SMS only (got %zu)", g_hal.smsSent.size());
+    CHECK(!textedNumber("+639222222222"), "no BFP SMS");
+}
 static void s01_normal() {
     printf("S01 normal: one alert POST, two SMS, two confirmations, nothing repeated\n");
     world(); Dev d; d.boot(); d.tier2(); d.run(20);
@@ -435,6 +463,7 @@ int main() {
     r05_duplicate_report_is_harmless(); r06_report_retry_exhaustion(); r06b_report_survives_short_outage(); r07_clear_while_retry_pending();
     r08_reassert_after_failure(); r09_offline_longer_than_interval(); r10_reboot_during_incident(); r11_200_without_usable_id(); r12_wdt_with_slow_failures();
     r06c_two_ready_results_one_failing_report_per_tick(); r12b_wdt_alert_after_config_and_telemetry_coincide(); r12c_wdt_telemetry_and_report_coincide();
+    b01_cleared_bfp_contact_is_not_texted(); b02_replaced_bfp_contact_is_used_at_once(); b03_cleared_at_boot_and_server_down();
     printf("\n%d checks, %d failed\n", g_checks, g_fails);
     return g_fails ? 1 : 0;
 }
