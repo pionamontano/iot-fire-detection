@@ -196,6 +196,8 @@ One reading over its level raises a **warning**; both together raise a **fire al
 | Offices / public halls | 50–55 °C | 150–200 | Balanced for foot traffic |
 | Garages and utility areas | 58–60 °C | 250–300 | Tolerates exhaust and equipment heat |
 
+> Temperature ranges follow common heat-detector ratings (NFPA 72). The gas (CO) ranges are AgapSense starting points, not values from a standard.
+>
 > Lower numbers = more sensitive (earlier warnings, more false alarms). Higher numbers = fewer false alarms but later warnings. When unsure, ask your administrator or BFP before changing.
 
 The device picks up new settings automatically within about **10 minutes**.

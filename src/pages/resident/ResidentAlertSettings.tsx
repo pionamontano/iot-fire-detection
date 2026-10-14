@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Device } from '../../lib/supabase';
@@ -19,6 +20,15 @@ import { NoDeviceLinked } from '../../components/NoDeviceLinked';
 
 const CARD = 'bg-white border border-border rounded-lg p-5 sm:p-6';
 const CARD_TITLE = 'text-lg font-bold tracking-[-0.01em] text-text';
+
+// Suggested starting levels per room (the "Suggested levels by room" guide).
+const ROOM_LEVELS = [
+  { room: 'Bedrooms & Living Areas', temp: '50°C – 54°C', co: '80 – 120 ppm', note: 'Life-safety priority; high sensitivity for early sleep evacuation.' },
+  { room: 'Kitchens & Dining', temp: '58°C – 65°C', co: '250 – 350 ppm', note: 'High ambient heat & cooking fumes; prevents false alarms.' },
+  { room: 'Server / Equipment Closets', temp: '40°C – 45°C', co: '50 – 80 ppm', note: 'Low tolerance for heat buildup; sensitive hardware protection.' },
+  { room: 'Offices / Public Halls (e.g., Barangay Hall)', temp: '50°C – 55°C', co: '150 – 200 ppm', note: 'Balanced for regular foot traffic and ambient dust.' },
+  { room: 'Garages & Utility Areas', temp: '58°C – 60°C', co: '250 – 300 ppm', note: 'Tolerates vehicle exhaust surges and utility equipment heat.' },
+];
 
 // One alert level: label, value, slider, scale and any warning, with a real <label>.
 const LevelSlider = ({ id, icon: Icon, label, value, original, unit, min, max, step, onChange, warning, children }: {
@@ -406,22 +416,22 @@ export const ResidentAlertSettings = () => {
         </div>
       </div>
 
-      {/* Threshold Advice Modal */}
-      {isAdviceModalOpen && (
+      {/* Suggested levels by room. Portalled to <body> (like ui.tsx Modal) so it covers
+          the app header and sidebar instead of sitting inside the scrolling page. */}
+      {isAdviceModalOpen && createPortal(
         <div
-          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center sm:p-4"
           onClick={() => setIsAdviceModalOpen(false)}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col relative"
+            className="bg-surface-card w-full sm:max-w-4xl max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-xl shadow-2xl border border-border"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-title"
           >
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-border px-6 py-4 flex items-center justify-between z-10 rounded-t-xl">
-              <h2 id="modal-title" className="text-lg font-bold text-text">Recommended Sensor Thresholds & Guidelines</h2>
+            <div className="px-5 sm:px-6 py-4 border-b border-border flex items-center justify-between gap-4 shrink-0">
+              <h2 id="modal-title" className="text-lg sm:text-xl font-bold text-text">Suggested Alert Levels by Room</h2>
               <button
                 onClick={() => setIsAdviceModalOpen(false)}
                 className="text-text-subtle hover:text-text transition-colors p-1 rounded-full hover:bg-surface-alt focus:outline-none focus:ring-2 focus:ring-primary"
@@ -431,60 +441,66 @@ export const ResidentAlertSettings = () => {
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 flex flex-col gap-8">
+            <div className="p-5 sm:p-6 flex flex-col gap-8 overflow-y-auto [&>*]:shrink-0">
+              <p className="text-sm text-text-body -mb-4">
+                Starting points for setting your alert levels. Lower numbers warn earlier but cause more false alarms.
+              </p>
 
-              {/* Reference Table */}
-              <div className={TABLE_CARD}>
+              {/* Table from tablet width up; one card per room on phones, where four
+                  columns would need sideways scrolling. */}
+              <div className={`${TABLE_CARD} hidden sm:block`}>
                 <TableScroll>
                   <table className={TABLE}>
                     <thead>
                       <tr className={THEAD_ROW}>
                         <th className={TH}>Room / Environment</th>
-                        <th className={TH}>Recommended Temp (°C)</th>
-                        <th className={TH}>Recommended CO (ppm)</th>
+                        <th className={TH}>Temperature</th>
+                        <th className={TH}>CO</th>
                         <th className={TH}>Considerations</th>
                       </tr>
                     </thead>
                     <tbody className="text-text-body">
-                      <tr className={TR}>
-                        <td className={`${TD} font-bold text-text`}>Bedrooms & Living Areas</td>
-                        <td className={`${TD} whitespace-nowrap`}>50°C – 54°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>80 – 120 ppm</td>
-                        <td className={TD}>Life-safety priority; high sensitivity for early sleep evacuation.</td>
-                      </tr>
-                      <tr className={TR}>
-                        <td className={`${TD} font-bold text-text`}>Kitchens & Dining</td>
-                        <td className={`${TD} whitespace-nowrap`}>58°C – 65°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>250 – 350 ppm</td>
-                        <td className={TD}>High ambient heat & cooking fumes; prevents false alarms.</td>
-                      </tr>
-                      <tr className={TR}>
-                        <td className={`${TD} font-bold text-text`}>Server / Equipment Closets</td>
-                        <td className={`${TD} whitespace-nowrap`}>40°C – 45°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>50 – 80 ppm</td>
-                        <td className={TD}>Low tolerance for heat buildup; sensitive hardware protection.</td>
-                      </tr>
-                      <tr className={TR}>
-                        <td className={`${TD} font-bold text-text`}>Offices / Public Halls (e.g., Barangay Hall)</td>
-                        <td className={`${TD} whitespace-nowrap`}>50°C – 55°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>150 – 200 ppm</td>
-                        <td className={TD}>Balanced for regular foot traffic and ambient dust.</td>
-                      </tr>
-                      <tr className={TR}>
-                        <td className={`${TD} font-bold text-text`}>Garages & Utility Areas</td>
-                        <td className={`${TD} whitespace-nowrap`}>58°C – 60°C</td>
-                        <td className={`${TD} whitespace-nowrap`}>250 – 300 ppm</td>
-                        <td className={TD}>Tolerates vehicle exhaust surges and utility equipment heat.</td>
-                      </tr>
+                      {ROOM_LEVELS.map(r => (
+                        <tr key={r.room} className={TR}>
+                          <td className={`${TD} font-bold text-text`}>{r.room}</td>
+                          <td className={`${TD} whitespace-nowrap`}>{r.temp}</td>
+                          <td className={`${TD} whitespace-nowrap`}>{r.co}</td>
+                          <td className={TD}>{r.note}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </TableScroll>
               </div>
+              <ul className="sm:hidden flex flex-col gap-3">
+                {ROOM_LEVELS.map(r => (
+                  <li key={r.room} className="border border-border rounded-lg p-4">
+                    <p className="text-sm font-bold text-text">{r.room}</p>
+                    <dl className="grid grid-cols-2 gap-3 mt-3">
+                      <div>
+                        <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-body">Temperature</dt>
+                        <dd className="text-sm font-semibold text-text">{r.temp}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-body">CO</dt>
+                        <dd className="text-sm font-semibold text-text">{r.co}</dd>
+                      </div>
+                    </dl>
+                    <p className="text-xs text-text-subtle mt-3">{r.note}</p>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Where the numbers come from: the cited standards cover heat and smoke
+                  detectors, not CO levels per room, so say so instead of implying it. */}
+              <p className="text-xs text-text-subtle leading-relaxed -mt-4">
+                Temperature ranges follow common heat-detector ratings (see NFPA 72 below). The CO ranges are AgapSense
+                starting points, not values from a standard: the standards below don't set CO levels for rooms.
+              </p>
 
               {/* Environmental Factors */}
               <div>
-                <h3 className="text-sm font-bold tracking-widest uppercase text-primary mb-3">Environmental Factors</h3>
+                <h3 className="text-base font-bold text-text mb-3">What else affects your readings</h3>
                 <ul className="space-y-3 text-sm text-text-body">
                   <li className="flex gap-2">
                     <span className="text-primary shrink-0 mt-0.5">•</span>
@@ -509,7 +525,7 @@ export const ResidentAlertSettings = () => {
 
               {/* References & Standards Footnote */}
               <div className="bg-surface border border-border rounded-lg p-5">
-                <h4 className="text-xs font-bold text-text mb-2 uppercase tracking-wide">References & Standards</h4>
+                <h4 className="text-sm font-bold text-text mb-2">References</h4>
                 <ul className="space-y-2 text-[11px] text-text-subtle leading-relaxed">
                   <li>
                     <strong className="text-text-body">NFPA 72 (National Fire Alarm and Signaling Code):</strong> Standard fixed-temperature heat detector operating ratings (ordinary temperature classification typically begins at 57°C / 135°F; kitchens/utilities adjusted to intermediate ratings).
@@ -520,12 +536,16 @@ export const ResidentAlertSettings = () => {
                   <li>
                     <strong className="text-text-body">UL 268 / UL 521 Standards:</strong> Specifications for smoke and heat detector response sensitivities and nuisance-alarm resistance.
                   </li>
+                  <li>
+                    <strong className="text-text-body">UL 2034 (residential CO alarms):</strong> Covers carbon monoxide alarms, which respond to CO level and how long it lasts rather than to a single ppm number. It does not set per-room levels.
+                  </li>
                 </ul>
               </div>
 
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
