@@ -17,9 +17,12 @@
 
 #include "gsm.h"
 #include "identity.h"
+#include "diag_log.h"
 
 #if DEBUG_MODE
   #define GSMLOG(fmt, ...) Serial.printf("[GSM] " fmt "\n", ##__VA_ARGS__)
+#elif ENABLE_DIAG_SERVER
+  #define GSMLOG(fmt, ...) diagLogAdd("[GSM] " fmt, ##__VA_ARGS__)
 #else
   #define GSMLOG(fmt, ...)
 #endif
@@ -253,6 +256,25 @@ void gsmQueueSms(const char* number, const char* message,
     }
 }
 
+// Periodic registration/signal recheck — gsmInit() only checks once at boot,
+// so without this there'd be no way to see e.g. the module losing/regaining
+// signal later. Only called when gsmProcessQueue() finds no SMS job queued
+// that tick, so a diagnostic AT+CSQ/AT+CREG? query never delays an urgent
+// alert SMS send.
+#define GSM_STATUS_INTERVAL_MS 30000UL
+static void gsmPeriodicStatus() {
+    static uint32_t lastStatus = 0;
+    if (millis() - lastStatus < GSM_STATUS_INTERVAL_MS) return;
+    lastStatus = millis();
+
+    bool reg = gsmIsRegistered();
+    while (GSM_SERIAL.available()) GSM_SERIAL.read();
+    GSM_SERIAL.print("AT+CSQ\r\n");
+    char csq[64];
+    gsmReadResponse(csq, sizeof(csq), 1000);
+    GSMLOG("Status: %s | %s", reg ? "registered" : "NOT registered", csq);
+}
+
 // Dequeues and sends (blocking) at most one job per call — called
 // once per GSM task loop tick, so a slow SIM800L response only ever
 // stalls the GSM task, never the Connectivity task's WDT reset.
@@ -282,7 +304,13 @@ void gsmProcessQueue() {
         xSemaphoreGive(smsMutex);
     }
 
-    if (!haveJob) return;
+    // No job this tick — safe moment for the periodic status check. Skipped
+    // when a job IS present so an urgent alert SMS is never delayed behind
+    // a diagnostic AT+CSQ/AT+CREG? query.
+    if (!haveJob) {
+        gsmPeriodicStatus();
+        return;
+    }
 
     bool sent = gsmSendSms(num, msg);   // send outside mutex (blocking)
 

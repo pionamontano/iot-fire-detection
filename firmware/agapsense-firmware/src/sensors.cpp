@@ -9,9 +9,12 @@
 
 #include "sensors.h"
 #include <math.h>
+#include "diag_log.h"
 
 #if DEBUG_MODE
   #define SLOG(fmt, ...) Serial.printf("[SENSOR] " fmt "\n", ##__VA_ARGS__)
+#elif ENABLE_DIAG_SERVER
+  #define SLOG(fmt, ...) diagLogAdd("[SENSOR] " fmt, ##__VA_ARGS__)
 #else
   #define SLOG(fmt, ...)
 #endif

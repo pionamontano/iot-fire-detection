@@ -3,9 +3,12 @@
 // ============================================================
 
 #include "gps.h"
+#include "diag_log.h"
 
 #if DEBUG_MODE
   #define GLOG(fmt, ...) Serial.printf("[GPS] " fmt "\n", ##__VA_ARGS__)
+#elif ENABLE_DIAG_SERVER
+  #define GLOG(fmt, ...) diagLogAdd("[GPS] " fmt, ##__VA_ARGS__)
 #else
   #define GLOG(fmt, ...)
 #endif
@@ -53,6 +56,18 @@ void gpsUpdate(GpsFix* fix, SemaphoreHandle_t mutex) {
     if (xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         *fix = nf;
         xSemaphoreGive(mutex);
+    }
+
+    // gpsUpdate() is called every 20ms from taskGPS — throttle logging so
+    // the diag ring buffer isn't flooded.
+    static uint32_t lastGpsLog = 0;
+    if (millis() - lastGpsLog >= 5000) {
+        lastGpsLog = millis();
+        if (nf.valid) {
+            GLOG("fix: lat=%.6f lng=%.6f sats=%d hdop=%.1f", nf.lat, nf.lng, nf.satellites, nf.hdop);
+        } else {
+            GLOG("no fix (chars processed=%lu, sats=%d)", gps.charsProcessed(), nf.satellites);
+        }
     }
 }
 

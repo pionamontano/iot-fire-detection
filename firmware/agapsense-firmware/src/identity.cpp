@@ -8,9 +8,12 @@
 
 #include <Preferences.h>
 #include <string.h>
+#include "diag_log.h"
 
 #if DEBUG_MODE
   #define ILOG(fmt, ...) Serial.printf("[IDENT] " fmt "\n", ##__VA_ARGS__)
+#elif ENABLE_DIAG_SERVER
+  #define ILOG(fmt, ...) diagLogAdd("[IDENT] " fmt, ##__VA_ARGS__)
 #else
   #define ILOG(fmt, ...)
 #endif
