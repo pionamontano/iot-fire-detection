@@ -69,54 +69,43 @@ export const DashboardSkeleton = () => (
 );
 
 // ─── Responder Dashboard Skeleton ───
-// Mimics: 4 stat cards + map area + live feed + table
+// Mimics: page header + 4 stat cards + map (2/3) + active fire list (1/3)
 export const ResponderDashboardSkeleton = () => (
-  <div className="space-y-8 pb-10 animate-fade-in">
-    {/* 4 Stat Cards */}
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+  <div className="flex flex-col gap-6 md:gap-8 pb-12 animate-fade-in">
+    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-8 md:h-10 w-48" />
+        <Skeleton className="h-4 w-72 max-w-full" />
+      </div>
+      <Skeleton className="h-10 w-44 rounded-lg" />
+    </div>
+
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="bg-surface-alt border border-border rounded-lg px-5 py-4 flex flex-col gap-3">
+        <div key={i} className="bg-surface-card border border-border rounded-lg p-4 sm:p-5 flex flex-col gap-3">
           <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-10 w-16 rounded-md" />
+          <Skeleton className="h-9 w-16 rounded-md" />
         </div>
       ))}
     </div>
 
-    {/* Map + Live Feed */}
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <div className="lg:col-span-8">
-        <Skeleton className="w-full rounded-lg" style={{ minHeight: 420 }} />
-      </div>
-      <div className="lg:col-span-4 bg-white border border-border rounded-lg flex flex-col overflow-hidden" style={{ maxHeight: 420 }}>
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-3 w-3 rounded-full" />
-        </div>
-        <div className="flex-1 p-4 flex flex-col gap-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex flex-col gap-2 pb-4 border-b border-border last:border-0">
-              <div className="flex justify-between">
-                <Skeleton className="h-4 w-36" />
-                <Skeleton className="h-3 w-16" />
-              </div>
-              <Skeleton className="h-3 w-44" />
-              <div className="grid grid-cols-2 gap-2">
-                <Skeleton className="h-12 rounded" />
-                <Skeleton className="h-12 rounded" />
-              </div>
-            </div>
-          ))}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+      <div className="lg:col-span-1 lg:order-2 flex flex-col gap-3">
+        <Skeleton className="h-5 w-40" />
+        <div className="bg-surface-card border border-border rounded-lg p-4 flex flex-col gap-3">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-3 w-48" />
+          <div className="grid grid-cols-2 gap-2">
+            <Skeleton className="h-12 rounded" />
+            <Skeleton className="h-12 rounded" />
+          </div>
+          <Skeleton className="h-10 rounded-lg" />
         </div>
       </div>
-    </div>
-
-    {/* Table */}
-    <div className="bg-white border border-border rounded-lg overflow-hidden">
-      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-        <Skeleton className="h-4 w-36" />
-        <Skeleton className="h-8 w-56 rounded" />
+      <div className="lg:col-span-2 lg:order-1 flex flex-col gap-3">
+        <Skeleton className="h-5 w-28" />
+        <Skeleton className="w-full rounded-lg h-[320px] sm:h-[400px] lg:h-[480px]" />
       </div>
-      <TableRowsSkeleton cols={7} rows={5} />
     </div>
   </div>
 );

@@ -39,9 +39,9 @@ test('trigger-alert Tier 2: push goes only to approved+active admins, responders
   assert.deepEqual(pushCalls[0].userIds.sort(), ['admin-ok', 'res-ok', 'resp-ok']);
 });
 
-test('trigger-alert Tier 1: residents are NOT notified (unchanged tier behaviour); unapproved excluded', async () => {
+test('trigger-alert Tier 1: only admins are pushed (no BFP responders, no residents); unapproved excluded', async () => {
   const { pushCalls } = await runTrigger({ tier: 1 });
-  assert.deepEqual(pushCalls[0].userIds.sort(), ['admin-ok', 'resp-ok']);
+  assert.deepEqual(pushCalls[0].userIds.sort(), ['admin-ok']);
 });
 
 test('trigger-alert: unapproved/inactive accounts never appear, even when they are the only ones', async () => {

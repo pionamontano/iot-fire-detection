@@ -200,10 +200,12 @@ async function dispatchNotifications(p: {
 }): Promise<void> {
   const { admin, alertId, tier, device, locationString, tgText } = p;
 
+  // The shared station chat (TELEGRAM_CHAT_ID) is the fire station's, so it gets fires (Tier 2) only, like the
+  // BFP responders. Tier 1 warnings reach admins through push and their own linked Telegram (below).
   const telegram = (async () => {
     const token = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
     const chatId = Deno.env.get('TELEGRAM_CHAT_ID') || '';
-    if (!token || !chatId) return;
+    if (tier < 2 || !token || !chatId) return;
     if (!(await claim(admin, alertId, tier, 'telegram_station', 'station'))) return;
     const r = await sendTelegram(token, chatId, tgText);
     await complete(admin, alertId, tier, 'telegram_station', 'station', r.ok ? 'sent' : 'failed', r.status, r.ref ?? null, r.error ?? null, r.retryable);
@@ -212,11 +214,12 @@ async function dispatchNotifications(p: {
     }
   })();
 
-  // Recipients: roles and tiers unchanged (admins and responders always; the device's resident on Tier 2 only),
-  // but every recipient must be an APPROVED, ACTIVE account. Shared by push and per-user Telegram (D5.4/#95).
+  // Recipients: admins on every tier; BFP responders and the device's resident on Tier 2 (fire) only. A Tier 1
+  // warning is one sensor over its threshold, which the site and the admins check first, so it is not dispatched
+  // to the fire station. Every recipient must be an APPROVED, ACTIVE account. Shared by push and per-user Telegram (D5.4/#95).
   const recipientRoles = tier === 2
     ? `role.eq.admin,role.eq.bfp_responder,and(device_id.eq.${device.id},role.eq.resident)`
-    : 'role.eq.admin,role.eq.bfp_responder';
+    : 'role.eq.admin';
 
   // Per-user Telegram (owner decision D5.4, issue #95): any approved+active recipient who has linked their
   // own Telegram chat (profiles.telegram_chat_id) gets the same alert text the station chat receives, on the
