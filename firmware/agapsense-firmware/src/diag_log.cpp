@@ -16,22 +16,30 @@ static bool diagLogWrapped = false;
 
 void diagLogAdd(const char* fmt, ...) {
     static SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
+    // Static, not a local — this is called from every sensor/connectivity
+    // task, including taskDS18B20 (STACK_DS18B20 = 2048 words = 8KB in
+    // config.h). A ~348-byte local buffer here (DIAG_LOG_LINE_MAX - 12)
+    // stacked on top of whatever DallasTemperature/OneWire already use is a
+    // plausible stack overflow — which on ESP32 shows up as silent
+    // corruption/hangs, not a clean crash. Moving it to static memory (BSS)
+    // costs nothing extra (same size either way) and removes the risk
+    // entirely. Safe to share across tasks because the whole format+copy
+    // now happens under the one mutex below, not just the ring-buffer write.
+    static char msg[DIAG_LOG_LINE_MAX - 12];
 
-    char msg[DIAG_LOG_LINE_MAX - 12];
+    if (!mutex || xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
+
     va_list args;
     va_start(args, fmt);
     vsnprintf(msg, sizeof(msg), fmt, args);
     va_end(args);
     Serial.printf("%s\n", msg);   // still useful if USB/serial happens to be available
 
-    // Called from every sensor/connectivity task — guards the shared ring
-    // buffer against concurrent writes corrupting a line or racing the index.
-    if (mutex && xSemaphoreTake(mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        snprintf(diagLogLines[diagLogHead], DIAG_LOG_LINE_MAX, "[%8lu s] %s", millis() / 1000, msg);
-        diagLogHead = (diagLogHead + 1) % DIAG_LOG_BUF_LINES;
-        if (diagLogHead == 0) diagLogWrapped = true;
-        xSemaphoreGive(mutex);
-    }
+    snprintf(diagLogLines[diagLogHead], DIAG_LOG_LINE_MAX, "[%8lu s] %s", millis() / 1000, msg);
+    diagLogHead = (diagLogHead + 1) % DIAG_LOG_BUF_LINES;
+    if (diagLogHead == 0) diagLogWrapped = true;
+
+    xSemaphoreGive(mutex);
 }
 
 String diagLogDump() {

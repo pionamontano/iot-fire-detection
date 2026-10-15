@@ -147,6 +147,13 @@ void setup() {
     Serial.println("\n============================================================");
     Serial.println("  Bantay Apoy — IoT Fire Detection Node  v" FIRMWARE_VERSION);
     Serial.println("============================================================");
+#elif ENABLE_DIAG_SERVER
+    // diagLogAdd() always Serial.printf()s regardless of DEBUG_MODE, but
+    // without Serial.begin() the Arduino UART driver is never installed, so
+    // those prints silently go nowhere. Diag builds are explicitly meant for
+    // bench debugging (often over a physical UART adapter), so wire it up.
+    Serial.begin(DEBUG_BAUD);
+    delay(500);
 #endif
 
     // ── Hardware WDT ───────────────────────────────────────
