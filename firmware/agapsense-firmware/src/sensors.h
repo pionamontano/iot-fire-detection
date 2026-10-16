@@ -36,6 +36,12 @@ struct SensorData {
   #define CO_STALE_MS       (MQ7_HEAT_DURATION_MS + 30000UL)
 #endif
 
+// Top of the MQ-7's rated range (datasheet: 20-2000 ppm). Readings are capped
+// here, and a saturated sensor reports it, so the dashboard shows "at the top
+// of the range" rather than a meaningless extrapolation such as 10000 ppm. It
+// stays above every allowed alert threshold (devices.co_threshold <= 1000).
+#define MQ7_PPM_MAX         2000.0f
+
 // Temperature reported to the backend for a probe with no usable reading —
 // the same value DallasTemperature uses for a disconnected sensor, so it reads
 // as a fault on the dashboard rather than as a plausible room temperature.
