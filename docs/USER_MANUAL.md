@@ -42,8 +42,8 @@ The device takes readings continuously and reports to the system about every **3
 
 | Level | Trigger | What happens |
 |---|---|---|
-| **Tier 1 — Warning** | **One** sensor (CO *or* temperature) is above its limit | Yellow LED. Push and Telegram to the resident and to administrators. **No SMS**, and BFP is not notified. The resident can mark it resolved once they have checked the room. |
-| **Tier 2 — Fire Alert** | **Both** sensors are above their limits | Red LED **and buzzer**. Alert to BFP and push notification to the resident. **SMS to the resident and to the BFP station.** |
+| **Tier 1 — Warning** | **One** sensor (CO *or* temperature) is above its limit | Yellow LED and **3 short beeps**, repeated about every 45 seconds while it lasts. Push and Telegram to the resident and to administrators. **No SMS**, and BFP is not notified. The resident can mark it resolved once they have checked the room. |
+| **Tier 2 — Fire Alert** | **Both** sensors are above their limits | Red LED **and a continuous buzzer**. Alert to BFP and push notification to the resident. **SMS to the resident and to the BFP station.** |
 
 To avoid false alarms, the device needs **3 readings in a row** above the limit before it raises an alert, and **2 safe readings in a row** before it clears one. A single brief spike will not set it off.
 
@@ -56,8 +56,8 @@ To avoid false alarms, the device needs **3 readings in a row** above the limit 
 | **Blue LED — solid** | Online. Wi-Fi works and the system is reachable | Nothing. Normal |
 | **Blue LED — blinking** | Wi-Fi is connected but the internet/system is not reachable | Check your router's internet connection |
 | **Blue LED — off** | No Wi-Fi | Check the router; see [Troubleshooting](#9-troubleshooting). The device still sounds local alarms and sends SMS |
-| **Yellow LED on** | **Tier 1 warning**: one reading is above its limit | Check the room for smoke, heat or a gas source. Be ready to evacuate |
-| **Red LED on + buzzer** | **Tier 2 fire alert** | **Evacuate immediately and call 911** |
+| **Yellow LED on + 3 short beeps every ~45 s** | **Tier 1 warning**: one reading is above its limit | Check the room for smoke, heat or a gas source. Be ready to evacuate |
+| **Red LED on + continuous buzzer** | **Tier 2 fire alert** | **Evacuate immediately and call 911** |
 | **Yellow → Red → Blue flash, then one beep** | Normal start-up self-test | Nothing. It means all indicators work |
 
 ### Warm-up after power-on
@@ -182,7 +182,7 @@ Here you control **when** the device alerts and **where** alerts are sent.
 
 One reading over its level raises a **warning**; both together raise a **fire alert**.
 
-**Where Alerts Are Sent** (each one applies on its own). You receive **fire alerts (Tier 2)** on each channel turned on here; warnings (Tier 1) show on your Dashboard.
+**Where Alerts Are Sent** (each one applies on its own). You receive **warnings (Tier 1)** and **fire alerts (Tier 2)** by push and Telegram on each channel turned on here; SMS is sent for fire alerts only.
 - **SMS**: the mobile number (`09XXXXXXXXX`) your device texts. It is sent by the device itself over the mobile network, so it works even without internet. Press **Save number**.
 - **Push notifications**: press **Turn on** and allow notifications to get alerts in that browser, even when AgapSense isn't open. Turn it on in each browser you use. *Unavailable* means the browser doesn't support it or notifications are blocked.
 - **Telegram**: press **Link Telegram** and follow the prompt. Fire alerts are then also sent to your Telegram through the AgapSense bot.
@@ -219,7 +219,7 @@ Update your **Full name**. Your **mobile number** is shown here and changed in *
 
 | Event | You receive |
 |---|---|
-| Tier 1 warning | Nothing is sent to you by SMS. Check your Dashboard; the device's yellow LED lights |
+| Tier 1 warning | Push and Telegram (no SMS). The device's yellow LED lights and it beeps 3 times about every 45 seconds. Check the room, then use **Mark as resolved** on your Dashboard |
 | Tier 2 fire alert | Red LED and buzzer at the device, **SMS to your mobile number** with evacuation instructions and a map link, a **push notification** if enabled, and a **Telegram** message if linked |
 
 **If you hear the alarm or receive the SMS: leave immediately, close doors behind you, call 911, and do not return until BFP says it is safe.**
@@ -232,7 +232,7 @@ Your menu has: **Dashboard**, **Alert Logs**, **Settings**, **Logout**.
 
 ### 7.1 Dashboard
 
-You see **fire alerts (Tier 2) only**. Single-sensor warnings (Tier 1) go to the administrators, who check the site first.
+You see **fire alerts (Tier 2) only**. Single-sensor warnings (Tier 1) go to the resident and administrators; the household checks the site first.
 
 - **Summary cards**: **Active Fires**, **Not Acknowledged**, **Devices Reporting** (online or reconnecting, out of enabled devices) and **Fire Alerts Today**. A card turns red only when there is something to act on.
 - **Alarm sound on / muted** (top right): the browser siren plays while any fire is unacknowledged. Keep the page open, your volume on, and allow the browser to play sound.
@@ -298,7 +298,7 @@ Messages include a navigation link of the form `maps.google.com/?q=<latitude>,<l
 
 **What if Wi-Fi is down during a fire?** The red LED, buzzer and SMS still work through the SIM. The device keeps trying to send the online alert and delivers it when Wi-Fi returns, without creating duplicates. However, **readings taken while offline are not stored**.
 
-**When does an alert end?** After 2 consecutive safe readings the device switches off the LEDs and buzzer. The incident in the system is then closed automatically unless a responder has already taken it over.
+**When does an alert end?** After 2 consecutive safe readings the device switches off the LEDs and buzzer. There is no button to silence the beeps: marking a warning resolved in the app closes it in the system, but the device keeps beeping until its readings are back to normal. The incident in the system is then closed automatically unless a responder has already taken it over.
 
 ---
 

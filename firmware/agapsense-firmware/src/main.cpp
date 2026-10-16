@@ -20,6 +20,7 @@
 #include "gps.h"
 #include "connectivity.h"
 #include "gsm.h"
+#include "buzzer.h"
 #include "diag_log.h"
 #include "diag_server.h"
 
@@ -52,6 +53,7 @@ static TaskHandle_t h_taskDS18B20      = nullptr;
 static TaskHandle_t h_taskGPS          = nullptr;
 static TaskHandle_t h_taskConnectivity = nullptr;
 static TaskHandle_t h_taskGSM          = nullptr;
+static TaskHandle_t h_taskBuzzer       = nullptr;
 
 // ============================================================
 // Task 1: MQ-7 Voltage Cycling + ADC reads (Core 1)
@@ -138,6 +140,23 @@ static void taskGSM(void* pvParams) {
 }
 
 // ============================================================
+// Task 6: Buzzer pattern (Core 1)
+//
+// The connectivity task only picks the mode (off / Tier 1 chirp / Tier 2
+// continuous); this task times the 150 ms beeps, which the 2 s, HTTPS-
+// blocking connectivity loop cannot. See buzzer.h.
+// ============================================================
+static void taskBuzzer(void* pvParams) {
+    LOG("taskBuzzer started on core %d", xPortGetCoreID());
+    esp_task_wdt_add(nullptr);
+    for (;;) {
+        esp_task_wdt_reset();
+        buzzerTick(millis());
+        vTaskDelay(pdMS_TO_TICKS(BUZZER_TICK_MS));
+    }
+}
+
+// ============================================================
 // setup()
 // ============================================================
 void setup() {
@@ -220,6 +239,10 @@ void setup() {
 
     rc = xTaskCreatePinnedToCore(taskGSM, "GSM",
          STACK_GSM, nullptr, PRIO_GSM, &h_taskGSM, 0);
+    configASSERT(rc == pdPASS);
+
+    rc = xTaskCreatePinnedToCore(taskBuzzer, "Buzzer",
+         STACK_BUZZER, nullptr, PRIO_BUZZER, &h_taskBuzzer, 1);
     configASSERT(rc == pdPASS);
 
     LOG("All tasks created — entering FreeRTOS scheduler");

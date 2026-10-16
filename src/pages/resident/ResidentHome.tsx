@@ -585,7 +585,7 @@ export const ResidentHome = () => {
               Check the room for heat, smoke or a gas source.
             </p>
             <p className="text-xs">
-              Warnings are not sent to fire responders, so no one else will close this. Once you have checked the room, mark it as resolved; it also clears on its own when readings return to normal.
+              Warnings are not sent to fire responders, so no one else will close this. Once you have checked the room, mark it as resolved; it also clears on its own when readings return to normal. The device keeps beeping until then.
             </p>
             {resolveError && <p role="alert" className="text-xs font-semibold text-primary">{resolveError}</p>}
             {offlineDuringAlert}

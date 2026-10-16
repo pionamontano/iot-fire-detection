@@ -7,14 +7,14 @@
 // PlatformIO environment (see platformio.ini's [env:...] sections):
 //   env:esp32dev            -> 2.1.0 (this file's fallback)      — original
 //                              1.4V heat/measure MQ-7 duty cycle
-//   env:esp32dev_mq7_5v     -> 2.2.0                             — AGS-001's
+//   env:esp32dev_mq7_5v     -> 2.3.0 (2.2.0 before the Tier 1 chirp) — AGS-001's
 //                              actual wiring: MQ-7 runs off a constant 5V
 //                              rail, not through MQ7_HEATER_PIN's
 //                              PWM/transistor, so the duty-cycle model
 //                              above always read ADC-saturated garbage on
 //                              this hardware. See sensors.cpp's
 //                              MQ7_CONTINUOUS_5V branch.
-//   env:esp32dev_mq7_5v_diag -> 2.2.0-diag                       — same
+//   env:esp32dev_mq7_5v_diag -> 2.3.0-diag                       — same
 //                              constant-5V fix, plus a bench-only HTTP
 //                              diag log server (ENABLE_DIAG_SERVER).
 //                              Not for production flashes — revert to
@@ -24,6 +24,13 @@
 // Whichever env a node was actually built with is what it reports as
 // devices.firmware_version_reported — not whatever this file's own
 // fallback says.
+//
+// Changes in v2.3:
+//   + Buzzer patterns: Tier 1 = 3 short beeps (150 ms) at once, then
+//     every 45 s while the warning lasts; Tier 2 = continuous (unchanged).
+//     Driven by a small dedicated task (buzzer.h, STACK_BUZZER /
+//     PRIO_BUZZER, defaulted there if this file predates them). No
+//     silence button: the beeps stop when the readings clear.
 //
 // Changes from v2.1:
 //   ~ MQ-7 driving model now selectable via the FIRMWARE_VERSION table
@@ -208,6 +215,7 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 #define STACK_GPS           3072
 #define STACK_CONNECTIVITY  10240   // larger: HTTPS POSTs + config fetch
 #define STACK_GSM           4096
+#define STACK_BUZZER        2048
 
 // ── FreeRTOS Task Priorities ───────────────────────────────
 #define PRIO_MQ7            2
@@ -215,6 +223,7 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 #define PRIO_GPS            3
 #define PRIO_CONNECTIVITY   3
 #define PRIO_GSM            2
+#define PRIO_BUZZER         2
 
 // ── MQ-7 Calibration ──────────────────────────────────────
 // Measure Rs in clean air, set R0 = Rs. Re-flash to apply.
