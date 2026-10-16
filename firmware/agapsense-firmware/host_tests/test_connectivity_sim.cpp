@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include "connectivity.h"
 #include "gsm.h"
+#include "buzzer.h"
 #include "sensors.h"
 #include <WiFi.h>
 #include <esp_task_wdt.h>
@@ -213,12 +214,17 @@ static void s05_escalation_while_failing() {
 }
 static void s06_escalation_after_ack() {
     printf("S06 tier 1 acknowledged, then escalation, then de-escalate and re-escalate: tier 2 is (re)POSTed each time, as before 5.3\n");
-    world(); Dev d; d.boot(); d.tier1(); d.run(10);
+    world(); Dev d; d.boot();
+    CHECK(buzzerMode() == agap::BuzzerMode::OFF, "silent while CLEAR");
+    d.tier1(); d.run(10);
     CHECK(srv.alertTiers.size() == 1 && srv.alertTiers[0] == 1 && g_hal.smsSent.empty());
+    CHECK(buzzerMode() == agap::BuzzerMode::CHIRP, "Tier 1 chirps");
     d.tier2(); d.run(10);
     CHECK(srv.alertTiers.size() == 2 && srv.alertTiers[1] == 2, "escalation POSTed immediately");
+    CHECK(buzzerMode() == agap::BuzzerMode::CONTINUOUS, "Tier 2 is a continuous tone");
     CHECK(g_hal.smsSent.size() == 2 && srv.reports.size() == 2);
     d.tier1(); d.run(8); CHECK(d.ctx.alertTier == AlertTier::TIER1);
+    CHECK(buzzerMode() == agap::BuzzerMode::CHIRP, "de-escalation back to Tier 1 chirps again");
     d.tier2(); d.run(10);
     CHECK(srv.alertTiers.size() == 3 && srv.alertTiers[2] == 2, "re-escalation re-POSTs (pre-5.3 behaviour) (%zu)", srv.alertTiers.size());
     CHECK(g_hal.smsSent.size() == 2, "...but the 5-minute SMS debounce still suppresses a second SMS pair");
@@ -227,6 +233,7 @@ static void s07_clear_cancels() {
     printf("S07 CLEAR cancels a pending retry\n");
     world(); Dev d; d.boot(); srv.mode = DOWN; d.tier2(); d.run(10);
     d.safe(); d.run(6); CHECK(d.ctx.alertTier == AlertTier::CLEAR);
+    CHECK(buzzerMode() == agap::BuzzerMode::OFF, "CLEAR silences the buzzer");
     int n = countCalls("trigger-alert"); srv.mode = OK; d.run(300);
     CHECK(countCalls("trigger-alert") == n, "no alert POST after CLEAR (%d -> %d)", n, countCalls("trigger-alert"));
     CHECK(srv.incidents == 0, "server never created the stale incident");

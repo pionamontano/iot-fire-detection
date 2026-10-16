@@ -34,7 +34,7 @@ const statusKey = (a: LogAlert): Exclude<StatusFilter, 'all'> => {
   return label === 'False alarm' ? 'false_alarm' : 'resolved';
 };
 
-const CLOSED_BY: Record<string, string> = { device: 'Device (readings back to normal)', responder: 'BFP responder', admin: 'Administrator', legacy: 'System' };
+const CLOSED_BY: Record<string, string> = { device: 'Device (readings back to normal)', responder: 'BFP responder', admin: 'Administrator', resident: 'Resident', legacy: 'System' };
 
 const SELECT = 'w-full sm:w-auto h-10 pl-3 pr-8 border border-border rounded-lg bg-surface-card text-sm font-semibold text-text-body focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary';
 

@@ -16,7 +16,7 @@ import { NoDeviceLinked } from '../../components/NoDeviceLinked';
 
 // Two independent parts: the alert levels (saved together with one Save) and
 // where alerts are sent (SMS number, push and Telegram, each applied on its own).
-// Residents receive fire alerts (Tier 2); warnings (Tier 1) only show in the app.
+// Residents get push and Telegram for warnings (Tier 1) and fire alerts (Tier 2); SMS is for fire alerts only.
 
 const CARD = 'bg-white border border-border rounded-lg p-5 sm:p-6';
 const CARD_TITLE = 'text-lg font-bold tracking-[-0.01em] text-text';
@@ -322,7 +322,7 @@ export const ResidentAlertSettings = () => {
           <section className={CARD}>
             <h2 className={CARD_TITLE}>Where Alerts Are Sent</h2>
             <p className="text-xs text-text-subtle mt-0.5">
-              You receive fire alerts (Tier 2) on each channel turned on here. Warnings (Tier 1) show on your dashboard.
+              You receive warnings (Tier 1) and fire alerts (Tier 2) by push and Telegram. SMS is sent for fire alerts only.
             </p>
             <ul className="mt-6 flex flex-col divide-y divide-border-warm">
               <ChannelRow
@@ -374,7 +374,7 @@ export const ResidentAlertSettings = () => {
 
               <ChannelRow
                 icon={Send} title="Telegram"
-                detail="Fire alerts sent to your Telegram app through the AgapSense bot."
+                detail="Warnings and fire alerts sent to your Telegram app through the AgapSense bot."
                 status={profile?.telegram_chat_id ? 'Linked' : 'Not linked'}
                 tone={profile?.telegram_chat_id ? 'ok' : 'warn'}
               >

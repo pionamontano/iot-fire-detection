@@ -103,7 +103,7 @@ Set the device's CO and temperature thresholds just above the current readings i
 
 | # | Check | Expected | Pass | Notes |
 |---|---|---|---|---|
-| 6.1 | Tier 1 (one sensor) | Warm only the DS18B20 above its threshold: after 3 consecutive readings (`ALERT_DEBOUNCE_COUNT`) the **yellow** LED lights, a Tier 1 alert appears in the admin page, push and linked Telegram reach **admins only** (no station chat, no responders, no SMS) | [ ] | |
+| 6.1 | Tier 1 (one sensor) | Warm only the DS18B20 above its threshold: after 3 consecutive readings (`ALERT_DEBOUNCE_COUNT`) the **yellow** LED lights and the buzzer gives **3 short beeps**, repeated about every 45 s while it lasts; a Tier 1 alert appears in the admin page and the resident's dashboard, push and linked Telegram reach the **resident and admins** (no station chat, no responders, no SMS) | [ ] | |
 | 6.2 | Debounce | A single spike (1-2 readings) does **not** trigger | [ ] | |
 | 6.3 | Tier 2 (both) | Exceed both thresholds: **red** LED + **buzzer**, Tier 2 alert, **SMS to the owner and the BFP numbers**, station Telegram, linked Telegram chats and push to admins, responders and the resident | [ ] | |
 | 6.4 | SMS content | Owner SMS is the Filipino evacuation text with a Maps link; BFP SMS has device ID, time, readings, Maps link, address. The Maps link survives intact | [ ] | |

@@ -60,6 +60,7 @@
 #include "connectivity.h"
 #include "gsm.h"
 #include "identity.h"
+#include "buzzer.h"
 
 #include <WiFi.h>
 #include <WiFiManager.h>
@@ -104,22 +105,25 @@ static void attemptAlertPost(ConnectivityCtx* ctx, const SensorData& sd, const G
 static void serviceSmsReports(ConnectivityCtx* ctx);
 
 // ── Indicator helpers ──────────────────────────────────────
+// The buzzer pin itself is driven by taskBuzzer (buzzer.h); these only pick its pattern.
 static void indicatorsOff() {
     digitalWrite(LED_YELLOW_PIN, LOW);
     digitalWrite(LED_RED_PIN,    LOW);
-    digitalWrite(BUZZER_PIN,     LOW);
+    buzzerSetMode(agap::BuzzerMode::OFF);
 }
 
+// Tier 1: yellow LED + 3 short beeps, repeated every 45 s while the warning lasts.
 static void setTier1Indicators() {
     digitalWrite(LED_YELLOW_PIN, HIGH);
     digitalWrite(LED_RED_PIN,    LOW);
-    digitalWrite(BUZZER_PIN,     LOW);
+    buzzerSetMode(agap::BuzzerMode::CHIRP);
 }
 
+// Tier 2: red LED + continuous tone.
 static void setTier2Indicators() {
     digitalWrite(LED_YELLOW_PIN, LOW);
     digitalWrite(LED_RED_PIN,    HIGH);
-    digitalWrite(BUZZER_PIN,     HIGH);
+    buzzerSetMode(agap::BuzzerMode::CONTINUOUS);
 }
 
 // Blue LED blink handler — call every task tick when not ONLINE
