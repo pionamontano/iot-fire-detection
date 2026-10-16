@@ -57,6 +57,11 @@ These files create:
 - ✅ Device registration with generated codes (`register_device`) and resident-set, admin-confirmed install locations (`update_own_device_location`, `devices.location_verified`) — `20261102000000_device_registration_location_verification.sql`
 - ✅ Station Information name and email columns (`station_settings.station_name`, `station_settings.email`) used by Responder Settings — `20261103000000_station_settings_name_email.sql` (no-op where they were already added by hand)
 - ✅ Resident contact for an open fire (`get_incident_resident_contact`): BFP responders get the linked resident's name and mobile only while a Tier 2 incident is open — `20261104000000_incident_resident_contact.sql`
+- ✅ Explicit Data API grants for every table, view, sequence and function, so the schema no longer depends on Supabase auto-granting `public` objects (new projects don't, from 2026-10-30) — `20261105000000_explicit_data_api_grants.sql` (GRANT-only; a no-op on a project created before that change)
+- ✅ Settings readable only by approved users, and `check_login_lockout` callable only by the `login` Edge Function — `20261106000000_close_settings_read_and_lockout_check_gaps.sql`
+
+> [!IMPORTANT]
+> A migration that creates a table, view, sequence or function must also `GRANT` it to the roles that need it (`anon`, `authenticated`, `service_role`). New Supabase projects no longer do this automatically, so without the GRANT the object is unreachable through the API. See `20261105000000_explicit_data_api_grants.sql` for the pattern.
 
 > [!NOTE]
 > `20261102000000` continues device codes after the highest existing `AGS-NNN` code. If you later run `supabase/reset_and_seed_devices.sql`, it resets the counter to follow the seeded `AGS-005`.

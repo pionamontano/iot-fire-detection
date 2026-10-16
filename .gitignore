@@ -28,3 +28,6 @@ firmware/agapsense-firmware/src/config.h
 firmware/agapsense-firmware/.pio/
 supabase/.temp/
 supabase/.branches/
+
+# Playwright black-box suite output
+tests/e2e/.artifacts/

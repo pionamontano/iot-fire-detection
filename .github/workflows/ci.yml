@@ -43,6 +43,30 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  e2e:
+    # Black-box suite (tests/e2e) against a throwaway local Supabase stack built from supabase/migrations.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase start -x studio,imgproxy,vector,logflare,supavisor,inbucket
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: e2e-report
+          path: tests/e2e/.artifacts/report
+          retention-days: 14
+
   build:
     runs-on: ubuntu-latest
     steps:

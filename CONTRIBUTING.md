@@ -8,7 +8,7 @@ Thank you for your interest in contributing to the AgapSense project! Your contr
 2. **Clone the Repository:** Clone your fork locally to begin making changes.
 3. **Create a Branch:** Create a feature branch for your work. Use a descriptive name like `feature/new-alert-type` or `fix/login-lockout-bug`.
 4. **Make Changes:** Write your code, update documentation, and ensure everything is working correctly.
-5. **Test Your Changes:** Run the project locally, verify the behavior in your browser, and confirm that edge cases are handled. Follow the live-testing methodologies detailed in the `testing/` directory.
+5. **Test Your Changes:** Run the project locally, verify the behavior in your browser, and confirm that edge cases are handled. Run `npm test` (unit) and, with `supabase start` running, `npm run test:e2e` (the black-box suite in `tests/e2e/`, see its README). Follow the live-testing methodologies detailed in the `testing/` directory.
 6. **Submit a Pull Request (PR):** Open a PR against the main branch of the original repository. Provide a clear and detailed description of the changes you made, why you made them, and how they can be tested.
 
 ## Coding Standards
@@ -29,6 +29,8 @@ Thank you for your interest in contributing to the AgapSense project! Your contr
 ### Database (PostgreSQL)
 - Write clear and documented SQL migrations.
 - Always use Row Level Security (RLS) policies to protect data.
+- `GRANT` every new table, view, sequence and function to the roles that need it (`anon`, `authenticated`, `service_role`); Supabase no longer grants new `public` objects automatically. When revoking a function from clients, revoke it from `PUBLIC` too.
+- When a migration drops a policy, copy its exact name from the migration that created it; `drop policy if exists` silently does nothing on a typo.
 - Ensure functions (RPCs) are secure and use `security definer` only when absolutely necessary, properly checking user roles and permissions within the function body.
 - Name migrations sequentially with a timestamp prefix (e.g., `YYYYMMDDHHMMSS_description.sql`).
 
