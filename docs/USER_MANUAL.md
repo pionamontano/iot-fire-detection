@@ -42,7 +42,7 @@ The device takes readings continuously and reports to the system about every **3
 
 | Level | Trigger | What happens |
 |---|---|---|
-| **Tier 1 — Warning** | **One** sensor (CO *or* temperature) is above its limit | Yellow LED. Push and Telegram to administrators, who check the site. **No SMS**, and BFP is not notified. |
+| **Tier 1 — Warning** | **One** sensor (CO *or* temperature) is above its limit | Yellow LED. Push and Telegram to the resident and to administrators. **No SMS**, and BFP is not notified. The resident can mark it resolved once they have checked the room. |
 | **Tier 2 — Fire Alert** | **Both** sensors are above their limits | Red LED **and buzzer**. Alert to BFP and push notification to the resident. **SMS to the resident and to the BFP station.** |
 
 To avoid false alarms, the device needs **3 readings in a row** above the limit before it raises an alert, and **2 safe readings in a row** before it clears one. A single brief spike will not set it off.
@@ -283,7 +283,7 @@ Every fire alert (Tier 2): when it started, the device, the address, the reading
 
 | Event | Responders receive |
 |---|---|
-| Tier 1 | Nothing. Warnings go to administrators only. |
+| Tier 1 | Nothing. Warnings go to the resident and administrators only. |
 | Tier 2 | Telegram message to the station chat and to your linked Telegram, push notification, plus an **SMS to the station number** assigned to that device with the device ID, time, readings, GPS coordinates, address and a Google Maps link |
 
 Messages include a navigation link of the form `maps.google.com/?q=<latitude>,<longitude>`. If the message says the position is *"estimated — last known"*, GPS had no fresh fix; confirm the address with the resident or the dispatcher.

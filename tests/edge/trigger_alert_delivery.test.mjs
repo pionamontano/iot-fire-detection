@@ -8,7 +8,7 @@ import { setup, TIER1, TIER2, device, profiles } from './delivery_helpers.mjs';
 const withAdminChat = profiles.map((p) => (p.id === 'admin-ok' ? { ...p, telegram_chat_id: 'chat-admin' } : p));
 
 const ELIGIBLE_T2 = ['admin-ok', 'res-ok', 'resp-ok'];
-const ELIGIBLE_T1 = ['admin-ok'];   // Tier 1 warnings go to admins only; BFP responders join at Tier 2
+const ELIGIBLE_T1 = ['admin-ok', 'res-ok'];   // Tier 1 warnings go to admins and the resident; BFP responders join at Tier 2
 const sorted = (a) => [...a].sort();
 
 test('PERSIST FIRST: raise_alert is called before any provider is contacted', async () => {
