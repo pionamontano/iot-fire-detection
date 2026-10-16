@@ -17,7 +17,7 @@ just a resize of the desktop layout.
 > against the real deployed app (`iot-fire-detection.vercel.app`, the
 > actual production build, not `vite dev`) with Playwright (headless
 > Chromium), using disposable test accounts plus real existing production
-> data where safe. See `LIVE_UI_UX_VERIFICATION.md` (same folder) for the
+> data where safe. See `LIVE_TESTING_SUMMARY.md` (detailed `LIVE_UI_UX_VERIFICATION.md` log in git history at `d74dc81`) for the
 > full log, screenshots, and a real UX finding (registration errors use a
 > top-of-form banner, not field-level attachment — exactly the anti-pattern
 > this checklist calls out). **Several items are genuinely untestable from
@@ -40,7 +40,7 @@ just a resize of the desktop layout.
 - [x] **Active route highlighting** — confirmed live across admin (Dashboard highlighted on `/dashboard`), responder (Alert Logs highlighted on `/responder/alerts`), and mobile (Dashboard highlighted in the slide-in menu)
 - [x] **Role isolation** — confirmed live: admin visiting `/home` and `/responder` is redirected to `/dashboard` both times. One transient false alarm during testing (URL briefly showed `/responder` for under 500ms) was investigated and confirmed to be `AuthGuard`'s own loading-spinner state, not a content leak — re-ran 4 times, only ever a bare address-bar flash before the redirect settles, never protected content
 - [ ] **Map page layout exception** — not independently verified (map tile rendering itself couldn't be tested in this sandbox; the surrounding page chrome around the map loaded correctly)
-- [x] Logout clears session state — confirmed as part of the earlier authentication testing pass (`LIVE_AUTH_VERIFICATION.md`); back-button-after-logout also confirmed there
+- [x] Logout clears session state — confirmed as part of the earlier authentication testing pass (`LIVE_TESTING_SUMMARY.md` (detailed `LIVE_AUTH_VERIFICATION.md` log in git history at `d74dc81`)); back-button-after-logout also confirmed there
 
 ## 2. Auth & Registration Flows
 
@@ -49,7 +49,7 @@ just a resize of the desktop layout.
 - [x] **Account lockout** — the UI communicates the lockout state and expected wait (`"Too many attempts. Wait N seconds..."`, submit disabled) — confirmed thoroughly in the earlier auth pass, including all three escalating tiers
 - [x] **Register (Resident)** validates required fields client-side (HTML5 `required`) before submit — confirmed live
 - [ ] **Register (Responder)** — not independently re-tested this pass (Resident form's validation pattern confirmed; Responder form uses the same `register` Edge Function and almost identical structure, but not run directly)
-- [x] **Finding:** registration form errors (e.g. password mismatch) render as a single banner at the top of the form, not attached to the specific field (the `Confirm Password` input itself shows no error state) — this is exactly the anti-pattern this checklist item calls out. See `LIVE_UI_UX_VERIFICATION.md` for the screenshot. Not fixed in this pass — a UX judgment call, not a bug
+- [x] **Finding:** registration form errors (e.g. password mismatch) render as a single banner at the top of the form, not attached to the specific field (the `Confirm Password` input itself shows no error state) — this is exactly the anti-pattern this checklist item calls out. See `LIVE_TESTING_SUMMARY.md` (detailed `LIVE_UI_UX_VERIFICATION.md` log in git history at `d74dc81`) for the screenshot. Not fixed in this pass — a UX judgment call, not a bug
 - [x] Password fields have visible show/hide toggles and correct `type="password"` masking — confirmed in the earlier auth pass
 - [x] **PendingApproval** page clearly explains the account is awaiting approval (`"Account Pending... You will be able to access the system once approved."`) — confirmed live, and confirms the earlier pending/rejected infinite-spinner bug fix is holding up correctly in this fresh test round too
 - [ ] **SessionExpired** page — confirmed to render correctly after an idle timeout in the earlier auth pass; not re-verified specifically for a mid-session JWT expiry (a different trigger than idle timeout)

@@ -9,8 +9,7 @@ types, and query correctness, independent of who is asking.
 > against the real Supabase project (`fnfgakcmdosxsthvekwj`) across three
 > rounds — anonymous, authenticated as a real admin, and via disposable
 > resident test accounts created and deleted through the app's own
-> registration/approval flow. See `LIVE_DATABASE_VERIFICATION.md` (same
-> folder) for the full log of every request/response. Two critical bugs
+> registration/approval flow. See `LIVE_TESTING_SUMMARY.md` (detailed `LIVE_DATABASE_VERIFICATION.md` log in git history at `d74dc81`) for the full log of every request/response. Two critical bugs
 > were found and fixed along the way (PRs #22 and #24), and one
 > data-integrity gap (#20 below) was fixed in PR #26 and confirmed live.
 > Everything still unchecked needs the service-role key specifically —
@@ -81,5 +80,5 @@ types, and query correctness, independent of who is asking.
 - [x] A resident cannot see another resident's/another device's data by tampering with a request parameter — confirmed live: querying a real device (`DEV-001`) the test resident didn't own returned `200 []`
 - [ ] `ResponderDevices` device lookup by `device_id` returns the correct single device (`maybeSingle()`), and a not-found id returns `null` cleanly — not tested (no responder test account created)
 - [ ] `useIdleTimeout`'s settings lookup returns the timeout for the *current user's role*, not a stale or wrong-role value after a role changes mid-session — not tested (requires driving the actual app UI, not just raw REST calls)
-- [ ] Admin-facing list views (`Users.tsx`, `Devices.tsx`, `Alerts.tsx`, `Logs.tsx`) are not accidentally under-scoped — not tested
+- [ ] Admin-facing list views (`Users.tsx`, `Devices.tsx`, `DeviceStatus.tsx`, `Logs.tsx`) are not accidentally under-scoped — not tested
 - [ ] Pagination/limit clauses don't allow a large offset/page-forward request to leak rows belonging to a different device — not tested

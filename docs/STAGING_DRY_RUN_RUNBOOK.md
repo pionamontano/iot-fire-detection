@@ -5,6 +5,13 @@ they behave as the local tests say, **before** anything is applied to the real `
 Written for Steps 1, 5.1 and 6.1 (`20261019000000`, `20261020000000`, `20261020000100`, `20261021000000`).
 Nothing in this runbook touches production except the **read-only** checks in Phase 0.
 
+> **Scope note (2026-10-16).** This runbook and `supabase/staging/` cover only the four migrations above. 19 more
+> migrations have been added since (`20261022000000` … `20261107000000`, including `get_auth_role()` now requiring an approved,
+> active profile in `20261031000000` and the explicit grants in `20261105000000`); the staging SQL does not include them. Before
+> using this for a production rollout, decide which later migrations production already has (Phase 0.1) and extend the
+> rehearsal to the rest. The decision-gate assumption below that the live `get_auth_role` ignores `profiles.status` describes
+> production as it was then; the repository no longer does.
+
 ## Hard rules
 1. **Never run `supabase link`, `db push`, `db pull`, `migration repair` or `functions deploy` against the production project.**
    Production already fails the Supabase preview check with "Remote migration versions not found in local migrations directory":
@@ -13,7 +20,7 @@ Nothing in this runbook touches production except the **read-only** checks in Ph
    until the whole procedure, a human review and the production plan are done.
 3. **Synthetic data only.** Do not copy production rows (profiles contain names, phones, addresses, Telegram ids).
    Schema only.
-4. **No real notifications.** Do not set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `RESEND_API_KEY`, `VAPID_*` on the staging
+4. **No real notifications.** Do not set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `VAPID_*` (or `APP_URL`) on the staging
    project. Without them the providers are skipped. Use only fake phone numbers and no real device.
 5. Record every result in the table in section 9. A step is only "passed" if you ran it and saw the expected output.
 

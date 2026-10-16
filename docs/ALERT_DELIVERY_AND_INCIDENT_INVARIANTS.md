@@ -5,9 +5,17 @@ Status: **design + local/test implementation (Steps 5.1, 5.2, 6.1 and 6.2).** No
 `20261021000000_incident_lifecycle.sql` have only been exercised on a throwaway local PostgreSQL (`supabase/tests/local/`).
 The edge-function changes (Step 5.2) and the UI (6.2) have only been tested locally; nothing is deployed.
 
+> **Status update (2026-10-16, `main` at `d74dc81`).** This document records the design as written for Steps 5.1–6.2; its
+> body is kept as written. Since then: per-user Telegram (Step 5.4, #95) is implemented as ledger channel `telegram_user`;
+> auto-resolution follows owner decision D6.1 (two consecutive safe readings, only incidents still `active`; row 3 of the
+> writer audit below no longer closes acknowledged/responding incidents); the direct-`UPDATE` revoke (6c, #97) is in
+> `20261022000000`. All `supabase/tests/local/` suites and `tests/edge/run_integration.sh` pass on a fresh local database.
+> Which of these migrations reached production is not recorded in the repository. Current issue status:
+> [`system-specification.md`](system-specification.md) §5.15.
+
 ## 1. Delivery semantics: at-least-once, not exactly-once
 
-Notifications (Telegram, Web Push, and in future per-user Telegram) are designed for **at-least-once delivery**.
+Notifications (Telegram, Web Push, and per-user Telegram) are designed for **at-least-once delivery**.
 A recipient can, in rare failure cases, receive the same alert twice. A fire alert that arrives twice is acceptable;
 one that is silently lost is not.
 
@@ -65,7 +73,7 @@ hidden** (the responder dashboard filters out `incident_status = 'resolved'`).
 | 6 | Responder `handleUpdateStatus` (`responding`) | responder | `incident_status` | n/a | Compatible. |
 | 7 | Responder `handleUpdateStatus` (`resolved`, `false_alarm`) | responder | `incident_status` **only** | **No: defect** | The row stays open to the index. **Confirmed by test.** Mitigated by the stopgap below. **Fixed at write time by the 6.1 guard trigger** (section 3); the UI itself is changed in 6.2. |
 | 8 | `confirm-sms-status` | service | `sms_sent_owner/bfp` | n/a | Compatible; `raise_alert` preserves these flags. |
-| 9 | `supabase/reset_and_seed_devices.sql` (manual) | superuser | deletes rows | n/a | Unaffected. |
+| 9 | `supabase/maintenance/reset_and_seed_devices.sql` (manual) | superuser | deletes rows | n/a | Unaffected. |
 | 10 | Any manual SQL / future code | any | any | not guaranteed | Needs the Step 6 database guard (trigger + `CHECK`). |
 
 ### How `raise_alert()` protects itself until Step 6
@@ -116,7 +124,7 @@ The responder dashboard and the admin manual-resolve button now change incidents
 * **Deploy order matters:** migration `20261021000000` must be applied **before** this UI. If the UI runs first, incident actions fail with a clear
   "database update pending" message (PostgREST `PGRST202`) and responders cannot acknowledge from the dashboard. There is deliberately no
   direct-write fallback (a second write path is exactly what Step 6 removes). Direct `UPDATE` remains granted until step 6c (`20261022000000`,
-  written but not yet deployed - see CHANGELOG §8a) is applied, so older clients keep working until then.
+  written but not yet deployed - see spec Appendix B) is applied, so older clients keep working until then.
 * Not in 6.2: the "device readings back to normal" badge (needs `device_cleared_at`, decision D6.1), revoking direct `UPDATE` (6c), and the
   other responder/admin screens, which read `resolved_at` and need no change.
 

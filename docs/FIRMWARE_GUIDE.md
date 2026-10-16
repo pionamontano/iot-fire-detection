@@ -40,15 +40,22 @@ radio on the ESP32 and cannot be used while Wi-Fi is active.
 
 ```
 firmware/agapsense-firmware/
-├── platformio.ini        PlatformIO env, board, libraries, build flags
+├── platformio.ini          PlatformIO envs (see 7), board, libraries, build flags
+├── host_tests/             Logic tests that run on a PC with g++ (see its README)
 └── src/
-    ├── config.example.h  Template — copy to config.h and fill in secrets
-    ├── main.cpp           setup()/loop(), FreeRTOS task creation
-    ├── sensors.h/.cpp      MQ-7 heat/measure cycle + DS18B20 reads
+    ├── config.example.h    Template — copy to config.h and fill in secrets; firmware version history
+    ├── main.cpp            setup()/loop(), FreeRTOS task creation
+    ├── sensors.h/.cpp      MQ-7 (duty-cycle or constant-5V variant, see 4.1) + DS18B20 reads
     ├── gps.h/.cpp          NEO-6M parsing via TinyGPS++
-    ├── connectivity.h/.cpp Wi-Fi, HTTPS to Supabase, alert FSM, LEDs, setup portal
+    ├── connectivity.h/.cpp Wi-Fi, HTTPS to Supabase, alert FSM, LEDs, setup portal, OTA
     ├── identity.h/.cpp     Per-node device ID + API key in NVS (set via the setup portal)
-    └── gsm.h/.cpp          SIM800L AT commands, async SMS queue
+    ├── gsm.h/.cpp          SIM800L AT commands, async SMS queue
+    ├── alert_retry.h       Retry/backoff policy for the alert POST (host-tested)
+    ├── sms_result_hold.h   Late-binding of SMS results to the right incident (host-tested)
+    ├── diag_log.h/.cpp     Log ring buffer, only in the diag build (ENABLE_DIAG_SERVER)
+    ├── diag_server.h/.cpp  /log web viewer + ArduinoOTA, only in the diag build
+    ├── test_components.cpp Separate bench-test sketch (env:test_components), not linked into the firmware
+    └── config_test_secrets.example.h  Template for the bench sketch's secrets
 ```
 
 `config.h` is **not** committed (see `.gitignore`) because it holds the Supabase
@@ -79,8 +86,9 @@ Then edit `config.h`:
 
 ## 3. Firmware Architecture (FreeRTOS)
 
-`main.cpp` creates five pinned FreeRTOS tasks instead of using the Arduino
-`loop()` — `loop()` just idles. Each task is watchdog-registered
+`main.cpp` creates five pinned FreeRTOS tasks for the real work. The Arduino
+`loop()` only watches Wi-Fi: after 30 s disconnected it opens the setup portal
+again (180 s timeout, then a restart). Each task is watchdog-registered
 (`esp_task_wdt`) with a 30 s timeout.
 
 | Task | Core | Priority | Period | Responsibility |
@@ -105,13 +113,28 @@ On boot, `setup()`:
 3. Runs a boot blink sequence (Yellow → Red → Blue → buzzer beep) to visually
    confirm all four indicators are wired correctly.
 4. Creates the mutexes and five tasks, then unsubscribes from the WDT (each
-   task self-registers instead).
+   task self-registers instead). The diag build (`ENABLE_DIAG_SERVER`) also
+   starts the `/log` web server first.
 
 ---
 
 ## 4. Sensor Logic
 
-### 4.1 MQ-7 (CO) — Heat/Measure Cycle
+### 4.1 MQ-7 (CO)
+
+There are two builds of the MQ-7 code, chosen by the PlatformIO environment (see 7):
+
+| Build | Env | Heater | Reads | `sensor_ready` after |
+|---|---|---|---|---|
+| **Constant 5V** (`MQ7_CONTINUOUS_5V`) | `esp32dev_mq7_5v` (v2.2.0) | Sensor on a fixed 5 V rail; `MQ7_HEATER_PIN` is not wired to it | Every 5 s, always "measuring", converted with Vc = 5 V | 60 s warm-up |
+| **Duty cycle** (default) | `esp32dev` | PWM through a transistor, 60 s at 5 V / 90 s at 1.4 V | Only during the 90 s measuring phase | First full cycle, ~150 s |
+
+According to `platformio.ini`, every deployed node so far is wired for the **constant-5V** build;
+the duty-cycle build is kept as the default/fallback. Flash the build that matches the wiring:
+the conversion formula assumes the matching supply voltage, so the wrong build gives wrong ppm.
+The rest of this section describes the duty-cycle build.
+
+#### Duty-cycle build: heat/measure cycle
 
 The MQ-7 datasheet requires alternating heater voltages to get a stable
 reading, so `mq7Update()` runs a two-phase state machine:
@@ -138,7 +161,7 @@ clean air, let it complete a few heat/measure cycles, measure the resulting
 Rs, and set `R0 = Rs`. Re-flash to apply.
 
 `sensor_ready` (in `SensorData`) only flips `true` after the **first
-complete** heat+measure cycle (~150 s after boot). The alert FSM in
+complete** heat+measure cycle (~150 s after boot; 60 s in the constant-5V build). The alert FSM in
 `connectivity.cpp` is fully suppressed until then, so a cold, unstable sensor
 can never fire a false alert on boot.
 
@@ -203,8 +226,8 @@ so thresholds can be retuned from the admin dashboard without reflashing.
 | Tier | Condition | Indicators | Backend / SMS |
 |---|---|---|---|
 | **CLEAR** | Neither sensor over threshold | All off | — |
-| **TIER 1** | Exactly one sensor over threshold | Yellow LED | `trigger-alert` POST (tier=1) only — backend sends a Telegram warning, **no SMS** |
-| **TIER 2** | Both sensors over threshold simultaneously | Red LED + buzzer | `trigger-alert` POST (tier=2) + owner SMS + BFP SMS — backend sends Telegram alert |
+| **TIER 1** | Exactly one sensor over threshold | Yellow LED | `trigger-alert` POST (tier=1) only — backend notifies **admins** (push + their linked Telegram), **no SMS** |
+| **TIER 2** | Both sensors over threshold simultaneously | Red LED + buzzer | `trigger-alert` POST (tier=2) + owner SMS + BFP SMS — backend sends the station Telegram, linked Telegram chats and push |
 
 State transitions are debounced to avoid flapping on noisy readings:
 - **Rising** into TIER1/TIER2 requires `ALERT_DEBOUNCE_COUNT` (3) consecutive
@@ -233,17 +256,20 @@ The `alert_event_id` returned by `trigger-alert` is threaded through to the
 queued SMS jobs and back to `confirm-sms-status`, so a delivery result always
 updates the exact incident row — never a guess based on recency.
 
-Telemetry is posted unconditionally every 30 s (not gated on MQ-7 phase); the
-payload's `mq7_phase` field tells the backend whether the reading is a
-"measuring" sample or a "heating" placeholder, so it can decide whether to run
-alert evaluation server-side too.
+Telemetry is posted unconditionally every 30 s (not gated on MQ-7 phase). The
+payload carries `mq7_phase`, `battery_mv` and `rssi`, but `ingest-reading` does
+not store them; it keeps CO, temperature, coordinates, `gps_valid`,
+`on_battery`, `sensor_ready` and the reported firmware version.
 
 ---
 
 ## 6. GSM / SMS Fallback (SIM800L)
 
-SMS exists as a fallback channel for Tier 2 alerts (Telegram is the primary
-channel and is sent server-side by `trigger-alert`, never from firmware).
+SMS is a second, **parallel** channel for Tier 2 alerts: the two SMS are queued as
+soon as the node enters Tier 2, whether or not Wi-Fi is up. It is not a fallback
+that waits for Wi-Fi to fail. Telegram and push are sent server-side by
+`trigger-alert`, never from firmware. An SMS with no number configured (e.g. the
+admin cleared the BFP contact) is skipped.
 
 - `gsmInit()` auto-bauds against the module, disables AT echo, sets text-mode
   SMS (`AT+CMGF=1`), and waits up to 30 s for network registration
@@ -267,26 +293,39 @@ channel and is sent server-side by `trigger-alert`, never from firmware).
 
 ## 7. Build & Flash (PlatformIO)
 
-**Target:** ESP32 DevKit V1 (`espressif32` platform, `esp32dev` board,
-Arduino framework). Build config lives in `platformio.ini`.
+**Target:** ESP32 DevKit V1 (`espressif32 @ ~6.9.0` platform, `esp32dev` board,
+Arduino framework). Build config lives in `platformio.ini`, which defines several
+environments:
+
+| Env | What it builds | `FIRMWARE_VERSION` from |
+|---|---|---|
+| `esp32dev` | Production firmware, duty-cycle MQ-7 | `config.h` |
+| `esp32dev_mq7_5v` | Production firmware, constant-5V MQ-7 (current hardware) | `platformio.ini` (`2.2.0`) |
+| `esp32dev_mq7_5v_diag` | As above plus an unauthenticated `/log` web viewer and ArduinoOTA. Bench debugging only | `platformio.ini` (`2.2.0-diag`) |
+| `*_ota` variants | Same build, flashed over Wi-Fi with `espota` (`--upload-port <device-ip>`) | as their base env |
+| `test_components` (+ `_ota`) | Separate bench-test sketch; needs `src/config_test_secrets.h` | — |
+
+There is no `default_envs`, so **always pass `-e`**: a bare `pio run` builds every
+environment, and `test_components` fails without its secrets file.
 
 ```bash
 # From firmware/agapsense-firmware/
 cp src/config.example.h src/config.h   # then fill in real values
 
-pio run                 # build
-pio run -t upload       # flash (uses upload_port/upload_speed from platformio.ini)
-pio device monitor      # serial monitor at 115200 baud
+pio run -e esp32dev_mq7_5v                # build
+pio run -e esp32dev_mq7_5v -t upload      # flash over USB
+pio device monitor                        # serial monitor at 115200 baud
 ```
 
-- `upload_port` defaults to `/dev/ttyUSB0` — change it to your OS's port
-  (e.g. `COM3` on Windows, `/dev/cu.usbserial-XXXX` on macOS) in
-  `platformio.ini`, or override on the command line:
-  `pio run -t upload --upload-port COM3`.
+- `upload_port` is set to `COM4` in `platformio.ini` — change it to your port
+  (e.g. `COM3` on Windows, `/dev/ttyUSB0` on Linux, `/dev/cu.usbserial-XXXX` on macOS)
+  or override on the command line: `--upload-port COM3`.
 - To see `[MAIN]`/`[SENSOR]`/`[CONN]`/`[GPS]`/`[GSM]` debug logs over serial,
   uncomment `-DDEBUG_MODE=1` in `platformio.ini`'s `build_flags` and reflash.
   Leave it at `0` (default) for production — it disables all logging calls at compile time.
-  Logs go to the USB serial port only (115200 baud).
+  Logs go to the USB serial port (115200 baud). For logs without a cable, use the
+  `esp32dev_mq7_5v_diag` build and open `http://<device-ip>/log`; switch back to a
+  production build when done.
 - Library dependencies (`OneWire`, `DallasTemperature`, `TinyGPSPlus`,
   `WiFiManager`, `ArduinoJson`) are pinned in `lib_deps` and fetched
   automatically by PlatformIO on first build.
@@ -304,8 +343,8 @@ pio device monitor      # serial monitor at 115200 baud
    (copy them from the admin Devices page). The node reboots once after saving.
 3. Once connected, the blue LED goes solid (ONLINE) and the device fetches
    its remote config (thresholds + SMS numbers) from Supabase.
-4. Allow ~150 s for the MQ-7's first full heat/measure cycle before expecting
-   alert evaluation — `sensor_ready` gates it.
+4. Allow the MQ-7 warm-up (60 s on the constant-5V build, ~150 s on the duty-cycle build)
+   before expecting alert evaluation — `sensor_ready` gates it.
 5. Watch the admin Devices page (or serial monitor with `DEBUG_MODE=1`) to
    confirm telemetry is arriving every 30 s.
 
@@ -336,12 +375,13 @@ OTA is Wi-Fi only; it is never attempted over the SIM800L.
 
 ### 8.2 Releasing an update
 
-1. **Bump the version** in `src/config.h`, e.g. `#define FIRMWARE_VERSION "2.1.1"`.
-   The node updates only when this differs from the target version, so every release
-   needs a new string.
-2. **Build:** `pio run`. The file to publish is `.pio/build/esp32dev/firmware.bin`
-   (not `bootloader.bin` or `partitions.bin`).
-3. **Checksum:** `md5sum .pio/build/esp32dev/firmware.bin` (32 hex characters).
+1. **Bump the version** where your env takes it from (see the table in 7): `src/config.h`
+   for `esp32dev`, the `-D FIRMWARE_VERSION` build flag in `platformio.ini` for the
+   `esp32dev_mq7_5v*` envs. The node updates only when this differs from the target
+   version, so every release needs a new string.
+2. **Build the env that matches the nodes' wiring:** `pio run -e <env>`. The file to publish is
+   `.pio/build/<env>/firmware.bin` (not `bootloader.bin` or `partitions.bin`).
+3. **Checksum:** `md5sum .pio/build/<env>/firmware.bin` (32 hex characters).
 4. **Upload** `firmware.bin` to a Supabase Storage bucket and copy its public (or signed)
    `https://<project-ref>.supabase.co/storage/v1/...` URL.
 5. **Publish in the admin Devices page:**
@@ -355,12 +395,24 @@ To opt a device out of OTA, leave its `firmware_version` and `firmware_url` empt
 ### 8.2a Automated build and upload (GitHub Actions)
 
 `.github/workflows/firmware-release.yml` performs steps 1-4 above. Push a tag such as
-`firmware-v2.1.1` (or run the workflow manually and enter `2.1.1`). It runs the host tests,
-generates `config.h` from `config.example.h` with the tag's version, builds with PlatformIO,
-uploads `agapsense-<version>.bin` to Supabase Storage, checks that the public URL serves
-identical bytes, and prints the version, URL and MD5 in the run summary. It never overwrites an
-existing object and never rolls anything out; you still add the release and push it from the
-admin Devices page.
+`firmware-v2.2.1`, or run the workflow manually and enter `2.2.1`. It:
+
+1. builds **one** env: `esp32dev_mq7_5v` (the constant-5V wiring of every deployed node) for a
+   tag, or the env you pick on a manual run (`esp32dev_mq7_5v` or `esp32dev`);
+2. runs the host tests;
+3. generates `config.h` from `config.example.h` with the tag's version, and also writes that
+   version into the env's `-D FIRMWARE_VERSION` flag in its own checkout of `platformio.ini`
+   (the 5V envs set the version there, which overrides `config.h`);
+4. builds with `pio run -e <env>` and fails if the image does not contain the version string;
+5. uploads `agapsense-<version>-<env>.bin` to Supabase Storage, checks that the public URL
+   serves identical bytes, and prints the version, env, URL and MD5 in the run summary.
+
+It never overwrites an existing object and never rolls anything out; you still add the release
+and push it from the admin Devices page. Only target nodes whose wiring matches the env shown
+in the summary.
+
+The committed `platformio.ini` is not changed by a release; bump its version by hand if you
+also build locally.
 
 One-time setup:
 - Create a **public** Storage bucket named `firmware` (or set the repo variable `FIRMWARE_BUCKET`).

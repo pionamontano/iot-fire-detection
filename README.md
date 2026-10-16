@@ -1,106 +1,81 @@
-# AgapSense System
+# AgapSense
 
-Welcome to the AgapSense System! This document serves as a comprehensive guide to the project's architecture, codebase, and features. It is specifically designed to help explain the system during panel presentations and code reviews.
+AgapSense is an IoT-based fire detection and location tracking system. ESP32 sensor nodes watch CO and
+temperature in a building; when readings cross a threshold the node sounds a local alarm and reports to a
+Supabase backend, which notifies the resident and the Bureau of Fire Protection (BFP) by Telegram, browser
+push and SMS. A role-based web dashboard lets residents, BFP responders and administrators follow devices
+and incidents in real time.
 
-## Project Overview
-AgapSense is a comprehensive, role-based fire alert and monitoring system designed to bridge the gap between residents, local authorities (BFP - Bureau of Fire Protection), and system administrators. The platform provides real-time monitoring, alert management, and device tracking to ensure swift responses to fire incidents.
+## Repository layout
 
-## Technology Stack
-- Frontend Framework: React 19 with TypeScript
-- Build Tool: Vite
-- Styling: TailwindCSS v4
-- Routing: React Router v7
-- Mapping & Location: Leaflet & React-Leaflet
-- Icons: Lucide React
-- Backend & Database: Supabase (PostgreSQL, Authentication, Row Level Security)
+| Path | What it holds |
+|---|---|
+| [`src/`](src) | React + TypeScript web app (Vite, Tailwind CSS v4, React Router v7, Leaflet) |
+| [`public/`](public) | Static assets and the Web Push service worker (`sw.js`) |
+| [`supabase/migrations/`](supabase/migrations) | PostgreSQL schema, RLS policies, grants and RPCs, applied in timestamp order |
+| [`supabase/functions/`](supabase/functions) | Deno Edge Functions (login, registration, device ingest, alerts, notifications, support requests) |
+| [`supabase/tests/local/`](supabase/tests/local) | SQL tests run against a throwaway local PostgreSQL built from the migrations |
+| [`supabase/staging/`](supabase/staging), [`supabase/maintenance/`](supabase/maintenance) | Staging dry-run scripts and one-off maintenance / backfill SQL |
+| [`firmware/agapsense-firmware/`](firmware/agapsense-firmware) | ESP32 firmware (PlatformIO) and its host-side logic tests |
+| [`tests/`](tests) | Unit tests (`*.test.ts`), Edge Function tests (`edge/`) and the Playwright black-box suite (`e2e/`) |
+| [`testing/`](testing) | Manual QA checklists, live verification reports and a Postman hardware-simulation collection |
+| [`docs/`](docs) | Project documentation — start with the [documentation index](docs/README.md) |
 
----
+## Roles and pages
 
-## System Architecture & Role-Based Access Control (RBAC)
-The system is built on a robust RBAC model to ensure users only see and interact with data relevant to their role. 
+Authority lives in the database (RLS, grants, RPCs) and Edge Functions; `AuthGuard` route protection in the
+SPA is a UI convenience. Routes are defined in [`src/App.tsx`](src/App.tsx).
 
-The application relies on a centralized `AuthContext` to manage user sessions and an `AuthGuard` component to secure routes based on user roles.
+| Role | Routes | Pages (`src/pages/`) |
+|---|---|---|
+| Admin (`admin`) | `/dashboard`, `/admin/*` | `admin/Dashboard`, `InteractiveMap` (Live Map), `Devices`, `Users`, `DeviceStatus`, `Logs` (System Log), `SupportRequests`, `Settings` |
+| BFP Responder (`bfp_responder`) | `/responder/*` | `responder/ResponderDashboard`, `ResponderAlertLogs`, `ResponderSettings` |
+| Resident (`resident`) | `/setup`, `/home/*`, `/account` | `resident/ResidentSetup`, `ResidentHome`, `ResidentAlerts`, `ResidentAlertSettings`, `ResidentDeviceInfo`, `ResidentAccount` |
+| Public | `/login`, `/register/*`, `/forgot-password`, … | `auth/*`, `common/NotFound` |
 
-### The 3 Main Roles:
-1. Admin (`admin`): Has full oversight of the system, including user management, all devices, and global logs.
-2. BFP Responder (`bfp_responder`): Focuses on active alerts, team coordination, and dispatching.
-3. Resident (`resident`): Focuses on managing their home devices, personal alert settings, and viewing local logs.
+Shared pieces: `src/contexts/AuthContext.tsx` (session and profile), `src/components/` (role layouts, tables,
+maps, badges), `src/lib/` (Supabase client and domain helpers), `src/hooks/`.
 
----
+See [`docs/FEATURES.md`](docs/FEATURES.md) for what each feature and Edge Function does.
 
-## Code Structure & Core Components
+## Running locally
 
-### 1. Routing & Security (`src/App.tsx` & `src/components/AuthGuard.tsx`)
-- `App.tsx`: Acts as the central router for the application. It defines public routes (like `/login`) and secure routes grouped by roles.
-- `AuthGuard.tsx`: A Higher-Order Component (HOC) that wraps protected routes. It checks the user's current session and role. If a user tries to access an unauthorized route, they are redirected appropriately.
+Requires Node.js 20.19+ or 22.12+ (Vite 8; CI uses 22).
 
-### 2. State Management (`src/contexts/AuthContext.tsx`)
-- Handles the connection to Supabase Auth.
-- Exposes user data and roles to the rest of the application so the UI can adapt dynamically.
+```bash
+npm install
+cp .env.example .env   # then fill in your Supabase keys
+npm run dev            # http://localhost:5173
+```
 
-### 3. Layouts
-To keep the code DRY (Don't Repeat Yourself), each role has a dedicated layout component (`src/components/AdminLayout.tsx`, `src/components/ResponderLayout.tsx`, `src/components/ResidentLayout.tsx`). These layouts contain the navigation sidebars or headers specific to that role, wrapping the page content (`Outlet`).
+`.env`:
 
----
+```env
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key
+# optional, for browser push notifications
+VITE_VAPID_PUBLIC_KEY=your_vapid_public_key
+```
 
-## Features by User Role (The "Pages")
+To stand up a new Supabase project (schema, first admin, Edge Function secrets, deployment) follow
+[`docs/MIGRATION_GUIDE.md`](docs/MIGRATION_GUIDE.md). For the firmware, see
+[`docs/FIRMWARE_GUIDE.md`](docs/FIRMWARE_GUIDE.md).
 
-### Admin Module
-The Admin routes are mounted under `/admin` or `/dashboard`.
-- Dashboard (`Dashboard.tsx`): The high-level overview of system health, total alerts, and active devices.
-- Live Map (`InteractiveMap.tsx`): A real-time geographical view (using Leaflet) showing device locations and active fire hotspots.
-- Devices (`Devices.tsx`): CRUD operations for hardware sensors connected to the system.
-- Users (`Users.tsx`): Allows the admin to approve, reject, or manage BFP Responders and Residents.
-- Device Status (`DeviceStatus.tsx`): Live status of every device, with filters, enable/disable and manual alert resolve.
-- System Log (`Logs.tsx`): A chronological record of alerts, logins and device registrations, with CSV export.
+## Checks and tests
 
-### BFP Responder Module
-The Responder routes are mounted under `/responder`.
-- Responder Dashboard (`ResponderDashboard.tsx`): Tailored for emergency response, highlighting immediate action items and active alarms.
-- Alert Logs (`ResponderAlertLogs.tsx`): Detailed view of incident reports, allowing responders to track the status of fires (e.g., dispatching, resolved).
-- Team Management (`ResponderTeam.tsx`): View active personnel on duty or available for dispatch.
-- Device Status (`ResponderDevices.tsx`): Checking the operational status of fire nodes/sensors in the field.
+| Command | What it runs |
+|---|---|
+| `npm run typecheck` | `tsc -b` over the app, Vite config and e2e suite |
+| `npm run lint` | `oxlint` |
+| `npm test` | Unit and Edge Function tests (`node --test`) |
+| `npm run build` | Production build |
+| `npm run test:e2e` | Playwright black-box suite against a local `supabase start` stack — see [`tests/e2e/README.md`](tests/e2e/README.md) |
+| `supabase/tests/local/run_local_db_tests.sh <db> <test.sql>…` | Database tests on a throwaway local PostgreSQL |
+| `firmware/agapsense-firmware/host_tests/run.sh` | Firmware logic tests with `g++` — see its [README](firmware/agapsense-firmware/host_tests/README.md) |
 
-### Resident Module
-The Resident routes are mounted under `/home` or `/account`.
-- Setup (`ResidentSetup.tsx`): Initial onboarding flow for new users to register their location and devices.
-- Resident Home (`ResidentHome.tsx`): The primary view showing the status of their specific home and devices.
-- Alert History (`ResidentAlerts.tsx`): The resident's alerts, filtered by date range, tier and active/resolved, with notifications sent.
-- Alert Settings (`ResidentAlertSettings.tsx`): Configuration for how they receive notifications (e.g., SMS, push notifications).
-- Device Information (`ResidentDeviceInfo.tsx`): Localized monitoring of their own hardware sensors.
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs typecheck, lint, unit tests, the e2e suite and
+the build on every pull request.
 
----
+## Contributing
 
-## Backend Integration (Supabase)
-- `src/lib/supabase.ts`: Initializes the Supabase client using environment variables (`.env`).
-- Authentication: Email/Password login flows are handled directly through Supabase Auth.
-- Database (PostgreSQL): The frontend interacts with Supabase tables via the Javascript client. Security is enforced at the database level using Row Level Security (RLS), ensuring a Resident cannot fetch another Resident's data, even if they manipulate the frontend code.
-
----
-
-## Documentation
-
-Detailed documentation has been moved to the `docs/` folder:
-- [Features & Edge Functions](docs/FEATURES.md)
-- [Firmware Guide](docs/FIRMWARE_GUIDE.md)
-- [Migration & Setup Guide](docs/MIGRATION_GUIDE.md)
-
----
-
-## How to Run Locally for Demonstration
-
-1. Install Dependencies:
-   ```bash
-   npm install
-   ```
-2. Set Environment Variables:
-   Ensure your `.env` file contains your Supabase credentials:
-   ```env
-   VITE_SUPABASE_URL=your_project_url
-   VITE_SUPABASE_ANON_KEY=your_anon_key
-   ```
-3. Start the Development Server:
-   ```bash
-   npm run dev
-   ```
-4. View Application: Open `http://localhost:5173` in your browser.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md).

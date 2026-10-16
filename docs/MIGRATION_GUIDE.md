@@ -8,9 +8,9 @@ A step-by-step guide to set up this project on a **brand-new Supabase project** 
 
 | Tool | Version | Install |
 |---|---|---|
-| **Node.js** | 18+ | [nodejs.org](https://nodejs.org) |
+| **Node.js** | 20.19+ or 22.12+ (Vite 8 requirement; CI uses 22) | [nodejs.org](https://nodejs.org) |
 | **npm** | 9+ | Comes with Node.js |
-| **Supabase CLI** | Latest | `npm install -g supabase` |
+| **Supabase CLI** | Latest | `npx supabase …`, or Homebrew / Scoop (a global `npm install -g` is not supported) |
 | **Git** | Latest | [git-scm.com](https://git-scm.com) |
 
 ---
@@ -26,7 +26,7 @@ A step-by-step guide to set up this project on a **brand-new Supabase project** 
 | **Project URL** | `Settings → API → Project URL` | `.env` (line 1) |
 | **Anon / Public Key** | `Settings → API → Project API Keys → anon public` | `.env` (line 2) |
 | **Service Role Key** | `Settings → API → Project API Keys → service_role secret` | Supabase Edge Function secrets |
-| **Database Password** | The password you set when creating the project | Only needed if using `migrate.cjs` |
+| **Database Password** | The password you set when creating the project | `supabase link` / `supabase db push` (Step 2, Method A) |
 
 ---
 
@@ -48,11 +48,11 @@ supabase db push
 5. Click **Run** (or press `Ctrl+Enter`) for each one in order.
 
 These files create:
-- ✅ All 8 tables (`devices`, `profiles`, `sensor_readings`, `alert_events`, `login_attempts`, `settings`, `station_settings`, `registration_requests`)
+- ✅ All tables — the 8 core tables from `init.sql` (`devices`, `profiles`, `sensor_readings`, `alert_events`, `login_attempts`, `settings`, `station_settings`, `registration_requests`) plus those added later (e.g. `push_subscriptions`, `support_requests`, `firmware_releases`, the alert notification ledger)
 - ✅ All functions (`get_auth_role`, `protect_profile_fields`, etc.)
 - ✅ All triggers (self-promotion protection)
 - ✅ All RLS policies
-- ✅ Default data (settings + station info)
+- ✅ Default station info (`station_settings`). Session timeouts need no rows: the app applies 15 / 15 / 60 min (admin / responder / resident) until an admin saves other values in **Settings**
 - ✅ Fixes, enhancements, and new fields (like `telegram_chat_id` and `local_ip`)
 - ✅ Device registration with generated codes (`register_device`) and resident-set, admin-confirmed install locations (`update_own_device_location`, `devices.location_verified`) — `20261102000000_device_registration_location_verification.sql`
 - ✅ Station Information name and email columns (`station_settings.station_name`, `station_settings.email`) used by Responder Settings — `20261103000000_station_settings_name_email.sql` (no-op where they were already added by hand)
@@ -60,18 +60,19 @@ These files create:
 - ✅ Explicit Data API grants for every table, view, sequence and function, so the schema no longer depends on Supabase auto-granting `public` objects (new projects don't, from 2026-10-30) — `20261105000000_explicit_data_api_grants.sql` (GRANT-only; a no-op on a project created before that change)
 - ✅ Settings readable only by approved users, and `check_login_lockout` callable only by the `login` Edge Function — `20261106000000_close_settings_read_and_lockout_check_gaps.sql`
 - ✅ Removes grants on `devices`, `alert_events` and `devices_safe` that earlier migrations had revoked but that remained on older projects (no-op on a project built from these migrations) — `20261107000000_revoke_drifted_device_and_alert_grants.sql`
+- ✅ Users can no longer change their own `is_active` (a deactivated user cannot re-activate itself) — `20261108000000_protect_profile_is_active.sql`
 
 > [!IMPORTANT]
 > A migration that creates a table, view, sequence or function must also `GRANT` it to the roles that need it (`anon`, `authenticated`, `service_role`). New Supabase projects no longer do this automatically, so without the GRANT the object is unreachable through the API. See `20261105000000_explicit_data_api_grants.sql` for the pattern.
 
 > [!NOTE]
-> `20261102000000` continues device codes after the highest existing `AGS-NNN` code. If you later run `supabase/reset_and_seed_devices.sql`, it resets the counter to follow the seeded `AGS-005`.
+> `20261102000000` continues device codes after the highest existing `AGS-NNN` code. If you later run `supabase/maintenance/reset_and_seed_devices.sql`, it resets the counter to follow the seeded `AGS-005`.
 
 ---
 
 ## Step 3 — Create the First Admin User
 
-After running the SQL, you need to manually create an admin account since new users default to `pending` residents.
+After running the SQL, create the first admin by hand: public sign-up only creates `pending` residents or responders, and no trigger creates a `profiles` row for a user added in the dashboard.
 
 1. In Supabase dashboard, go to **Authentication → Users**.
 2. Click **Add user → Create new user**.
@@ -80,13 +81,16 @@ After running the SQL, you need to manually create an admin account since new us
 5. Now go to **SQL Editor** and run this (replace the email with what you used):
 
 ```sql
--- Replace 'admin@agapsense.com' with the email you just created
-UPDATE profiles
-SET role = 'admin', status = 'approved', full_name = 'System Admin'
-WHERE id = (
-  SELECT id FROM auth.users WHERE email = 'admin@agapsense.com'
-);
+-- Replace 'admin@agapsense.com' with the email you just created.
+-- Creates the profile row (an UPDATE alone would match nothing) and is safe to run twice.
+INSERT INTO public.profiles (id, full_name, role, status, setup_complete)
+SELECT id, 'System Admin', 'admin', 'approved', true
+FROM auth.users WHERE email = 'admin@agapsense.com'
+ON CONFLICT (id) DO UPDATE
+  SET role = 'admin', status = 'approved', is_active = true, setup_complete = true;
 ```
+
+It should report `INSERT 0 1`. `INSERT 0 0` means the email did not match the user you just created.
 
 > [!CAUTION]
 > If you skip this step, you won't be able to log in as admin to approve other users.
@@ -111,6 +115,8 @@ VITE_SUPABASE_ANON_KEY=your_anon_public_key_here
 | 1 | `VITE_SUPABASE_URL` | Your Project URL from Supabase dashboard |
 | 2 | `VITE_SUPABASE_ANON_KEY` | Your anon/public API key from Supabase dashboard |
 
+For browser push notifications on a new project, also add `VITE_VAPID_PUBLIC_KEY=...` with the public key you set in Step 5b. If it is unset, the app falls back to the original project's built-in public key (`src/lib/pushNotifications.ts`), which will not match your private key.
+
 ---
 
 ## Step 5 — Deploy Edge Functions
@@ -133,6 +139,15 @@ Some edge functions use secrets. Set them via CLI:
 ```bash
 supabase secrets set TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 supabase secrets set TELEGRAM_CHAT_ID=your_telegram_chat_id
+# Required by telegram-webhook (it rejects every update without it). Use the same
+# value as secret_token when registering the webhook with Telegram's setWebhook.
+supabase secrets set TELEGRAM_WEBHOOK_SECRET=a_long_random_string
+# Optional: browser push notifications. Without these, push delivery is disabled
+# (Telegram/SMS still work). Generate a pair with `npx web-push generate-vapid-keys`
+# and put the same public key in the frontend's VITE_VAPID_PUBLIC_KEY (Step 4).
+supabase secrets set VAPID_PUBLIC_KEY=your_vapid_public_key
+supabase secrets set VAPID_PRIVATE_KEY=your_vapid_private_key
+supabase secrets set VAPID_SUBJECT=mailto:you@example.com
 # Optional: the dashboard's public address, e.g. https://agapsense.vercel.app.
 # Admins' Telegram messages about new support requests include a link to the
 # request only when this is set.
@@ -154,6 +169,7 @@ supabase functions deploy
 
 | Function | Purpose |
 |---|---|
+| `admin-support-request` | User submits a support request; notifies every active admin |
 | `assign-device` | Admin assigns a device to a user |
 | `confirm-sms-status` | IoT device reports real SMS delivery outcome after Tier 2 |
 | `create-user` | Admin creates a new user account |
@@ -164,8 +180,11 @@ supabase functions deploy
 | `manage-registration` | Admin approves/rejects user registrations |
 | `manage-user` | Admin edits, deactivates or reactivates a user |
 | `register` | Self-registration for new users |
+| `register-push` | Stores a browser's Web Push subscription |
+| `resolve-support-request` | Admin resolves or reopens a support request and notifies the requester |
+| `send-push-notification` | Delivers Web Push (VAPID) notifications |
 | `telegram-webhook` | Handles linking user's Telegram ID for notifications |
-| `trigger-alert` | Fires alerts + sends Telegram notifications |
+| `trigger-alert` | Fires alerts + sends Telegram / Web Push notifications |
 
 ---
 
@@ -207,8 +226,9 @@ The project includes a `vercel.json` for SPA routing.
 
 | File | Line(s) | What to Change |
 |---|---|---|
-| `.env` | 1-2 | `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` |
-| `migrate.cjs` | 6 | PostgreSQL connection string (only if using this script) |
+| `.env` | 1-2 | `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (optionally `VITE_VAPID_PUBLIC_KEY`) |
+| Edge Function secrets | — | Set with `supabase secrets set` (Step 5b), never in code |
+| `firmware/agapsense-firmware/src/config.h` | — | Copy from `config.example.h`; see [`FIRMWARE_GUIDE.md`](FIRMWARE_GUIDE.md) |
 
 > [!WARNING]
 > **Do NOT commit `.env` or real keys to GitHub.** The `.gitignore` already excludes `.env`, but double-check before pushing.
@@ -220,7 +240,7 @@ The project includes a `vercel.json` for SPA routing.
 | Problem | Fix |
 |---|---|
 | "Missing Supabase environment variables" on app start | Your `.env` file is missing or the keys are wrong. See Step 4. |
-| Login works but dashboard shows nothing | The admin user's `status` is probably still `'pending'`. Run the UPDATE query from Step 3. |
+| Login works but dashboard shows nothing, or the admin cannot sign in | The admin has no `profiles` row, or its `status` is not `'approved'`. Run the query from Step 3. |
 | Edge function returns 500 | Check that you linked the correct project (`supabase link`) and secrets are set (`supabase secrets list`). |
-| "infinite recursion detected in policy" | You ran one of the old migration files on top of the new one. Reset the DB and only run `20260717000000_init.sql`. |
+| "infinite recursion detected in policy" | Migrations were applied out of order or an old hand-written policy is still present. Reset the DB and apply every file in `supabase/migrations/` in timestamp order (Step 2). |
 | RLS blocks all data | Make sure the `get_auth_role()` function exists. Run `SELECT get_auth_role();` in the SQL Editor to test. |

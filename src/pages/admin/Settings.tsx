@@ -8,18 +8,19 @@ import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import { ONLINE_THRESHOLD_MS, RECONNECTING_THRESHOLD_MS } from '../../lib/deviceStatus';
 import { FIELD, BTN_PRIMARY, BTN_SECONDARY } from '../../components/ui';
+import { DEFAULT_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES, MIN_TIMEOUT_MINUTES, TIMEOUT_SETTING_KEY } from '../../lib/sessionTimeouts';
 
 const LABEL = 'block text-xs font-bold text-text-body mb-2 uppercase tracking-[0.1em]';
 const SECTION_TITLE = 'text-xs font-bold text-text-body uppercase tracking-[0.1em] mb-1 flex items-center gap-2';
 
-// Same fallbacks useIdleTimeout effectively shows when a key is missing.
+// Unsaved keys show the defaults useIdleTimeout enforces for them.
 const TIMEOUTS = [
-  { key: 'timeout_admin', label: 'Admin Timeout', summary: 'Admin Session Timeout', fallback: '15' },
-  { key: 'timeout_bfp', label: 'Responder Timeout', summary: 'Responder Session Timeout', fallback: '15' },
-  { key: 'timeout_resident', label: 'Resident Timeout', summary: 'Resident Session Timeout', fallback: '60' },
+  { key: TIMEOUT_SETTING_KEY.admin, label: 'Admin Timeout', summary: 'Admin Session Timeout', fallback: String(DEFAULT_TIMEOUT_MINUTES.admin) },
+  { key: TIMEOUT_SETTING_KEY.bfp_responder, label: 'Responder Timeout', summary: 'Responder Session Timeout', fallback: String(DEFAULT_TIMEOUT_MINUTES.bfp_responder) },
+  { key: TIMEOUT_SETTING_KEY.resident, label: 'Resident Timeout', summary: 'Resident Session Timeout', fallback: String(DEFAULT_TIMEOUT_MINUTES.resident) },
 ];
-const MIN_TIMEOUT = 1;
-const MAX_TIMEOUT = 1440;
+const MIN_TIMEOUT = MIN_TIMEOUT_MINUTES;
+const MAX_TIMEOUT = MAX_TIMEOUT_MINUTES;
 
 const timeoutError = (value: string) => {
   if (!/^\d+$/.test(value.trim())) return 'Enter a whole number of minutes.';
