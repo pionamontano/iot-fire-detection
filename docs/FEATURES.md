@@ -13,7 +13,7 @@ Three roles (`profiles.role`): `admin`, `bfp_responder`, `resident`. Route prote
 - **BFP Responder**: sees all devices, readings, incidents and the live map; handles incidents (acknowledge → responding → resolved / false alarm) through `transition_incident()`; edits own profile and station information.
 - **Resident**: sees only the device linked to their account; edits that device's thresholds (via RPC) and their own contact number.
 
-Backend denial does not depend on the UI: `get_auth_role()` returns NULL unless the profile is `approved` and `is_active`, so RLS gives pending, rejected and deactivated accounts nothing (`20261031000000`, `20261030000000`). Known gap: a deactivated user can re-enable its own profile while its access token is still valid (spec KI-10).
+Backend denial does not depend on the UI: `get_auth_role()` returns NULL unless the profile is `approved` and `is_active`, so RLS gives pending, rejected and deactivated accounts nothing (`20261031000000`, `20261030000000`).
 
 ### 2. Two-Tier Alert System
 Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware evaluates readings only while `sensor_ready` is true and only from valid MQ-7 measuring-phase data.
@@ -103,7 +103,7 @@ Located in `supabase/functions/`. Functions called by the ESP32 authenticate wit
 - Pending, rejected and deactivated accounts get no rows (see RBAC above).
 
 ### Self-Promotion Protection
-A trigger on `profiles` reverts non-admin attempts to change `role`, `status`, `device_id` or `telegram_chat_id`. It does not cover `is_active` or `setup_complete` (spec KI-10).
+A trigger on `profiles` reverts Data API attempts by anyone but an approved, active admin to change `role`, `status`, `device_id`, `telegram_chat_id` or `is_active` (`20261108000000`), so a deactivated user cannot re-activate itself with a still-valid token. `setup_complete` stays user-writable because first-run setup sets it.
 
 ### Session Security
-- Per-role idle timeout (`timeout_admin`, `timeout_bfp`, `timeout_resident` in `settings`) signs the user out and redirects to `/session-expired`. No defaults are seeded: until an admin saves Settings (which pre-fills 15 / 15 / 60 min) no timeout applies.
+- Per-role idle timeout (`timeout_admin`, `timeout_bfp`, `timeout_resident` in `settings`) signs the user out and redirects to `/session-expired`. Until an admin saves a value, the defaults apply: 15 min for admins and responders, 60 min for residents (`src/lib/sessionTimeouts.ts`, shared with the Settings page).

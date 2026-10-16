@@ -127,7 +127,7 @@ Enter your email and password on the login page.
 
 - **Too many wrong passwords locks the account temporarily** (after 3 failures for 10 seconds, after 5 for 30 seconds, after 7 for 15 minutes). Wait for the timer, or ask an administrator to unlock you.
 - **Forgot password?** Use the *Forgot password* link and follow the emailed reset link.
-- **Automatic sign-out:** if your administrator has turned it on, you are signed out after a period of inactivity (suggested: **60 minutes for residents, 15 minutes for responders**). Sign in again to continue.
+- **Automatic sign-out:** for safety you are signed out after a period of inactivity (**60 minutes for residents, 15 minutes for responders** unless your administrator changes it). Sign in again to continue.
 
 ---
 

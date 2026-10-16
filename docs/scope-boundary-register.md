@@ -28,7 +28,7 @@ Companion to [`system-specification.md`](system-specification.md) §5.3 (baselin
 | Admin reopen of closed incident | D | Not implemented (blocked by design) | guard trigger | Excluded | D6.4 |
 | Revoking direct `UPDATE` on `alert_events` | A (remediation) | Verified (code), `R` | `20261022000000`; issue #97 | Included — deploy only after 6.1/6.2 are live | Deployment approval |
 | Registration with admin approval | A | Verified (code), `L` | `register`, `manage-registration` | Included | — |
-| Backend enforcement of approval and deactivation (RLS) | A | Verified (code + local tests), `R` | `20261031000000`, `20261030000000`; KI-09 fixed. Open gap: self-reactivation (KI-10) | Was **Hold**; changed in repo — confirm on production (OQ-03) | OQ-03 |
+| Backend enforcement of approval and deactivation (RLS) | A | Verified (code + local tests), `R` | `20261031000000`, `20261030000000`; KI-09 fixed; self-reactivation blocked (KI-10 fixed, `20261108000000`) | Was **Hold**; changed in repo — confirm on production (OQ-03) | OQ-03 |
 | Roles: admin, bfp_responder, resident | A | Verified | `init.sql:29` | Included; **no new roles** | Any new role |
 | Admin dashboard, live map, Device Status, devices, users (incl. edit/deactivate), system log, support requests, settings | A | Verified/Partial | spec §5.11 | Included; IA preserved | — |
 | Admin interactive map | A | Partial (tiles external) | `InteractiveMap.tsx` | Included | — |
@@ -40,13 +40,13 @@ Companion to [`system-specification.md`](system-specification.md) §5.3 (baselin
 | Device registration, ownership, API-key auth/regeneration | A | Verified | `Devices.tsx`; migrations | Included; key storage/rotation redesign excluded | OQ-16/17 for policy |
 | Login lockout, `login` function, admin unlock | A | Verified, `L` | `login`, `check_login_lockout` | Included | — |
 | Direct-to-GoTrue brute-force protection (CAPTCHA/rate limit) | D | Not implemented; owner accepted risk | `LIVE_TESTING_SUMMARY.md` | Excluded | Owner decision recorded earlier |
-| Idle timeout (per role) | A | Partial, `L`; **off by default** (no settings seeded, KI-30) | `useIdleTimeout.ts`; `Settings.tsx` | Included; seeding defaults = bug fix | Default values |
+| Idle timeout (per role) | A | Verified (code), `L`; defaults 15/15/60 min apply until saved (KI-30 fixed) | `useIdleTimeout.ts`; `lib/sessionTimeouts.ts`; `Settings.tsx` | Included | Confirm default values |
 | Password reset by e-mail | B | Partial | `ForgotPassword.tsx` | Included | — |
 | Support requests (in-app inbox, replaced Resend in #107) | A | Verified (code); open gaps (KI-08) | `admin-support-request`, `resolve-support-request`, `SupportRequests.tsx` | Included | OQ-21 |
 | Location labelling: live / last-known / registered / unavailable | A (remediation) | Verified (code) | `lib/location.ts` | Included — rule: never present non-live position as live | 15 min value (OQ-18) |
 | Fabricated metrics ("System Uptime 99.98%", "connectivity %") | — | **Removed** (KI-01/02 fixed) | — | — | — |
 | Online/offline status definition | A | Verified: one helper everywhere (KI-03 fixed) | `lib/deviceStatus.ts` | Included | — |
-| Account deactivation (`manage-user`) | A | Verified (code) | `manage-user`; `20261030000000` | Included; self-reactivation gap (KI-10) is a bug fix | Security review (rule 6) |
+| Account deactivation (`manage-user`) | A | Verified (code) | `manage-user`; `20261030000000` | Included; self-reactivation fixed (KI-10, `20261108000000`) | Security review (rule 6) done locally; owner sign-off |
 | OTA firmware updates and firmware releases | A | Verified (code); untested on hardware | `connectivity.cpp`; `get-device-config`; `firmware_releases`; KI-31, KI-32 | Included; image signing = proposal | Owner (MD5 / signing policy) |
 | Data retention / archival | D | Not specified | FR-ALERT-006 | Excluded | OQ-12 |
 | Privacy notice / consent flows | D | Not present | — | Excluded | OQ-13 |

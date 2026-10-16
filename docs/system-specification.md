@@ -56,18 +56,18 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 | Version | Date | Change |
 |---|---|---|
 | 0.1 | 2026-10-12 | First specification baseline (this document). |
-| 0.3 | 2026-10-16 | Re-checked every Known Issue at `d74dc81`: 11 fixed, 5 partly fixed, 8 still open (KI-10 escalated after a local reproduction); added KI-30 (no default session-timeout settings), KI-31 (OTA image integrity) and KI-32 (firmware release workflow builds the wrong variant). Ran the local DB, edge, unit and firmware host suites (§5.14). Updated §5.3 B/C, the affected FR rows, §5.6, §5.8, §5.11, §5.12 and §19 accordingly. |
+| 0.3 | 2026-10-16 | Later the same day: fixed KI-10 (`20261108000000`) and KI-30 (`lib/sessionTimeouts.ts`); local DB suites now 14 files / 235 checks; removed the duplicate `AGAPSENSE_SYSTEM_SPECIFICATION.md`. Before that: re-checked every Known Issue at `d74dc81`: 11 fixed, 5 partly fixed, 8 still open (KI-10 escalated after a local reproduction); added KI-30 (no default session-timeout settings), KI-31 (OTA image integrity) and KI-32 (firmware release workflow builds the wrong variant). Ran the local DB, edge, unit and firmware host suites (§5.14). Updated §5.3 B/C, the affected FR rows, §5.6, §5.8, §5.11, §5.12 and §19 accordingly. |
 | 0.2 | 2026-10-13 | Incremental backend-only re-review (all Edge Functions, full migration history re-read as current effective schema). Resolved the `get_dashboard_stats()` Unverified note into confirmed KI-25. Added KI-25–KI-29 (dashboard-stats privilege exposure, login-lockout case-sensitivity bypass, `get_device_api_key_secure()` missing `search_path` pin, `manage-registration` duplicate-device gap, `reviewed_by`/`unlocked_by` FK convention break). Rewrote KI-08, B7, C8, FR-RESP-005, FR-NOTIF-007 and §5.10/§5.12 Resend entries: the Resend e-mail support path they described was replaced by an in-app admin inbox (`support_requests` table, PR #107) before this update; added the `support_requests` table to §5.8 and new gaps found in its replacement. |
 
 ### Relationship to existing documents (not overwritten)
 
 | Existing document | Assessment | Evidence |
 |---|---|---|
-| `docs/AGAPSENSE_SYSTEM_SPECIFICATION.md` | **Summary only; not authoritative.** [0.3] Since 0.2 it has been refreshed to the current code and now defers to this document for detail. | |
+| `docs/AGAPSENSE_SYSTEM_SPECIFICATION.md` | [0.3] **Removed** (2026-10-16) as a duplicate of this document and `FEATURES.md`; still in git history. | |
 | `docs/FEATURES.md` | [0.3] **Consistent with the code** in the places checked. The 0.2 findings (non-existent responder pages, SMS recipients, "mathematically" blocked pending users) are no longer in the file. | |
 | `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`, `docs/CHANGELOG_AUDIT_REMEDIATION.md`, `docs/STAGING_DRY_RUN_RUNBOOK.md`, `docs/FIRMWARE_GUIDE.md`, `docs/MIGRATION_GUIDE.md` | Consistent with code in every place checked; used as secondary evidence. | |
 
-> **Owner action:** decide whether `AGAPSENSE_SYSTEM_SPECIFICATION.md` and `FEATURES.md` are to be superseded by this document (OQ-14).
+> OQ-14 resolved: this document is the specification; `FEATURES.md` is the short overview.
 
 ### Status vocabulary used throughout
 
@@ -159,8 +159,8 @@ Separate axes are always kept apart: **Implemented (in repo)** ≠ **Tested** �
 | C6 | *(Resolved in repo)* Direct `UPDATE` on `alert_events` | Revoked by `20261022000000`; local test passes. Deployment state unknown | KI-11 |
 | C7 | Stale-sensor detection in firmware | `last_co_ms`/`last_temp_ms` written, never read | KI-17 |
 | C8 | Support requests from unapproved accounts; `category` unvalidated | Still open in 0.3; now also triggers admin push/Telegram | KI-08 |
-| C9 [0.3] | Account deactivation can be undone by the deactivated user | `protect_profile_fields` does not cover `is_active`; reproduced locally | KI-10 |
-| C10 [0.3] | Idle sign-out disabled by default | No `settings` rows are seeded; the hook does nothing until an admin saves Settings | KI-30 |
+| C9 [0.3] | *(Resolved in repo)* Account deactivation could be undone by the deactivated user | `20261108000000` adds `is_active` to `protect_profile_fields` | KI-10 |
+| C10 [0.3] | *(Resolved)* Idle sign-out disabled by default | The hook now applies the role defaults when no value is saved (`lib/sessionTimeouts.ts`) | KI-30 |
 
 ### D. Proposed but Not Approved
 
@@ -216,7 +216,7 @@ Roles are exactly those in `profiles.role` CHECK (`20260717000000_init.sql:29`):
 | UI pages | `/setup` (mandatory first), `/home`, `/home/alerts`, `/home/settings`, `/home/devices`, `/account` (`/home/logs` redirects to `/home/alerts`) | `App.tsx:87-95` |
 | Backend authority | Read own device (`devices_safe`/column grants), own `sensor_readings`/`alert_events` (`device_id = own`); `update_own_device_alert_settings()` (CO 0–1000, temp 0–100; approved resident only); `resolve_address_discrepancy()` (own rows; approval overwrites the device's registered address and coordinates); self-update of own profile (non-protected columns); `link-device` Edge Function | `20260917080000`, `20261016000000`, `link-device/index.ts` |
 | Prohibited | Other residents' data; role/status/device_id changes via direct update (trigger resets them) | `protect_profile_fields` init.sql:236-261 |
-| Concerns | `protect_profile_fields` does not cover `is_active` or `setup_complete` (KI-10; `telegram_chat_id` was added in `20261026000000`). A resident's approval of a drift prompt changes the *device-wide* registered location used by all subsequent drift checks (design as implemented) | |
+| Concerns | `protect_profile_fields` covers `role`, `status`, `device_id`, `telegram_chat_id` and (`20261108000000`) `is_active`; `setup_complete` stays user-writable because first-run setup sets it. A resident's approval of a drift prompt changes the *device-wide* registered location used by all subsequent drift checks (design as implemented) | |
 
 ### IoT device / system process (non-human)
 
@@ -239,12 +239,12 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | FR-AUTH-001 | Public registration (`register`) for roles `resident` and `bfp_responder` only; creates the auth user (`email_confirm:true`), a `profiles` row with `status='pending'`, and a `registration_requests` row; rolls back both on failure. Validates required fields, PH mobile `09XXXXXXXXX`, e-mail shape, password ≥ 6 chars. [0.3] Resident: mobile number and structured address (house/street, barangay, city/municipality, province) required, device code optional. Responder: fire station required; mobile, rank and BFP ID optional | Implemented (C) | Public | Verified [L] | `register/index.ts`; `RegisterResident.tsx`, `RegisterResponder.tsx` | Register each role → pending profile + request exist; duplicate e-mail → 409; admin role request → 400 | Password policy minimum is 6 (Not Specified — Requires Approval). E-mail is auto-confirmed (no ownership verification) — OQ-15 |
 | FR-AUTH-002 | Sign-in goes through `login`: lower-cases the e-mail, checks `check_login_lockout`, forwards credentials to GoTrue, records every attempt in `login_attempts`, returns tokens or a lockout response. Lockout tiers within a 15-min window: ≥3 failures→10 s, ≥5→30 s, ≥7→900 s; admin override via `admin_unlock_login` | `SW-2.6.2` (cited, unconfirmed) | Public | Verified [L]; case-folding tested locally (0.3) | `login/index.ts:67-117`; `20260924090000`; `20260924010000`; `tests/edge/login_lockout_case.test.mjs` | 3 bad logins → 429/locked with decreasing countdown; admin unlock → immediate success | Direct calls to GoTrue `/auth/v1/token` bypass the lockout; owner accepted this trade-off (`LIVE_TESTING_SUMMARY.md`). Lockout keyed by e-mail only, not IP |
 | FR-AUTH-003 | UI shows Pending/Rejected screens and blocks app routes for any non-`approved` profile | C | All | Verified | `AuthGuard.tsx:55-79`; policy allowing own-profile read `20261019000000` | Pending account logs in → sees "Account Pending", no dashboard | UI only; see FR-AUTH-004 |
-| FR-AUTH-004 | Backend data access is denied to non-approved and deactivated accounts | C (stated aim of `20260917030000`, FEATURES.md) | All | Verified (code + local tests, 0.3) **[R]** | `get_auth_role()` returns NULL unless `status='approved'` and `is_active` (`20261031000000`, `20261030000000`); `get_auth_role_approval.test.sql` (11 checks), `deactivated_access.test.sql` (9 checks) pass | Query `alert_events` as a *pending responder* via PostgREST → expect 0 rows | Live definition still not inspected (OQ-03). A deactivated user can re-enable itself while its token is valid (KI-10) |
+| FR-AUTH-004 | Backend data access is denied to non-approved and deactivated accounts | C (stated aim of `20260917030000`, FEATURES.md) | All | Verified (code + local tests, 0.3) **[R]** | `get_auth_role()` returns NULL unless `status='approved'` and `is_active` (`20261031000000`, `20261030000000`); `get_auth_role_approval.test.sql` (11 checks), `deactivated_access.test.sql` (9 checks) pass | Query `alert_events` as a *pending responder* via PostgREST → expect 0 rows | Live definition still not inspected (OQ-03). Self-reactivation blocked by `20261108000000` (KI-10 fixed) |
 | FR-AUTH-005 | Route protection by role with redirect to the role's home | C | All | Verified | `AuthGuard.tsx:81-91`; `App.tsx` | Resident opening `/admin/users` → redirected to `/home` | UI-only |
 | FR-AUTH-006 | Resident must complete `/setup` (valid, confirmed mobile number) before any other resident page | C | Resident | Verified | `AuthGuard.tsx:94-100`; `ResidentSetup.tsx:30-55` | New resident cannot reach `/home` before setup | Phone format checked only client-side + register function |
-| FR-AUTH-007 | Per-role idle timeout, minutes read from `settings` keys `timeout_admin`, `timeout_bfp`, `timeout_resident`, re-read every 5 min; sign-out → `/session-expired` | `SW-2.6.1` (cited) | All | Verified (code) [L] | `useIdleTimeout.ts:33-66`; `Settings.tsx:17-19` | Idle beyond limit → redirected to session-expired | [0.3] **No migration seeds these keys**: with no row the hook does nothing, so idle sign-out is off until an admin saves Settings. The 15/15/60 values are UI display fallbacks only (KI-30) |
+| FR-AUTH-007 | Per-role idle timeout, minutes read from `settings` keys `timeout_admin`, `timeout_bfp`, `timeout_resident`, re-read every 5 min; with no saved (or an unusable) value the role default applies (15 / 15 / 60 min); sign-out → `/session-expired` | `SW-2.6.1` (cited) | All | Verified (code) [L]; `tests/session-timeouts.test.ts` | `useIdleTimeout.ts`; `lib/sessionTimeouts.ts`; `Settings.tsx` | Idle beyond limit → redirected to session-expired | Defaults live in code (shared by hook and Settings page), not in the DB. KI-30 fixed |
 | FR-AUTH-008 | Password reset by e-mail link (`resetPasswordForEmail` → `/reset-password` → `updateUser`) | C | Public | Partially Verified | `ForgotPassword.tsx:17`, `ResetPassword.tsx:61` | Request link → set new password | Depends on Supabase e-mail + redirect URL config (Unverified) |
-| FR-AUTH-009 | Non-admin users cannot change their own `role`, `status`, `device_id` or `telegram_chat_id` (trigger reverts them) | C | All | Verified [L]; `telegram_chat_id` tested locally | `init.sql:236-261`; `20261026000000`; `telegram_chat_id.test.sql` | Direct PATCH of own role → unchanged | Trigger omits `is_active` and `setup_complete` (KI-10, reproduced in 0.3) |
+| FR-AUTH-009 | Data API callers other than an approved, active admin cannot change their own `role`, `status`, `device_id`, `telegram_chat_id` or `is_active` (trigger reverts them) | C | All | Verified [L]; tested locally (`telegram_chat_id.test.sql`, `protect_profile_fields.test.sql`) | `init.sql:236-261`; `20261026000000`; `20261108000000` | Direct PATCH of own role → unchanged | `setup_complete` stays user-writable (first-run setup sets it). KI-10 fixed |
 | FR-AUTH-010 | Only approved admins can read other users' profiles | C (remediation Step 1) | Admin | Verified [R] | `20261019000000` (`is_approved_admin()`); test `profiles_rls.test.sql` (reported 13 checks) | Resident reads another profile → 0 rows | Not deployed; see FR-AUTH-004 |
 
 ### FR-ADMIN — Administrator
@@ -257,7 +257,7 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | FR-ADMIN-004 | "Device Status" (formerly "System Overview"): fleet status, manual resolve through `transition_incident`. Enable/disable (`is_active`) moved to Devices → Edit device, behind a typed confirmation; disabled devices have their own "Disabled" status | C | Verified (code) [R for resolve] | `DeviceStatus.tsx:158-167` | Resolve → incident closed with `resolved_by` set | Direct `devices.update` from the browser relies on admin RLS |
 | FR-ADMIN-005 | System Log merges recent alert events, login attempts, device registrations and other sources, with search, filters and CSV export | C | Partially Verified | `Logs.tsx`; `lib/systemLog.ts`; `tests/system-log.test.ts` | Entries visible, export produces file | [0.3] Alert text now derived from tier and device (KI-04 fixed) |
 | FR-ADMIN-006 | Interactive map of devices (live/last-known/registered markers) and a live alert feed | `A10` | Partially Verified | `InteractiveMap.tsx:111-132`; `lib/location.ts` | Markers distinct per state | Tiles external (B8) |
-| FR-ADMIN-007 | Security settings: session timeouts, unlock a locked login, push-notification toggle | `SW-2.6.x` | Verified (code) | `Settings.tsx` | Saved values appear in `settings` | Settings saved with client `upsert` (admin RLS). Until first saved, no timeout applies (KI-30) |
+| FR-ADMIN-007 | Security settings: session timeouts, unlock a locked login, push-notification toggle | `SW-2.6.x` | Verified (code) | `Settings.tsx` | Saved values appear in `settings` | Settings saved with client `upsert` (admin RLS); unsaved keys show and enforce the defaults |
 
 ### FR-RESP — BFP Responder
 
@@ -344,7 +344,7 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 | Area | Observed (verified in code) | Target |
 |---|---|---|
 | Security / authorisation | RLS on all tables; device writes service-role only (`20260917010000`); `api_key` masked via `devices_safe`/`get_device_api_key_secure` (`20261015000000`); admin-only RPCs (`is distinct from 'admin'` after NULL-bypass fix `20260924020000`); lockout; Telegram webhook secret compared in constant time (`telegram-webhook:15-25`); push endpoint restricted to service role or self/admin (`send-push-notification:37-60`) | Password policy NS-RA; session lifetime NS-RA; API-key rotation policy NS-RA |
-| Security concerns | CORS `*` on all functions; `register` auto-confirms e-mail; provisioning AP password is a shared compile-time constant; plaintext `api_key`; `SECURITY DEFINER` `get_device_api_key_secure` without pinned `search_path` (KI-27); self-reactivation (KI-10); unsigned OTA images (KI-31) | — (see KI) |
+| Security concerns | CORS `*` on all functions; `register` auto-confirms e-mail; provisioning AP password is a shared compile-time constant; plaintext `api_key`; `SECURITY DEFINER` `get_device_api_key_secure` without pinned `search_path` (KI-27); unsigned OTA images (KI-31) | — (see KI) |
 | Data integrity | CHECK constraints on roles, statuses, tiers, thresholds; unique one-resident-per-device index; one-open-incident index [R]; lifecycle guard [R] | — |
 | Reliability / fault handling | Persist-first-then-notify; bounded provider timeouts (default 3.5 s each, 4 s dispatch budget); fail-open ledger; firmware retry [R]; watchdog | Availability, RTO/RPO NS-RA |
 | Performance | Telemetry every 30 s per device; alert POST synchronous at transition; HTTP timeout 10 s; geocode 3 s | Response-time / capacity targets NS-RA; no load test evidence |
@@ -414,7 +414,7 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 | `telegram_link_tokens` | One-time link tokens (15 min) | `token` PK, `user_id`, `expires_at` | No client grants; RPC + webhook only |
 | `login_attempts` | Lockout evidence | `email`, `success`, `attempted_at`, `ip_address` (never populated by `login`) | Admin read; no client insert |
 | `login_lockout_overrides` | Admin unlocks | `email` PK, `unlocked_at/by` | Admin only |
-| `settings` | Key/value (session timeouts `timeout_admin`, `timeout_bfp`, `timeout_resident`) | `key` PK; **no rows seeded by any migration** (KI-30) | Admin ALL; approved users SELECT |
+| `settings` | Key/value (session timeouts `timeout_admin`, `timeout_bfp`, `timeout_resident`) | `key` PK; no rows seeded: the app applies defaults when a key is missing | Admin ALL; approved users SELECT |
 | `station_settings` | Singleton station info | `id=1` CHECK; `station_name`, `address`, `contact_number`, `email` (used by the UI; `station_name` and `email` added by `20261103000000`); unused legacy columns `team_name, commander_name, latitude, longitude, alert_radius_km` | Admin ALL, **responder ALL** (KI-11), approved users SELECT |
 
 ### Functions / triggers / views
@@ -462,7 +462,7 @@ Not specified (FR-ALERT-006). `registration_requests`/`profiles` removed by auth
 | BR-13 Responder handling | Via `transition_incident` only; direct column UPDATE revoked in the repo (`20261022000000`) | |
 | BR-14 Resident operations | Link device, edit thresholds, resolve drift prompt, edit own contact, push/Telegram preferences | |
 
-**Intended vs implemented where they differ** — documented in the Known Issues (§5.15): DB `approved` default for profiles vs "pending" workflow (only enforced because `register` always sets `pending`); tier computed by two parties with potentially different thresholds; session timeouts shown in Settings but not in force until saved (KI-30).
+**Intended vs implemented where they differ** — documented in the Known Issues (§5.15): DB `approved` default for profiles vs "pending" workflow (only enforced because `register` always sets `pending`); tier computed by two parties with potentially different thresholds;.
 
 ---
 
@@ -523,11 +523,11 @@ Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `supp
 | Admin | `Dashboard` | Fleet overview | `devices`, `alert_events`, `profiles`, `sensor_readings` | View | AuthGuard(admin) / RLS admin | Partial | |
 | Admin | `InteractiveMap` ("Live Map") | Map + alert feed | `devices`, `sensor_readings`, `alert_events` | View | same | Partial | |
 | Admin | `Devices` ("Devices") | Register (generated code), edit, toggle, confirm pin, OTA target, regenerate key | `devices`, `firmware_releases`; RPC | Create, edit, toggle, regenerate key | same | Verified | |
-| Admin | `Users` | Approvals, create, edit, deactivate/reactivate, assign | `profiles`, `registration_requests`, `devices`; Edge (`manage-user` etc.) | Approve/reject/delete/create/edit/deactivate/assign | same | Verified | KI-10 |
+| Admin | `Users` | Approvals, create, edit, deactivate/reactivate, assign | `profiles`, `registration_requests`, `devices`; Edge (`manage-user` etc.) | Approve/reject/delete/create/edit/deactivate/assign | same | Verified | |
 | Admin | `DeviceStatus` ("Device Status") | Fleet + incident close | `devices`, `alert_events`, `sensor_readings` | Resolve | same | Verified | |
 | Admin | `Logs` ("System Log") | Event/log view + export | `alert_events`, `login_attempts`, `devices`, others via `lib/systemLog.ts` | Search, filter, export | same | Partial | |
 | Admin | `SupportRequests` (`/admin/support`) [0.3] | Support inbox | `support_requests`; Edge | Resolve/reopen with reply | same | Verified (code) | KI-08 |
-| Admin | `Settings` (`/admin/settings/security`) | Timeouts, unlock, push | `settings`; RPC | Save, unlock | same | Verified | KI-30 |
+| Admin | `Settings` (`/admin/settings/security`) | Timeouts, unlock, push | `settings`; RPC | Save, unlock | same | Verified | |
 | Responder | `ResponderDashboard` | Live Tier 2 incidents/devices | `devices_safe`, `alert_events`; RPC | Acknowledge/responding/resolve/false alarm, call resident | AuthGuard(bfp) / RLS + RPC | Partial | |
 | Responder | `ResponderAlertLogs` | History | `alert_events`, `devices_safe` | Filter, export | same | Partial | |
 | Responder | `ResponderSettings` | Profile, station info, Telegram, push, support | `profiles`, `station_settings`; RPC | Save | same | Verified (code) | KI-11 |
@@ -588,9 +588,9 @@ The full matrix is in [`requirements-traceability.md`](requirements-traceability
 
 | Evidence type | Where | Executed in 0.1/0.2 | Executed in 0.3 (2026-10-16, `d74dc81`) |
 |---|---|---|---|
-| Unit + edge tests (`tests/*.test.ts`, `tests/edge/*.test.mjs`) | `npm test` | No | **Yes**: 187 tests, 179 pass, 0 fail, 8 skipped (the PostgreSQL-backed ones, run separately below) |
+| Unit + edge tests (`tests/*.test.ts`, `tests/edge/*.test.mjs`) | `npm test` | No | **Yes**: 190 tests, 182 pass, 0 fail, 8 skipped (the PostgreSQL-backed ones, run separately below) |
 | `trigger-alert` integration tests on local PostgreSQL | `tests/edge/run_integration.sh` | No | **Yes**: 8/8 pass |
-| Local PostgreSQL suites | `supabase/tests/local/*.test.sql` (13 files) | No | **Yes**: 224 PASS, 0 FAIL (PostgreSQL 16 with the repo's Supabase stub, all 52 migrations) |
+| Local PostgreSQL suites | `supabase/tests/local/*.test.sql` (14 files after the KI-10 fix) | No | **Yes**: 235 PASS, 0 FAIL (PostgreSQL 16 with the repo's Supabase stub, all 53 migrations) |
 | Firmware host tests | `firmware/.../host_tests/run.sh` | No | **Yes**: all groups 0 failed, including the connectivity/GSM simulation (256 checks) |
 | Typecheck / lint | `npm run typecheck`, `npm run lint` | No | **Yes**: clean (lint: 2 warnings, 0 errors) |
 | Playwright black-box suite | `npm run test:e2e` (also in CI) | No | No (needs a running `supabase start` stack) |
@@ -618,7 +618,7 @@ Status key: **Fixed** = the defect is gone from the code at `d74dc81` (deploymen
 | KI-07 | `station_settings` UI columns missing from the schema | **Fixed** | `20261103000000` adds `station_name`, `email`. Leftovers: unused `key_personnel` in the TS type (`lib/supabase.ts:146`) and unused legacy columns | Optional clean-up |
 | KI-08 | `admin-support-request`: any session (pending, rejected, deactivated) can file; `category` unvalidated, no length limits | **Open** | Unchanged checks (`admin-support-request/index.ts:70-91`); no CHECK on `category`/`message`. Since 0.2 the function also pushes and Telegrams every admin, so an unapproved account can now generate admin notifications | Require approved + active caller; validate `category` against `lib/supportRequests.ts`; cap lengths |
 | KI-09 | `get_auth_role()` ignored `profiles.status` | **Fixed (repo)** — tested 0.3 | `20261031000000` (approved) and `20261030000000` (active); `get_auth_role_approval.test.sql` 11/11, `deactivated_access.test.sql` 9/9 | Confirm on production (OQ-03) |
-| KI-10 | `protect_profile_fields` does not protect `is_active`, `setup_complete` (and `telegram_chat_id`) | **Open — escalated** — tested 0.3 | `telegram_chat_id` added in `20261026000000`; `is_active` and `setup_complete` still not. Since `manage-user` deactivation exists this matters: reproduced locally, a deactivated resident with a still-valid access token ran `update profiles set is_active = true where id = auth.uid()`; `get_auth_role()` went from NULL back to `resident` and the change persisted. The auth ban still blocks new sign-ins and refreshes, but the profile stays active, so the account is back in every alert fan-out (push, linked Telegram) and appears active to admins. Self-update policy: `init.sql:291-292` | Add `is_active` (and `setup_complete`) to the trigger's protected columns; security review (rule 6) |
+| KI-10 | `protect_profile_fields` does not protect `is_active`, `setup_complete` (and `telegram_chat_id`) | **Fixed (repo)** — tested | Reproduced in 0.3: a deactivated user with a still-valid token could set its own `is_active` back to true. `20261108000000` adds `is_active` to the protected columns, requires `is_approved_admin()` for the exemption (a deactivated admin was exempt before) and pins `search_path`. `protect_profile_fields.test.sql` 11/11 (5 of them fail without the migration); all other local suites still pass. `setup_complete` stays user-writable on purpose (`ResidentSetup.tsx` sets it) | Deploy the migration |
 | KI-11 | Responder `FOR ALL` on `station_settings`; direct `UPDATE` on `alert_events` | **Partly fixed** — tested 0.3 | `alert_events` UPDATE revoked (`20261022000000`; `alert_events_revoke_update.test.sql` 13/13). The `station_settings` policy is unchanged: any responder may INSERT or DELETE the singleton row, not only update it | Narrow the responder policy to UPDATE |
 | KI-12 | DB faults mapped to 4xx (dropped SMS reports) | **Partly fixed** | `ingest-reading` now returns 500 from its catch block; but a failed device lookup still returns 401 in `ingest-reading` and `confirm-sms-status`, and `confirm-sms-status`'s catch returns 400 (`confirm-sms-status/index.ts:44-55,137-143`), which the firmware treats as permanent | Owner decision (unchanged) |
 | KI-13 | Auto-resolve closed acknowledged/responding incidents | **Fixed** | D6.1: two consecutive safe readings, only `incident_status='active'` (`ingest-reading/index.ts:202-260`) | — |
@@ -633,7 +633,7 @@ Status key: **Fixed** = the defect is gone from the code at `d74dc81` (deploymen
 | KI-27 | `get_device_api_key_secure()` lacks `SET search_path` | **Open** — tested 0.3 | `pg_proc.proconfig` is NULL on a DB built from all migrations | Add `set search_path = public, pg_temp` |
 | KI-28 | `manage-registration` approve could double-assign a device | **Fixed** | Pre-write check returns 409 (`manage-registration/index.ts:68-90`); `tests/edge/manage_registration_device_guard.test.mjs` | — |
 | KI-29 | `reviewed_by`/`unlocked_by` reference `auth.users` | **Open** (convention) — confirmed 0.3 | FKs `support_requests_reviewed_by_fkey`, `registration_requests_reviewed_by_fkey`, `login_lockout_overrides_unlocked_by_fkey` | Optional |
-| KI-30 [0.3] | **New.** No migration inserts the `timeout_*` keys into `settings` | **Open** — tested 0.3 | `settings` is empty on a DB built from all migrations. `useIdleTimeout.ts:40-53` treats a missing row as "no timeout", while `Settings.tsx:17-19` displays 15/15/60 as fallbacks, so the admin sees timeouts that are not in force until they press Save. Cited requirement `SW-2.6.1` is therefore off by default on every new project | Seed defaults in a migration, or make the hook use the same fallbacks; owner to confirm values |
+| KI-30 [0.3] | No migration inserts the `timeout_*` keys into `settings`, so idle sign-out was off until an admin saved Settings while the page showed 15/15/60 | **Fixed** | `useIdleTimeout.ts` now applies the role default when the key is missing or unusable; defaults and limits live in `lib/sessionTimeouts.ts`, shared with `Settings.tsx`; `tests/session-timeouts.test.ts` | Owner to confirm the default values |
 | KI-31 [0.3] | **New (hardening).** OTA images are not signed | **Open** | `connectivity.cpp:379-410`: integrity relies on TLS to a host under the pinned CA and on an MD5 supplied by the same `get-device-config` response; when `firmware_md5` is empty or not 32 hex chars the image is flashed without any digest check. Anyone who can set a device's firmware target (admin) controls the code on that node | Owner decision: require MD5, consider signed images |
 
 | KI-32 [0.3] | **New.** The firmware release workflow cannot produce the image the hardware needs | **Open** | `.github/workflows/firmware-release.yml` runs a bare `pio run`; with no `default_envs` that builds every env, including `test_components`, whose `#include "config_test_secrets.h"` is git-ignored and absent in CI, so the build should fail. It then publishes `.pio/build/esp32dev/firmware.bin` (duty-cycle MQ-7 build), while `platformio.ini` says every deployed node is wired for `esp32dev_mq7_5v` (Vc = 5 V conversion). The tag's version reaches only `config.h`, not the 5V envs' `-D FIRMWARE_VERSION` | Build and publish `-e esp32dev_mq7_5v` with the tag's version; until then, release manually (FIRMWARE_GUIDE §8.2) |
@@ -645,7 +645,7 @@ Keep-alive re-assert (D5.2) · UTC label on message times (D5.6) · backfill of 
 [0.3] Per-user Telegram (Step 5.4, #95) and the D6.1 auto-resolve rule are implemented. Step 6c (#97) is in the repository (`20261022000000`); whether it is deployed is not recorded.
 
 ### Conflicting implementations
-[0.3] KI-06 (partly), KI-30 (UI shows timeouts that are not in force); KI-03, KI-07 and KI-09 are fixed; `devices_safe` has been redefined many times after `init.sql` (`20260917020000`, `…070000`, `20260924060000`, `20261011…`, `20261013…`, `20261014…`, final `20261015…`) — final definition governs (Verified), earlier ones are superseded.
+[0.3] KI-06 (partly); KI-03, KI-07, KI-09 and KI-30 are fixed; `devices_safe` has been redefined many times after `init.sql` (`20260917020000`, `…070000`, `20260924060000`, `20261011…`, `20261013…`, `20261014…`, final `20261015…`) — final definition governs (Verified), earlier ones are superseded.
 
 ### Missing or unclear requirements
 Retention (FR-ALERT-006); password/session policy; SLA/availability/performance targets; whether GSM data fallback is required (OQ-02); who must receive Tier 1 (currently admins only, by push and linked Telegram; the station chat, responders and residents get nothing on Tier 1); coverage/area scoping of responders; privacy basis for location data.
@@ -708,8 +708,6 @@ Template: [`change-request-template.md`](change-request-template.md).
 
 | # | Current limitation | Evidence | Proposed change | Why it may help | Scope impact | Risks / dependencies | Owner approval |
 |---|---|---|---|---|---|---|---|
-| R1 | [0.3] Deactivated users can re-enable themselves (KI-10) | §5.15 | Add `is_active` and `setup_complete` to `protect_profile_fields` | Makes deactivation stick | Bug fix in an existing trigger | RLS-adjacent ⇒ rule 6 review | Yes |
-| R2 | [0.3] Idle sign-out off by default (KI-30) | §5.15 | Seed `timeout_*` defaults in a migration, or apply the UI fallbacks in the hook | Cited requirement SW-2.6.1 holds on every install | Small migration or hook change | Owner confirms values | Yes |
 | R3 | Stale-sensor blindness (KI-17) | `sensors.cpp` | Use existing timestamps to flag stale temperature/CO | Prevents masked Tier 2 | Detection logic ⇒ rule 8 | Physical retest | Yes |
 | R4 | SMS with 0,0 coordinates (KI-18) | `connectivity.cpp`, `gsm.cpp` | Omit/annotate link when no fix | Avoids misleading responders | Firmware message text | Hardware retest | Yes |
 | R5 | Support requests from unapproved accounts (KI-08) | §5.15 | Require approved + active caller; validate category; cap lengths | Stops admin-notification abuse | Edge Function only | Low | Yes |
@@ -718,7 +716,7 @@ Template: [`change-request-template.md`](change-request-template.md).
 | R8 | Local DB, integration and firmware host suites not in CI | `ci.yml` | Add a job with PostgreSQL and `g++` | Regression safety for the safety-critical paths | CI config only | None | Yes |
 | R9 | Documentation of requirement IDs `SW-x/HW-x` | comments | Supply the original specification for import into this baseline | Converts "unconfirmed" to "approved" | Docs only | None | Owner supplies |
 
-[0.3] Done since 0.2: inspect/fix backend approval enforcement (old R1, fixed in repo), remove fabricated metrics (old R2), one definition of "online" (old R5), tests in CI (old R6, partly), mark stale docs (old R8).
+[0.3] Done since 0.2: self-reactivation (KI-10) and default idle timeouts (KI-30); inspect/fix backend approval enforcement (old R1, fixed in repo), remove fabricated metrics (old R2), one definition of "online" (old R5), tests in CI (old R6, partly), mark stale docs (old R8).
 
 ---
 

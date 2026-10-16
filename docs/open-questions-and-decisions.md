@@ -11,8 +11,8 @@
 > | OQ-07 / D6.1 / F1 | Implemented as recommended in §H: two consecutive safe readings, only `active` incidents. |
 > | OQ-08 / CT-4 | Partly: new devices take the DB default (60 °C); firmware fallback is still 70 °C. |
 > | CT-3 | Resolved: every page uses `lib/deviceStatus.ts` (2 / 15 min). |
-> | OQ-14 / CT-5 / CT-7 | `FEATURES.md` and `AGAPSENSE_SYSTEM_SPECIFICATION.md` were brought up to date; the latter now defers to `system-specification.md`. |
-> | OQ-20 | Deactivation is now an admin action (`manage-user`), `AuthGuard` and `get_auth_role()` honour `is_active`; but a user can still set `is_active` on their own row (KI-10). |
+> | OQ-14 / CT-5 / CT-7 | Resolved: `AGAPSENSE_SYSTEM_SPECIFICATION.md` was removed as a duplicate (2026-10-16); `FEATURES.md` was brought up to date and is the short overview. |
+> | OQ-20 | Answered in code: deactivation is an admin action (`manage-user`); `AuthGuard` and `get_auth_role()` honour `is_active`, and since `20261108000000` users cannot change it on their own row (KI-10 fixed). |
 > | OQ-21 | Overtaken: Resend was replaced by the in-app `support_requests` inbox (#107). Remaining gaps: KI-08. |
 > | OQ-22 | The "System Uptime" and "Connectivity %" widgets were removed. |
 > | OQ-23 / CT-6 / D5.4 / D5.5 | Implemented (§H). |

@@ -30,8 +30,7 @@ commit each one names, not a live guarantee.
 
 | Document | For |
 |---|---|
-| [`system-specification.md`](system-specification.md) | The detailed baseline specification (draft v0.3), including the status-tracked Known Issues list — the authoritative one of the two specs |
-| [`AGAPSENSE_SYSTEM_SPECIFICATION.md`](AGAPSENSE_SYSTEM_SPECIFICATION.md) | Shorter summary specification, kept in step with the code; defers to `system-specification.md` for detail |
+| [`system-specification.md`](system-specification.md) | The detailed baseline specification (draft v0.3), including the status-tracked Known Issues list — the only specification; `FEATURES.md` is the short overview |
 | [`scope-boundary-register.md`](scope-boundary-register.md) | What is in scope, unverified, defective or excluded (Deliverable B) |
 | [`requirements-traceability.md`](requirements-traceability.md) | Each requirement mapped to its implementation and verification (Deliverable C) |
 | [`open-questions-and-decisions.md`](open-questions-and-decisions.md) | Questions only the project owner can decide (Deliverable D) |

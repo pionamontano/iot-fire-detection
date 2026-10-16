@@ -16,7 +16,6 @@
 - [ ] Phones in frame: one for the **Telegram station chat** (Tier 2 only) and an admin's linked Telegram (Tier 1), one for the **SMS** (resident number and BFP number)
 - [ ] Safe way to trigger the sensors: **lower the thresholds first** (Alert Settings or admin Edit device) to just above room readings, then use a hair dryer at a safe distance for the DS18B20 and the smoke of an incense stick held away from the board for the MQ-7. **No open flame near the electronics** (see `HARDWARE_BENCH_TEST.md`).
 - [ ] Wait up to 10 minutes after changing thresholds (or reboot the node) so it picks them up
-- [ ] Admin → Settings: save the session timeouts once (none apply until saved), so the idle-timeout claim in Scene 4 holds
 - [ ] Browser zoom 110–125 %, notifications muted except for the demo ones, dark mode off for readability
 
 ---

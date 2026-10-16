@@ -52,7 +52,7 @@ These files create:
 - ✅ All functions (`get_auth_role`, `protect_profile_fields`, etc.)
 - ✅ All triggers (self-promotion protection)
 - ✅ All RLS policies
-- ✅ Default station info (`station_settings`). No session-timeout rows are created: idle sign-out stays off until an admin opens **Settings** and saves the timeouts
+- ✅ Default station info (`station_settings`). Session timeouts need no rows: the app applies 15 / 15 / 60 min (admin / responder / resident) until an admin saves other values in **Settings**
 - ✅ Fixes, enhancements, and new fields (like `telegram_chat_id` and `local_ip`)
 - ✅ Device registration with generated codes (`register_device`) and resident-set, admin-confirmed install locations (`update_own_device_location`, `devices.location_verified`) — `20261102000000_device_registration_location_verification.sql`
 - ✅ Station Information name and email columns (`station_settings.station_name`, `station_settings.email`) used by Responder Settings — `20261103000000_station_settings_name_email.sql` (no-op where they were already added by hand)
@@ -60,6 +60,7 @@ These files create:
 - ✅ Explicit Data API grants for every table, view, sequence and function, so the schema no longer depends on Supabase auto-granting `public` objects (new projects don't, from 2026-10-30) — `20261105000000_explicit_data_api_grants.sql` (GRANT-only; a no-op on a project created before that change)
 - ✅ Settings readable only by approved users, and `check_login_lockout` callable only by the `login` Edge Function — `20261106000000_close_settings_read_and_lockout_check_gaps.sql`
 - ✅ Removes grants on `devices`, `alert_events` and `devices_safe` that earlier migrations had revoked but that remained on older projects (no-op on a project built from these migrations) — `20261107000000_revoke_drifted_device_and_alert_grants.sql`
+- ✅ Users can no longer change their own `is_active` (a deactivated user cannot re-activate itself) — `20261108000000_protect_profile_is_active.sql`
 
 > [!IMPORTANT]
 > A migration that creates a table, view, sequence or function must also `GRANT` it to the roles that need it (`anon`, `authenticated`, `service_role`). New Supabase projects no longer do this automatically, so without the GRANT the object is unreachable through the API. See `20261105000000_explicit_data_api_grants.sql` for the pattern.
@@ -90,8 +91,6 @@ ON CONFLICT (id) DO UPDATE
 ```
 
 It should report `INSERT 0 1`. `INSERT 0 0` means the email did not match the user you just created.
-
-Then sign in as this admin, open **Settings** and press **Save** once: no session-timeout values exist until then, so idle sign-out is off.
 
 > [!CAUTION]
 > If you skip this step, you won't be able to log in as admin to approve other users.
