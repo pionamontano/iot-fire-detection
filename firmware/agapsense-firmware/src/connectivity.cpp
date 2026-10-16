@@ -1,5 +1,17 @@
 // ============================================================
-// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM, OTA  (v2.5)
+// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM, OTA  (v2.6)
+//
+// Changes from v2.5 (this file):
+//  [25] The FSM runs when either sensor has a reading (was: both).
+//       isTier1()/isTier2() ignore a sensor that never produced one, so
+//       an unplugged DS18B20 no longer disables CO detection and posting.
+//  [26] Sensor health check (KI-17): a sensor with no good reading for
+//       TEMP_STALE_MS / CO_STALE_MS is logged as a fault, and a failed
+//       temperature probe is reported as TEMP_FAULT_C instead of its
+//       frozen last value — unless that value was over threshold, which
+//       is kept so a probe that dies in a fire never clears the alert.
+//  [27] Tier 1 chirps: a 100 ms beep every 10 s alongside the yellow LED
+//       (was LED only). Tier 2 keeps its continuous buzzer.
 //
 // Changes from v2.4 (this file):
 //  [24] postTelemetry() now includes firmware_version (compiled-in
@@ -110,10 +122,26 @@ static void indicatorsOff() {
     digitalWrite(BUZZER_PIN,     LOW);
 }
 
-static void setTier1Indicators() {
+// [27] Tier 1 warning chirp: yellow LED plus one short beep every
+//      TIER1_CHIRP_INTERVAL_MS (the first as soon as Tier 1 starts), so a
+//      warning is audible but distinct from Tier 2's continuous buzzer.
+#ifndef TIER1_CHIRP_INTERVAL_MS
+#define TIER1_CHIRP_INTERVAL_MS 10000UL
+#endif
+#ifndef TIER1_CHIRP_MS
+#define TIER1_CHIRP_MS          100
+#endif
+
+static void setTier1Indicators(ConnectivityCtx* ctx) {
     digitalWrite(LED_YELLOW_PIN, HIGH);
     digitalWrite(LED_RED_PIN,    LOW);
-    digitalWrite(BUZZER_PIN,     LOW);
+    uint32_t now = millis();
+    if (ctx->lastChirp_ms == 0 || now - ctx->lastChirp_ms >= TIER1_CHIRP_INTERVAL_MS) {
+        ctx->lastChirp_ms = now ? now : 1;   // 0 means "chirp now"
+        digitalWrite(BUZZER_PIN, HIGH);
+        delay(TIER1_CHIRP_MS);
+    }
+    digitalWrite(BUZZER_PIN, LOW);
 }
 
 static void setTier2Indicators() {
@@ -142,13 +170,19 @@ static void updateBlueLed(ConnectivityCtx* ctx, bool online) {
 }
 
 // ── Threshold evaluators ───────────────────────────────────
-bool isTier2(float co_ppm, float temp_c, const ConnectivityCtx* ctx) {
-    return (co_ppm >= ctx->co_alert_ppm) && (temp_c >= ctx->temp_alert_c);
+// [25] A sensor that has never produced a reading counts as "not over
+//      threshold" instead of blocking the FSM, so the other sensor still
+//      alerts on its own (Tier 1) when one is unplugged or dead from boot.
+bool isTier2(float co_ppm, float temp_c, const ConnectivityCtx* ctx,
+             bool coValid, bool tempValid) {
+    return coValid && tempValid &&
+           (co_ppm >= ctx->co_alert_ppm) && (temp_c >= ctx->temp_alert_c);
 }
 
-bool isTier1(float co_ppm, float temp_c, const ConnectivityCtx* ctx) {
-    bool coHigh   = (co_ppm >= ctx->co_alert_ppm);
-    bool tempHigh = (temp_c >= ctx->temp_alert_c);
+bool isTier1(float co_ppm, float temp_c, const ConnectivityCtx* ctx,
+             bool coValid, bool tempValid) {
+    bool coHigh   = coValid   && (co_ppm >= ctx->co_alert_ppm);
+    bool tempHigh = tempValid && (temp_c >= ctx->temp_alert_c);
     return (coHigh || tempHigh) && !(coHigh && tempHigh);
 }
 
@@ -437,9 +471,9 @@ static bool performOtaUpdate(const char* url, const char* expectedMd5, Connectiv
             xSemaphoreTake(sensorMtx, 0) == pdTRUE) {
             SensorData sd = *sensorData;
             xSemaphoreGive(sensorMtx);
-            if (sd.sensor_ready && sd.co_valid && sd.temp_valid &&
-                (isTier1(sd.co_ppm, sd.temperature_c, ctx) ||
-                 isTier2(sd.co_ppm, sd.temperature_c, ctx))) {
+            if (sd.sensor_ready &&
+                (isTier1(sd.co_ppm, sd.temperature_c, ctx, sd.co_valid, sd.temp_valid) ||
+                 isTier2(sd.co_ppm, sd.temperature_c, ctx, sd.co_valid, sd.temp_valid))) {
                 CLOG("OTA: aborting — sensor reading crossed alert threshold mid-download");
                 Update.abort();
                 http.end();
@@ -624,6 +658,9 @@ void connectivityInit(ConnectivityCtx* ctx) {
     ctx->smsHold.clear();
     ctx->incidentSeq = 0;
     gsmSetIncidentSeq(0);
+    ctx->coFault      = false;
+    ctx->tempFault    = false;
+    ctx->lastChirp_ms = 0;
     strncpy(ctx->ownerNumber, OWNER_SMS_NUMBER_DEFAULT, sizeof(ctx->ownerNumber) - 1);
     strncpy(ctx->bfpNumber,   BFP_SMS_NUMBER_DEFAULT,   sizeof(ctx->bfpNumber)   - 1);
 
@@ -699,7 +736,9 @@ void connectivityUpdate(ConnectivityCtx* ctx,
 
     if (xSemaphoreTake(sensorMtx, pdMS_TO_TICKS(100)) == pdTRUE) {
         sd       = *sensorData;
-        haveData = sd.co_valid && sd.temp_valid;
+        // [25] One working sensor is enough to run the FSM and keep posting —
+        // previously a missing DS18B20 silenced CO detection entirely.
+        haveData = sd.co_valid || sd.temp_valid;
         xSemaphoreGive(sensorMtx);
     }
     if (xSemaphoreTake(gpsMtx, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -709,6 +748,30 @@ void connectivityUpdate(ConnectivityCtx* ctx,
 
     if (!haveData) { CLOG("Waiting for sensor data..."); return; }
 
+    // ── Step 3b: Sensor health (KI-17) ───────────────────────
+    // [26] A sensor with no good reading for *_STALE_MS (never read, unplugged,
+    // or failing) is logged once as a fault. The FSM keeps using its last value,
+    // so a probe that dies while over threshold never clears an alert. But a
+    // failed probe's below-threshold value is not reported as if it were live:
+    // the backend gets TEMP_FAULT_C instead, so the fault shows on the dashboard.
+    // last_*_ms is 0 until the first good reading, so a sensor that never
+    // answers is also flagged once the limit has passed since boot.
+    const bool coFresh   = (now - sd.last_co_ms)   <= CO_STALE_MS;
+    const bool tempFresh = (now - sd.last_temp_ms) <= TEMP_STALE_MS;
+    const bool tempOk    = sd.temp_valid && tempFresh;
+    if (coFresh == ctx->coFault) {
+        ctx->coFault = !coFresh;
+        if (ctx->coFault) CLOG("FAULT: no CO reading for %lu s — alerts use temperature only", CO_STALE_MS / 1000);
+        else              CLOG("CO sensor reading again");
+    }
+    if (tempFresh == ctx->tempFault) {
+        ctx->tempFault = !tempFresh;
+        if (ctx->tempFault) CLOG("FAULT: no temperature reading for %lu s — reporting %.0f °C, alerts use CO only",
+                                 TEMP_STALE_MS / 1000, TEMP_FAULT_C);
+        else                CLOG("Temperature sensor reading again");
+    }
+    if (!tempOk && sd.temperature_c < ctx->temp_alert_c) sd.temperature_c = TEMP_FAULT_C;
+
     ctx->batteryMv = readBatteryMv();
 
     // ── Step 4: Alert FSM (suppressed until sensor_ready) ───
@@ -716,9 +779,12 @@ void connectivityUpdate(ConnectivityCtx* ctx,
         CLOG("Sensor warm-up in progress — alert FSM suppressed");
         indicatorsOff();
     } else {
-        bool tier2Now = isTier2(sd.co_ppm, sd.temperature_c, ctx);
-        bool tier1Now = isTier1(sd.co_ppm, sd.temperature_c, ctx);
+        bool tier2Now = isTier2(sd.co_ppm, sd.temperature_c, ctx, sd.co_valid, sd.temp_valid);
+        bool tier1Now = isTier1(sd.co_ppm, sd.temperature_c, ctx, sd.co_valid, sd.temp_valid);
         bool safeNow  = !tier1Now && !tier2Now;
+
+        // Every entry into Tier 1 (from CLEAR or down from Tier 2) chirps at once.
+        if (ctx->alertTier != AlertTier::TIER1) ctx->lastChirp_ms = 0;
 
         switch (ctx->alertTier) {
 
@@ -749,7 +815,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                             ctx->alertTier      = AlertTier::TIER1;
                             ctx->alertRiseCount = 0;   // [21] reset so TIER1→TIER2 debounce starts fresh
                             ctx->alertFallCount = 0;
-                            setTier1Indicators();
+                            setTier1Indicators(ctx);
                             CLOG("TIER 1 WARNING — single sensor over threshold");
                             fireTier1Warning(ctx, sd, fix);
                         }
@@ -761,7 +827,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
 
             // ── TIER 1 ────────────────────────────────────
             case AlertTier::TIER1:
-                setTier1Indicators();
+                setTier1Indicators(ctx);
                 if (tier2Now) {
                     ctx->alertRiseCount++;
                     if (ctx->alertRiseCount >= ALERT_DEBOUNCE_COUNT) {
@@ -809,7 +875,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                         ctx->alertTier      = AlertTier::TIER1;
                         ctx->alertRiseCount = 0;
                         ctx->alertFallCount = 0;
-                        setTier1Indicators();
+                        setTier1Indicators(ctx);
                     }
                 } else {
                     ctx->alertFallCount = 0;

@@ -24,6 +24,23 @@ struct SensorData {
     uint32_t last_temp_ms;
 };
 
+// ── Sensor freshness (KI-17) ───────────────────────────────
+// A sensor whose last good reading is older than this is reported as failed
+// (connectivity.cpp logs it and stops presenting the frozen value as live).
+// The duty-cycle MQ-7 takes no readings while heating, so its limit covers
+// a whole heating phase.
+#define TEMP_STALE_MS       30000UL   // ~6 missed DS18B20 reads
+#ifdef MQ7_CONTINUOUS_5V
+  #define CO_STALE_MS       30000UL   // ~6 missed MQ-7 reads
+#else
+  #define CO_STALE_MS       (MQ7_HEAT_DURATION_MS + 30000UL)
+#endif
+
+// Temperature reported to the backend for a probe with no usable reading —
+// the same value DallasTemperature uses for a disconnected sensor, so it reads
+// as a fault on the dashboard rather than as a plausible room temperature.
+#define TEMP_FAULT_C        (-127.0f)
+
 // ── MQ-7 Phase ─────────────────────────────────────────────
 enum class MQ7Phase { HEATING, MEASURING };
 

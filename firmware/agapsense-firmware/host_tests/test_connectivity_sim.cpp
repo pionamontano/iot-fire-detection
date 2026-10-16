@@ -97,17 +97,22 @@ struct Dev {
     ConnectivityCtx ctx{};
     SensorData sd{}; GpsFix fix{};
     bool gsmPaused = false;
+    bool coDead = false, tempDead = false;   // sensor stopped answering: its last-reading time stops advancing
     void boot() {
         ctx = ConnectivityCtx{};
         sd.co_valid = sd.temp_valid = sd.sensor_ready = true; sd.co_ppm = 5; sd.temperature_c = 25;
+        sd.last_co_ms = sd.last_temp_ms = g_hal.now;
         fix.lat = 14.5995; fix.lng = 120.9842; fix.valid = true;
         connectivityInit(&ctx);
     }
+    void noProbe() { sd.temp_valid = false; sd.temperature_c = 0; sd.last_temp_ms = 0; tempDead = true; }   // DS18B20 absent from boot
     void readings(float co, float t) { sd.co_ppm = co; sd.temperature_c = t; }
     void safe()  { readings(5, 25); }
     void tier1() { readings(250, 25); }
     void tier2() { readings(250, 90); }
     void tick() {                       // one connectivity-task iteration + GSM task + 2 s delay (as main.cpp)
+        if (!coDead)   sd.last_co_ms   = g_hal.now;   // the sensor tasks keep refreshing their readings
+        if (!tempDead) sd.last_temp_ms = g_hal.now;
         esp_task_wdt_reset();
         connectivityUpdate(&ctx, &sd, (SemaphoreHandle_t)1, &fix, (SemaphoreHandle_t)1);
         uint32_t t = g_hal.now; if (!gsmPaused) gsmProcessQueue(); g_hal.now = t;   // GSM task runs concurrently: don't charge its time
@@ -124,6 +129,52 @@ static int countCalls(const char* what) { int n = 0; for (auto& c : g_hal.calls)
 static std::vector<uint32_t> callTimes(const char* what) { std::vector<uint32_t> v; for (auto& c : g_hal.calls) if (c.url.find(what) != std::string::npos) v.push_back(c.atMs); return v; }
 static uint32_t maxWdtGap() { uint32_t m = 0; for (size_t i = 1; i < g_hal.wdtAt.size(); i++) { uint32_t g = g_hal.wdtAt[i] - g_hal.wdtAt[i-1]; if (g > m) m = g; } return m; }
 static int reportsFor(const std::string& id, const std::string& role) { int n = 0; for (auto& r : srv.reports) if (r.id == id && r.role == role) ++n; return n; }
+static std::string lastField(const char* what, const char* key) { std::string v; for (auto& c : g_hal.calls) if (c.url.find(what) != std::string::npos) v = field(c.payload, key); return v; }
+
+// Sensor faults (KI-17): a missing or failed sensor must not silence the other one, must not clear an alert,
+// and must show as a fault (-127 °C) instead of a frozen plausible value.
+static int buzzerOnWrites() { int n = 0; for (auto& w : g_hal.pinWrites) if (w.first == BUZZER_PIN && w.second == HIGH) ++n; return n; }
+static void c01_tier1_chirps() {
+    printf("C01 Tier 1 chirps: one beep at once, then one every 10 s (not every tick); silent again after CLEAR\n");
+    world(); Dev d; d.boot(); d.run(10);
+    g_hal.pinWrites.clear(); d.tier1(); d.run(8);           // 3-tick rise, then Tier 1
+    CHECK(d.ctx.alertTier == AlertTier::TIER1, "Tier 1 raised");
+    CHECK(buzzerOnWrites() == 1, "chirped once on entering Tier 1 (got %d)", buzzerOnWrites());
+    g_hal.pinWrites.clear(); d.run(60);
+    CHECK(buzzerOnWrites() >= 5 && buzzerOnWrites() <= 7, "about one chirp per 10 s over 60 s (got %d)", buzzerOnWrites());
+    d.safe(); d.run(10); g_hal.pinWrites.clear(); d.run(30);
+    CHECK(d.ctx.alertTier == AlertTier::CLEAR && buzzerOnWrites() == 0, "no chirps after CLEAR (got %d)", buzzerOnWrites());
+}
+static void f01_no_probe_from_boot() {
+    printf("F01 DS18B20 missing from boot: readings still posted (temp -127), CO alone raises Tier 1\n");
+    world(); Dev d; d.boot(); d.noProbe(); d.run(40);
+    CHECK(countCalls("ingest-reading") >= 1, "telemetry posted without a temperature probe (got %d)", countCalls("ingest-reading"));
+    CHECK(lastField("ingest-reading", "temp_celsius") == "-127.00", "fault value reported (got %s)", lastField("ingest-reading", "temp_celsius").c_str());
+    d.tier1(); d.run(20);
+    CHECK(srv.alertTiers.size() == 1 && srv.alertTiers[0] == 1, "one tier-1 POST from CO alone (got %zu)", srv.alertTiers.size());
+    CHECK(d.ctx.alertTier == AlertTier::TIER1, "device in TIER1");
+    CHECK(lastField("trigger-alert", "temp_celsius") == "-127.00", "alert carries the fault value, not a made-up temperature");
+    CHECK(g_hal.smsSent.empty(), "Tier 1 sends no SMS (got %zu)", g_hal.smsSent.size());
+}
+static void f02_probe_fails_at_room_temperature() {
+    printf("F02 DS18B20 stops answering at room temperature: reported as -127 after the stale limit, CO still alerts, recovery restores it\n");
+    world(); Dev d; d.boot(); d.run(10);
+    d.tempDead = true; d.run(70);
+    CHECK(lastField("ingest-reading", "temp_celsius") == "-127.00", "frozen 25 C no longer reported as live (got %s)", lastField("ingest-reading", "temp_celsius").c_str());
+    d.tier1(); d.run(20);
+    CHECK(srv.alertTiers.size() == 1 && srv.alertTiers[0] == 1, "CO still raises Tier 1 (got %zu)", srv.alertTiers.size());
+    d.tempDead = false; d.run(40);
+    CHECK(lastField("ingest-reading", "temp_celsius") == "25.00", "live value again once the probe answers (got %s)", lastField("ingest-reading", "temp_celsius").c_str());
+}
+static void f03_probe_dies_hot_during_tier2() {
+    printf("F03 DS18B20 dies while over threshold in a Tier 2: alert held, hot value still reported, nothing re-sent\n");
+    world(); Dev d; d.boot(); d.tier2(); d.run(20);
+    CHECK(d.ctx.alertTier == AlertTier::TIER2, "Tier 2 raised");
+    d.tempDead = true; d.run(120);
+    CHECK(d.ctx.alertTier == AlertTier::TIER2, "not de-escalated by a dead probe");
+    CHECK(lastField("ingest-reading", "temp_celsius") == "90.00", "last hot value kept (got %s)", lastField("ingest-reading", "temp_celsius").c_str());
+    CHECK(srv.alertTiers.size() == 1, "no extra alert POST (got %zu)", srv.alertTiers.size());
+}
 
 // ── scenarios ────────────────────────────────────────────────
 // BFP contact changes made by an admin on the Devices page (devices.bfp_contact). The device
@@ -464,6 +515,8 @@ int main() {
     r08_reassert_after_failure(); r09_offline_longer_than_interval(); r10_reboot_during_incident(); r11_200_without_usable_id(); r12_wdt_with_slow_failures();
     r06c_two_ready_results_one_failing_report_per_tick(); r12b_wdt_alert_after_config_and_telemetry_coincide(); r12c_wdt_telemetry_and_report_coincide();
     b01_cleared_bfp_contact_is_not_texted(); b02_replaced_bfp_contact_is_used_at_once(); b03_cleared_at_boot_and_server_down();
+    f01_no_probe_from_boot(); f02_probe_fails_at_room_temperature(); f03_probe_dies_hot_during_tier2();
+    c01_tier1_chirps();
     printf("\n%d checks, %d failed\n", g_checks, g_fails);
     return g_fails ? 1 : 0;
 }
