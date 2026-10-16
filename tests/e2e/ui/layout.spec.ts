@@ -13,8 +13,7 @@ const SHELLS: { who: AccountName; home: string; activeLink: string; mobileBelow:
   { who: 'resident', home: '/home', activeLink: 'Dashboard', mobileBelow: 1024 },
 ];
 
-// The hamburger has no accessible name (see README "Findings"), so find it by its icon.
-const menuToggle = (page: Page) => page.locator('header button').filter({ has: page.locator('svg[class*="lucide-menu"], svg[class*="lucide-x"]') });
+const menuToggle = (page: Page) => page.getByRole('button', { name: /^(Open|Close) menu$/ });
 const backdrop = (page: Page) => page.locator('div.fixed.inset-0').filter({ hasNot: page.locator('*') });
 
 for (const shell of SHELLS) {
@@ -45,12 +44,16 @@ for (const shell of SHELLS) {
         test('hamburger slides the sidebar in over a backdrop; backdrop tap closes it', async ({ page }) => {
           const nav = page.getByRole('navigation', { name: 'Main' });
           await expect(nav).not.toBeInViewport();
-          await menuToggle(page).click();
+          const open = page.getByRole('button', { name: 'Open menu' });
+          await expect(open).toHaveAttribute('aria-expanded', 'false');
+          await open.click();
           await expect(nav).toBeInViewport();
+          await expect(page.getByRole('button', { name: 'Close menu' })).toHaveAttribute('aria-expanded', 'true');
           await expect(backdrop(page)).toBeVisible();
           await backdrop(page).click({ position: { x: width - 10, y: 450 } });
           await expect(nav).not.toBeInViewport();
           await expect(backdrop(page)).toHaveCount(0);
+          await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible();
         });
 
         test('choosing a link closes the sidebar', async ({ page }) => {
