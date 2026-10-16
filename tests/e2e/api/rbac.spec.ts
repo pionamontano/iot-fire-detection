@@ -285,6 +285,34 @@ test.describe('settings and station settings', () => {
   });
 });
 
+// Beneath RLS: these privileges must be absent, not merely filtered to zero rows. Production had
+// drifted on exactly these until 20261107000000.
+test.describe('privileges (defence in depth beneath RLS)', () => {
+  const PERMISSION_DENIED = '42501';
+
+  test('nobody can read devices.api_key from the base table, admins included', async () => {
+    for (const c of [anonClient(), await clientAs('admin'), await clientAs('responder'), await clientAs('resident')]) {
+      const { error } = await c.from('devices').select('api_key').limit(1);
+      expect(error?.code).toBe(PERMISSION_DENIED);
+    }
+  });
+
+  test('anonymous callers cannot read devices at all', async () => {
+    const { error } = await anonClient().from('devices').select('id').limit(1);
+    expect(error?.code).toBe(PERMISSION_DENIED);
+  });
+
+  test('clients cannot insert or update alert_events directly', async () => {
+    const device = await deviceByCode(DEVICES.resident.device_code);
+    for (const c of [anonClient(), await clientAs('admin'), await clientAs('responder')]) {
+      const ins = await c.from('alert_events').insert({ device_id: device.id, alert_tier: 1, co_ppm: 60, temp_celsius: 30 });
+      expect(ins.error?.code).toBe(PERMISSION_DENIED);
+      const upd = await c.from('alert_events').update({ incident_status: 'acknowledged' }).eq('device_id', device.id);
+      expect(upd.error?.code).toBe(PERMISSION_DENIED);
+    }
+  });
+});
+
 test.describe('registration requests', () => {
   test('a user reads only their own request and cannot review it', async () => {
     const self = await profileByEmail(ACCOUNTS.resident.email);

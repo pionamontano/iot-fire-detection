@@ -32,6 +32,17 @@ for (const { who, home, forbidden } of isolation) {
   });
 }
 
+// Admin pages read the base devices table with an explicit column list; this fails loudly if the
+// column-level SELECT grant (20261107000000) and DEVICE_COLUMNS ever disagree.
+for (const path of ['/admin/devices', '/admin/status']) {
+  test(`admin ${path} lists devices without a permission error`, async ({ page }) => {
+    await useSession(page, 'admin');
+    await page.goto(path);
+    await expect(page.getByText('E2E-RES-1').first()).toBeVisible();
+    await expect(page.getByText(/permission denied/i)).toHaveCount(0);
+  });
+}
+
 test('/ sends a signed-in user to their role home', async ({ page }) => {
   await useSession(page, 'responder');
   await page.goto('/');
