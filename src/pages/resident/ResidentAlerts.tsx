@@ -2,14 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { AlertEvent } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Filter, FileText, Flame, RefreshCw, ThermometerSun } from 'lucide-react';
+import { Check, Filter, FileText, Flame, Loader2, RefreshCw, ThermometerSun } from 'lucide-react';
 import { TableBodySkeleton } from '../../components/SkeletonLoaders';
 import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll, TableEmpty, TablePager, TABLE_PAGE_SIZE } from '../../components/Table';
 import { usePagedRows } from '../../hooks/usePagedRows';
 import { AlertStatusPill } from '../../components/StatusBadge';
 import { formatEventTime } from '../../lib/alertText';
 import { PageHeader } from '../../components/PageHeader';
-import { BTN_SECONDARY } from '../../components/ui';
+import { BTN_SECONDARY, ErrorNote } from '../../components/ui';
+import { RESIDENT_RESOLVE_CONFIRM, residentResolveWarning } from '../../lib/incidents';
 
 // The resident's one alert page (it replaced the separate resident System
 // Log): every alert their device raised, filtered by date range, tier and
@@ -48,6 +49,9 @@ export const ResidentAlerts = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  // Open Tier 1 warning being resolved by the resident, and the last error doing so.
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [resolveError, setResolveError] = useState<string | null>(null);
 
   const [fromDate, setFromDate] = useState(() => daysAgo(30));
   const [toDate, setToDate] = useState(() => localDate(new Date()));
@@ -114,6 +118,17 @@ export const ResidentAlerts = () => {
     setRefreshing(true);
     await fetchAlerts();
     setRefreshing(false);
+  };
+
+  // Tier 1 warnings never reach responders, so the resident closes them; fire alerts stay with responders.
+  const handleResolve = async (alertId: string) => {
+    if (resolvingId || !window.confirm(RESIDENT_RESOLVE_CONFIRM)) return;
+    setResolvingId(alertId);
+    setResolveError(null);
+    const result = await residentResolveWarning(supabase, alertId);
+    if (!result.ok) setResolveError(result.message);
+    if (result.ok || result.refresh) await fetchAlerts();
+    setResolvingId(null);
   };
 
   const activeCount = alerts.filter(a => !a.resolved_at).length;
@@ -196,6 +211,8 @@ export const ResidentAlerts = () => {
         </div>
       </div>
 
+      {resolveError && <ErrorNote message={resolveError} />}
+
       {/* Table */}
       <div className={TABLE_CARD}>
         <TableScroll>
@@ -248,7 +265,22 @@ export const ResidentAlerts = () => {
                     </div>
                   </td>
                   <td className={`${TD} text-xs text-text-body whitespace-nowrap`}>
-                    {alert.resolved_at ? formatEventTime(alert.resolved_at) : '—'}
+                    {alert.resolved_at ? (
+                      <>
+                        {formatEventTime(alert.resolved_at)}
+                        {alert.resolution_source === 'resident' && <span className="block text-[10px] text-text-faint">Marked resolved</span>}
+                        {alert.resolution_source === 'device' && <span className="block text-[10px] text-text-faint">Cleared by device</span>}
+                      </>
+                    ) : alert.alert_tier === 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => handleResolve(alert.id)}
+                        disabled={!!resolvingId}
+                        className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-border bg-surface-card text-xs font-bold text-text-body hover:bg-surface disabled:opacity-50"
+                      >
+                        {resolvingId === alert.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Resolve
+                      </button>
+                    ) : '—'}
                   </td>
                 </tr>
               ))}

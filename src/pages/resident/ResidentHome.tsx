@@ -21,6 +21,7 @@ import type { PushState } from '../../lib/pushNotifications';
 import { LocationBadge } from '../../components/LocationBadge';
 import { AlertStatusPill } from '../../components/StatusBadge';
 import { EMERGENCY_CONTACTS, telHref } from '../../lib/emergencyContacts';
+import { RESIDENT_RESOLVE_CONFIRM, residentResolveWarning } from '../../lib/incidents';
 
 // The resident's home page, in the order a resident asks: is my home OK right
 // now (status panel), what is the device measuring (readings), will I be told
@@ -69,7 +70,8 @@ const SectionLink = ({ to, children }: { to: string; children: React.ReactNode }
   </Link>
 );
 
-// Responder progress on an open alert, from the incident fields responders update.
+// Responder progress on an open fire alert, from the incident fields responders update.
+// Tier 1 warnings never go to responders, so they show none of this.
 const INCIDENT_STEP: Record<string, string> = {
   active: 'Waiting for a responder',
   acknowledged: 'A responder has acknowledged',
@@ -324,6 +326,10 @@ export const ResidentHome = () => {
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
 
+  // Resolving an open Tier 1 warning from the status panel
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+
   const fetchData = useCallback(async (deviceId: string) => {
     try {
       const windowStart = new Date(Date.now() - ALERT_COUNT_DAYS * 86_400_000);
@@ -515,22 +521,32 @@ export const ResidentHome = () => {
     { label: 'Device', value: device.device_code, sub: device.label || undefined },
   ];
 
-  // Responder progress and "BFP notified" for the open alert, when there is one.
-  const responderLine = openAlert && (
+  // Responder progress and "BFP notified" for the open fire alert, when there is one.
+  const responderLine = openFire && (
     <div className="flex flex-wrap gap-2">
-      {openAlert.sms_sent_bfp && (
+      {openFire.sms_sent_bfp && (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 border border-black/10 px-2.5 py-1 text-xs font-bold text-text">
           <Check className="w-3.5 h-3.5 text-success-dark" /> BFP notified by SMS
         </span>
       )}
       <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 border border-black/10 px-2.5 py-1 text-xs font-bold text-text">
-        <ShieldCheck className="w-3.5 h-3.5 text-primary" /> {INCIDENT_STEP[openAlert.incident_status ?? 'active'] ?? INCIDENT_STEP.active}
+        <ShieldCheck className="w-3.5 h-3.5 text-primary" /> {INCIDENT_STEP[openFire.incident_status ?? 'active'] ?? INCIDENT_STEP.active}
       </span>
     </div>
   );
   const offlineDuringAlert = openAlert && isOffline && (
     <p className="text-xs font-semibold">Your device is also offline (last report {lastReportAgo ?? 'never'}), so these readings may be out of date.</p>
   );
+
+  const handleResolveWarning = async (alertId: string) => {
+    if (!window.confirm(RESIDENT_RESOLVE_CONFIRM)) return;
+    setResolving(true);
+    setResolveError(null);
+    const result = await residentResolveWarning(supabase, alertId);
+    if (!result.ok) setResolveError(result.message);
+    if (result.ok || result.refresh) await fetchData(device.id);
+    setResolving(false);
+  };
 
   const hero = (() => {
     switch (status) {
@@ -550,12 +566,28 @@ export const ResidentHome = () => {
         );
       case 'warning':
         return (
-          <StatusHero status={status} icon={ThermometerSun} title="Warning" facts={heroFacts} action={<SectionLink to="/home/alerts">View alert</SectionLink>}>
+          <StatusHero
+            status={status}
+            icon={ThermometerSun}
+            title="Warning"
+            facts={heroFacts}
+            action={
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <button type="button" onClick={() => handleResolveWarning(openAlert!.id)} disabled={resolving} className={BTN_SECONDARY}>
+                  {resolving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Mark as resolved
+                </button>
+                <SectionLink to="/home/alerts">View alert</SectionLink>
+              </div>
+            }
+          >
             <p>
               A reading went over its alert level ({openAlert!.temp_celsius?.toFixed(1)} °C, {openAlert!.co_ppm?.toFixed(0)} ppm, {formatEventTime(openAlert!.triggered_at, now)}).
               Check the room for heat, smoke or a gas source.
             </p>
-            {responderLine}
+            <p className="text-xs">
+              Warnings are not sent to fire responders, so no one else will close this. Once you have checked the room, mark it as resolved; it also clears on its own when readings return to normal.
+            </p>
+            {resolveError && <p role="alert" className="text-xs font-semibold text-primary">{resolveError}</p>}
             {offlineDuringAlert}
           </StatusHero>
         );

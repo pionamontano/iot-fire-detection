@@ -99,3 +99,37 @@ export const transitionIncident = async (
     return { ok: false, message: 'Network problem: the update may not have been applied. Please check and retry.', refresh: true };
   }
 };
+
+// ---- Resident: close their own Tier 1 warning (migration 20261109000000) ----
+// A warning never reaches responders, so the resident is the one who can say it has been handled. Fire alerts (Tier 2) stay with responders and admins.
+
+export const RESIDENT_RESOLVE_CONFIRM =
+  'Mark this warning as resolved? Do this only after checking the room. A resolved warning cannot be reopened; ' +
+  'if the readings rise again you will get a new alert.';
+
+/** Maps the SQLSTATEs raised by resident_resolve_warning() to messages a resident can act on. */
+export const describeResidentResolveError = (error: RpcErrorLike | null | undefined): IncidentActionError => {
+  switch (error?.code) {
+    case '42501':
+      return { message: 'Your account cannot resolve alerts. It must be approved, active and linked to this device.', refresh: false };
+    case '55000':
+      return { message: 'This alert was already closed or has become a fire alert, so it can no longer be resolved here.', refresh: true };
+    case 'P0002':
+      return { message: 'This alert no longer exists.', refresh: true };
+    case 'PGRST202':
+      return { message: 'Resolving warnings is unavailable until the database update (resident_resolve_warning) has been applied.', refresh: false };
+    default:
+      return { message: error?.message ? `Could not resolve the warning: ${error.message}` : 'Could not resolve the warning. Please try again.', refresh: false };
+  }
+};
+
+/** Calls resident_resolve_warning. Never throws: a network failure becomes an error result. */
+export const residentResolveWarning = async (client: RpcClient, alertId: string): Promise<TransitionResult> => {
+  try {
+    const { data, error } = await client.rpc('resident_resolve_warning', { p_alert_id: alertId });
+    if (error) return { ok: false, ...describeResidentResolveError(error) };
+    return { ok: true, incident: data };
+  } catch {
+    return { ok: false, message: 'Network problem: the warning may not have been resolved. Please check and retry.', refresh: true };
+  }
+};
