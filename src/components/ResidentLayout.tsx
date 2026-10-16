@@ -33,6 +33,8 @@ export const ResidentLayout = () => {
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 text-white/80 hover:text-white rounded-md lg:hidden shrink-0"
+            aria-label={isSidebarOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={isSidebarOpen}
           >
             {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
           </button>

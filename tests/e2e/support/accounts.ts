@@ -56,6 +56,8 @@ export const ACCOUNTS = {
   lockTier1: acct('lock.tier1', { fullName: 'E2E Lock 1', role: 'resident', setupComplete: true }),
   lockTier3: acct('lock.tier3', { fullName: 'E2E Lock 3', role: 'resident', setupComplete: true }),
   lockTier3b: acct('lock.tier3b', { fullName: 'E2E Lock 3b', role: 'resident', setupComplete: true }),
+  lockTier3c: acct('lock.tier3c', { fullName: 'E2E Lock 3c', role: 'resident', setupComplete: true }),
+  lockTier2: acct('lock.tier2', { fullName: 'E2E Lock 2', role: 'resident', setupComplete: true }),
   lockApi: acct('lock.api', { fullName: 'E2E Lock API', role: 'resident', setupComplete: true }),
   lockOverride: acct('lock.override', { fullName: 'E2E Lock Override', role: 'resident', setupComplete: true }),
 } satisfies Record<string, Account>;
