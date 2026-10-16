@@ -11,7 +11,7 @@ Companion to [`system-specification.md`](system-specification.md) §5.3 (baselin
 | Capability / component | Class | Current status | Evidence | Boundary | Approval needed |
 |---|---|---|---|---|---|
 | CO + temperature multi-sensor detection, Tier 1/Tier 2 | A | Verified (code); accuracy Unverified; hardware untested | `connectivity.cpp:126-134`; `trigger-alert:325-339` | Included — thresholds/logic changes need rule-8 review | Ratify (OQ-01); calibration plan (OQ-10) |
-| MQ-7 reading: duty-cycle build (60 s/90 s) and constant-5V build (v2.2.0, per `platformio.ini` the deployed wiring); ppm model | A | Verified (code) | `sensors.cpp` (both branches); `platformio.ini` | Included; no recalibration or sensor swap without review. Release workflow builds the wrong variant (spec KI-32) | Accuracy tolerance NS-RA |
+| MQ-7 reading: duty-cycle build (60 s/90 s) and constant-5V build (v2.2.0, per `platformio.ini` the deployed wiring); ppm model | A | Verified (code) | `sensors.cpp` (both branches); `platformio.ini` | Included; no recalibration or sensor swap without review. Release workflow builds `esp32dev_mq7_5v` by default (KI-32 fixed) | Accuracy tolerance NS-RA |
 | DS18B20 temperature reading | A | Verified (code); stale-value gap | `sensors.cpp:137-156`; KI-17 | Included; freshness logic = **Hold** | OQ-09 |
 | GPS capture (NEO-6M), cached fix, `gps_valid` | A | Verified (code) | `gps.cpp` | Included | — |
 | Reverse geocoding (Nominatim, tiered address) | A | Verified (code); service Unverified | `trigger-alert:20-79` | Included; provider change excluded | Provider swap needs approval |
@@ -47,7 +47,7 @@ Companion to [`system-specification.md`](system-specification.md) §5.3 (baselin
 | Fabricated metrics ("System Uptime 99.98%", "connectivity %") | — | **Removed** (KI-01/02 fixed) | — | — | — |
 | Online/offline status definition | A | Verified: one helper everywhere (KI-03 fixed) | `lib/deviceStatus.ts` | Included | — |
 | Account deactivation (`manage-user`) | A | Verified (code) | `manage-user`; `20261030000000` | Included; self-reactivation fixed (KI-10, `20261108000000`) | Security review (rule 6) done locally; owner sign-off |
-| OTA firmware updates and firmware releases | A | Verified (code); untested on hardware | `connectivity.cpp`; `get-device-config`; `firmware_releases`; KI-31, KI-32 | Included; image signing = proposal | Owner (MD5 / signing policy) |
+| OTA firmware updates and firmware releases | A | Verified (code); untested on hardware | `connectivity.cpp`; `get-device-config`; `firmware_releases`; KI-31; KI-32 fixed | Included; image signing = proposal | Owner (MD5 / signing policy) |
 | Data retention / archival | D | Not specified | FR-ALERT-006 | Excluded | OQ-12 |
 | Privacy notice / consent flows | D | Not present | — | Excluded | OQ-13 |
 | SLA, availability, performance targets | D | NS-RA | — | Excluded | OQ-24 |

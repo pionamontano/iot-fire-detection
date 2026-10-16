@@ -5,8 +5,12 @@ name: Firmware release
 # It does NOT roll anything out: register the printed version/URL/MD5 in the admin
 # Devices page (add release -> test on one device -> push to fleet).
 #
-# Trigger: push a tag like  firmware-v2.1.1  (the tag's version becomes FIRMWARE_VERSION),
+# Trigger: push a tag like  firmware-v2.2.1  (the tag's version becomes FIRMWARE_VERSION),
 # or run manually and give the version.
+#
+# Builds ONE PlatformIO env, by default esp32dev_mq7_5v: the constant-5V MQ-7 wiring every
+# deployed node uses (see platformio.ini). esp32dev (heater-PWM wiring) can be chosen on a
+# manual run. Flashing the build that does not match a node's wiring gives wrong CO readings.
 
 on:
   push:
@@ -14,8 +18,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Firmware version, e.g. 2.1.1 (no "v" prefix)'
+        description: 'Firmware version, e.g. 2.2.1 (no "v" prefix)'
         required: true
+      env:
+        description: 'PlatformIO env (must match the nodes'' MQ-7 wiring)'
+        type: choice
+        options: [esp32dev_mq7_5v, esp32dev]
+        default: esp32dev_mq7_5v
 
 permissions:
   contents: read
@@ -36,16 +45,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve version
+      - name: Resolve version and env
         id: ver
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_ENV: ${{ github.event.inputs.env }}
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME#firmware-v}"; else v="$INPUT_VERSION"; fi
           if ! printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'; then
             echo "Invalid firmware version: '$v'"; exit 1
           fi
+          e="${INPUT_ENV:-esp32dev_mq7_5v}"
+          case "$e" in esp32dev_mq7_5v|esp32dev) ;; *) echo "Not a production env: '$e'"; exit 1 ;; esac
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "env=$e" >> "$GITHUB_OUTPUT"
 
       - name: Check required secrets
         run: |
@@ -88,15 +101,58 @@ jobs:
           open('config.h', 'w', encoding='utf-8').write(s)
           PY
 
+      # Envs that set -D FIRMWARE_VERSION in platformio.ini (the esp32dev_mq7_5v family) override
+      # config.h, so the tag's version must replace that flag too. Only this CI checkout is changed.
+      - name: Apply version to the env's build flags
+        working-directory: firmware/agapsense-firmware
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          PIO_ENV: ${{ steps.ver.outputs.env }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          env, version = os.environ['PIO_ENV'], os.environ['VERSION']
+          text = open('platformio.ini', encoding='utf-8').read()
+          parts = re.split(r'(?m)^(?=\[)', text)
+          head = '[env:%s]' % env
+          hits = [i for i, p in enumerate(parts) if p.startswith(head + '\n') or p.startswith(head + '\r')]
+          assert len(hits) == 1, 'env section not found: ' + env
+          i = hits[0]
+          # platformio.ini form:  -D FIRMWARE_VERSION='"2.2.0"'
+          flag = re.compile(r"""(-D\s*FIRMWARE_VERSION=)'"[^"]*"'""")
+          new, n = flag.subn(lambda m: m.group(1) + "'\"" + version + "\"'", parts[i])
+          assert n <= 1, 'FIRMWARE_VERSION defined more than once in ' + head
+          parts[i] = new
+          open('platformio.ini', 'w', encoding='utf-8').write(''.join(parts))
+          print(('set %s FIRMWARE_VERSION to %s' if n else '%s takes FIRMWARE_VERSION from config.h (%s)') % (head, version))
+          PY
+
+      # Only the chosen env: a bare `pio run` would also build test_components, which needs a
+      # git-ignored secrets file.
       - name: Build
         working-directory: firmware/agapsense-firmware
-        run: pio run
+        env:
+          PIO_ENV: ${{ steps.ver.outputs.env }}
+        run: pio run -e "$PIO_ENV"
+
+      - name: Check the image reports the release version
+        working-directory: firmware/agapsense-firmware
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          PIO_ENV: ${{ steps.ver.outputs.env }}
+        run: |
+          # FIRMWARE_VERSION is compiled in as a string (telemetry + OTA comparison), so it must be in the image.
+          if ! grep -aqF -- "${VERSION}" ".pio/build/${PIO_ENV}/firmware.bin"; then
+            echo "Built image does not contain version ${VERSION}"; exit 1
+          fi
 
       - name: Checksum
         id: sum
         working-directory: firmware/agapsense-firmware
+        env:
+          PIO_ENV: ${{ steps.ver.outputs.env }}
         run: |
-          f=.pio/build/esp32dev/firmware.bin
+          f=".pio/build/${PIO_ENV}/firmware.bin"
           test -s "$f"
           echo "md5=$(md5sum "$f" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "size=$(stat -c %s "$f")" >> "$GITHUB_OUTPUT"
@@ -106,13 +162,14 @@ jobs:
         working-directory: firmware/agapsense-firmware
         env:
           VERSION: ${{ steps.ver.outputs.version }}
+          PIO_ENV: ${{ steps.ver.outputs.env }}
         run: |
-          path="agapsense-${VERSION}.bin"
+          path="agapsense-${VERSION}-${PIO_ENV}.bin"
           code=$(curl -sS -o resp.txt -w '%{http_code}' -X POST \
             "${SUPABASE_URL}/storage/v1/object/${FIRMWARE_BUCKET}/${path}" \
             -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
             -H "Content-Type: application/octet-stream" \
-            --data-binary @.pio/build/esp32dev/firmware.bin)
+            --data-binary "@.pio/build/${PIO_ENV}/firmware.bin")
           if [ "$code" != "200" ] && [ "$code" != "201" ]; then
             echo "Upload failed (HTTP $code) - an existing object with this version is never overwritten:"; cat resp.txt; exit 1
           fi
@@ -129,6 +186,7 @@ jobs:
       - name: Summary
         env:
           VERSION: ${{ steps.ver.outputs.version }}
+          PIO_ENV: ${{ steps.ver.outputs.env }}
           URL: ${{ steps.up.outputs.url }}
           MD5: ${{ steps.sum.outputs.md5 }}
           SIZE: ${{ steps.sum.outputs.size }}
@@ -141,6 +199,7 @@ jobs:
             echo "| Field | Value |"
             echo "|---|---|"
             echo "| Version | \`${VERSION}\` |"
+            echo "| Build env | \`${PIO_ENV}\` (only for nodes with this MQ-7 wiring) |"
             echo "| URL | ${URL} |"
             echo "| MD5 | \`${MD5}\` |"
             echo "| Size | ${SIZE} bytes |"

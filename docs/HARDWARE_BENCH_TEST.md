@@ -129,7 +129,7 @@ Use a **test device and a throwaway build**; keep a USB cable to recover it.
 | # | Check | Expected | Pass | Notes |
 |---|---|---|---|---|
 | 8.1 | Build A -> B | Flash build A over USB. Build B from the same env with a visible change and a new `FIRMWARE_VERSION` (in `config.h` for `esp32dev`, in `platformio.ini` for `esp32dev_mq7_5v`) | [ ] | |
-| 8.2 | Release | Upload B to Storage (the release workflow currently builds the wrong env, see FIRMWARE_GUIDE §8.2a), add the release, set the target on **this one device** with the correct MD5 | [ ] | |
+| 8.2 | Release | Upload B to Storage (or run the release workflow, choosing the same env as A), add the release, set the target on **this one device** with the correct MD5 | [ ] | |
 | 8.3 | Update | Within 10 min the log shows `OTA: new firmware <B> available`, download, flash, reboot | [ ] | |
 | 8.4 | Version | Admin page shows "Running: <B>" after the next telemetry | [ ] | |
 | 8.5 | Identity kept | After the update the node needs **no portal** and keeps the same ID/key (`last_seen` continues under the same device) | [ ] | |

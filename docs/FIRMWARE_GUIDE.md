@@ -395,19 +395,24 @@ To opt a device out of OTA, leave its `firmware_version` and `firmware_url` empt
 ### 8.2a Automated build and upload (GitHub Actions)
 
 `.github/workflows/firmware-release.yml` performs steps 1-4 above. Push a tag such as
-`firmware-v2.1.1` (or run the workflow manually and enter `2.1.1`). It runs the host tests,
-generates `config.h` from `config.example.h` with the tag's version, builds with PlatformIO,
-uploads `agapsense-<version>.bin` to Supabase Storage, checks that the public URL serves
-identical bytes, and prints the version, URL and MD5 in the run summary. It never overwrites an
-existing object and never rolls anything out; you still add the release and push it from the
-admin Devices page.
+`firmware-v2.2.1`, or run the workflow manually and enter `2.2.1`. It:
 
-> **Known problems (as of 2026-10-16).** The workflow runs a bare `pio run`, which also builds
-> `test_components` and fails because `config_test_secrets.h` does not exist in CI. And it
-> publishes `.pio/build/esp32dev/firmware.bin` — the **duty-cycle** build — while the nodes
-> are wired for the constant-5V build, whose version is set in `platformio.ini` rather than by
-> the tag. Until the workflow is changed to build and publish `esp32dev_mq7_5v`, use the manual
-> steps in 8.2.
+1. builds **one** env: `esp32dev_mq7_5v` (the constant-5V wiring of every deployed node) for a
+   tag, or the env you pick on a manual run (`esp32dev_mq7_5v` or `esp32dev`);
+2. runs the host tests;
+3. generates `config.h` from `config.example.h` with the tag's version, and also writes that
+   version into the env's `-D FIRMWARE_VERSION` flag in its own checkout of `platformio.ini`
+   (the 5V envs set the version there, which overrides `config.h`);
+4. builds with `pio run -e <env>` and fails if the image does not contain the version string;
+5. uploads `agapsense-<version>-<env>.bin` to Supabase Storage, checks that the public URL
+   serves identical bytes, and prints the version, env, URL and MD5 in the run summary.
+
+It never overwrites an existing object and never rolls anything out; you still add the release
+and push it from the admin Devices page. Only target nodes whose wiring matches the env shown
+in the summary.
+
+The committed `platformio.ini` is not changed by a release; bump its version by hand if you
+also build locally.
 
 One-time setup:
 - Create a **public** Storage bucket named `firmware` (or set the repo variable `FIRMWARE_BUCKET`).
