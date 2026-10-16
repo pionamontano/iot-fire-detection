@@ -59,6 +59,7 @@ These files create:
 - ✅ Resident contact for an open fire (`get_incident_resident_contact`): BFP responders get the linked resident's name and mobile only while a Tier 2 incident is open — `20261104000000_incident_resident_contact.sql`
 - ✅ Explicit Data API grants for every table, view, sequence and function, so the schema no longer depends on Supabase auto-granting `public` objects (new projects don't, from 2026-10-30) — `20261105000000_explicit_data_api_grants.sql` (GRANT-only; a no-op on a project created before that change)
 - ✅ Settings readable only by approved users, and `check_login_lockout` callable only by the `login` Edge Function — `20261106000000_close_settings_read_and_lockout_check_gaps.sql`
+- ✅ Removes grants on `devices`, `alert_events` and `devices_safe` that earlier migrations had revoked but that remained on older projects (no-op on a project built from these migrations) — `20261107000000_revoke_drifted_device_and_alert_grants.sql`
 
 > [!IMPORTANT]
 > A migration that creates a table, view, sequence or function must also `GRANT` it to the roles that need it (`anon`, `authenticated`, `service_role`). New Supabase projects no longer do this automatically, so without the GRANT the object is unreachable through the API. See `20261105000000_explicit_data_api_grants.sql` for the pattern.
