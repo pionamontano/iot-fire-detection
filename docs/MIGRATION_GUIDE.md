@@ -52,7 +52,7 @@ These files create:
 - ✅ All functions (`get_auth_role`, `protect_profile_fields`, etc.)
 - ✅ All triggers (self-promotion protection)
 - ✅ All RLS policies
-- ✅ Default data (settings + station info)
+- ✅ Default station info (`station_settings`). No session-timeout rows are created: idle sign-out stays off until an admin opens **Settings** and saves the timeouts
 - ✅ Fixes, enhancements, and new fields (like `telegram_chat_id` and `local_ip`)
 - ✅ Device registration with generated codes (`register_device`) and resident-set, admin-confirmed install locations (`update_own_device_location`, `devices.location_verified`) — `20261102000000_device_registration_location_verification.sql`
 - ✅ Station Information name and email columns (`station_settings.station_name`, `station_settings.email`) used by Responder Settings — `20261103000000_station_settings_name_email.sql` (no-op where they were already added by hand)

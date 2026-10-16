@@ -7,7 +7,7 @@ documents link to them.
 
 | Document | For |
 |---|---|
-| [`USER_MANUAL.md`](USER_MANUAL.md) | Residents and BFP responders: the device, its lights, and the web app. `USER_MANUAL.pdf` is an exported copy and may lag behind the Markdown; the `.md` is the source. |
+| [`USER_MANUAL.md`](USER_MANUAL.md) | Residents and BFP responders: the device, its lights, and the web app. The `.md` is the source; rebuild `USER_MANUAL.pdf` after every edit with [`tools/build-user-manual-pdf.sh`](tools/build-user-manual-pdf.sh) (needs pandoc and Chromium). |
 | [`MIGRATION_GUIDE.md`](MIGRATION_GUIDE.md) | Setting up a new Supabase project, Edge Function secrets, and deploying the web app |
 | [`FIRMWARE_GUIDE.md`](FIRMWARE_GUIDE.md) | ESP32 hardware, firmware structure, alert logic, configuring, building, flashing and OTA (version history is in `firmware/agapsense-firmware/src/config.example.h`) |
 | [`HARDWARE_BENCH_TEST.md`](HARDWARE_BENCH_TEST.md) | Checklist to run on a real node before installing it or pushing an OTA update |
@@ -30,8 +30,8 @@ commit each one names, not a live guarantee.
 
 | Document | For |
 |---|---|
-| [`system-specification.md`](system-specification.md) | The detailed baseline specification (draft v0.2) — the authoritative one of the two specs |
-| [`AGAPSENSE_SYSTEM_SPECIFICATION.md`](AGAPSENSE_SYSTEM_SPECIFICATION.md) | Earlier, shorter specification; superseded by `system-specification.md` |
+| [`system-specification.md`](system-specification.md) | The detailed baseline specification (draft v0.3), including the status-tracked Known Issues list — the authoritative one of the two specs |
+| [`AGAPSENSE_SYSTEM_SPECIFICATION.md`](AGAPSENSE_SYSTEM_SPECIFICATION.md) | Shorter summary specification, kept in step with the code; defers to `system-specification.md` for detail |
 | [`scope-boundary-register.md`](scope-boundary-register.md) | What is in scope, unverified, defective or excluded (Deliverable B) |
 | [`requirements-traceability.md`](requirements-traceability.md) | Each requirement mapped to its implementation and verification (Deliverable C) |
 | [`open-questions-and-decisions.md`](open-questions-and-decisions.md) | Questions only the project owner can decide (Deliverable D) |

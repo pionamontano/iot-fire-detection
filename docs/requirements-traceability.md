@@ -1,5 +1,7 @@
 # AgapSense Requirements Traceability Matrix (Deliverable C)
 
+> **0.3 update (2026-10-16):** the statuses in this file are from the 0.1/0.2 review. For the current status of every Known Issue (11 fixed, 5 partly fixed, 8 open, plus 2 new open issues) see [`system-specification.md`](system-specification.md) §5.15.
+
 Part of the baseline set started by [`system-specification.md`](system-specification.md) (v0.1, commit `5441cb78`). Full requirement text, acceptance criteria and limitations are in §5.5 of that document; this matrix links each requirement to its source, implementation, verification method and current status.
 
 **Reading the status columns**

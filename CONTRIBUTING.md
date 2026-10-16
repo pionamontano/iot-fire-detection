@@ -51,6 +51,7 @@ Thank you for your interest in contributing to the AgapSense project! Your contr
 
 - Documentation is kept in Markdown files, mainly in `docs/` (see [`docs/README.md`](docs/README.md) for the index) and `testing/`.
 - If you add a new feature, update the relevant documentation. If you modify a database schema or Edge Function, ensure `docs/FEATURES.md` and `docs/MIGRATION_GUIDE.md` are kept up-to-date (including the Edge Functions table and any new secret).
+- If you change `docs/USER_MANUAL.md`, rebuild the PDF with `docs/tools/build-user-manual-pdf.sh`.
 - One-off or maintenance SQL that is not a migration goes in `supabase/maintenance/`, not in `supabase/migrations/` or `supabase/tests/`.
 
 We appreciate your contributions to making AgapSense better!

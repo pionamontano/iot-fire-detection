@@ -1,4 +1,4 @@
-# AgapSense System Specification (Baseline Draft v0.2)
+# AgapSense System Specification (Baseline Draft v0.3)
 
 > **Status: DRAFT BASELINE — requires project-owner approval before it is treated as controlled.**
 > This document describes what the repository *demonstrably contains*, separates that from what is *approved*, *deployed* and *tested*,
@@ -17,12 +17,13 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 |---|---|
 | Document title | AgapSense System Specification and Scope Boundary Definition |
 | System name | AgapSense — IoT-Based Fire Detection and Location Tracking System Using Multi-Sensor Fusion and Dual-Path Communication |
-| Version / status | 0.2 — incremental backend re-review, **draft, not owner-approved** |
-| Date prepared | 2026-10-12 (baseline); updated 2026-10-13 |
+| Version / status | 0.3 — Known Issues re-check against `main` plus executed local test suites, **draft, not owner-approved** |
+| Date prepared | 2026-10-12 (baseline); updated 2026-10-13 (0.2), 2026-10-16 (0.3) |
 | Repository / branch | `pionamontano/iot-fire-detection`, branch `claude/epic-brahmagupta-r9vi1d` (baseline); `fix/revoke-alert-events-direct-update` (0.2 update) |
 | Commit inspected | `5441cb78e4fef320eecc613fc3c7058ec669647c` ("Add documentation of audit remediation changes (#98)"), working tree clean before this document was added |
 | Commit inspected (0.2 update) | Working-tree snapshot anchored near `96716ffb0caf78e28b64c2777dfacbcfa365bdbb`, **not a fixed commit**: the branch had uncommitted/untracked changes in progress in `supabase/migrations/` during this review (files were renamed and added mid-review — see §5.1 limitation 5). Scope limited to `supabase/functions/*` (all 14, stable throughout) and `supabase/migrations/*` (35 files read at the time of inspection; the directory kept changing afterward, so this is a lower bound, not an exact current count) — frontend, firmware and docs were not re-read |
-| Method | Read-only static inspection of source, SQL migrations, firmware, tests and existing documentation. **No test suite, build, firmware compile, deployment or live-service call was executed in this review.** |
+| Commit inspected (0.3 update) | `main` at `d74dc81` ("Document firmware version history and fix stale NEO-6M comments (#155)"), clean tree |
+| Method | Read-only static inspection of source, SQL migrations, firmware, tests and existing documentation. **0.1/0.2: no test suite, build, firmware compile, deployment or live-service call was executed.** 0.3: the repository's own local suites were run (see §5.14); still no deployment, live-service call, ESP32 build or hardware test |
 
 ### Inspection coverage
 
@@ -38,6 +39,8 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 | Postman collection, `seed_script.ts`, `verify2.py`, `patch_*.cjs`, `scripts/*` | Not reviewed | Auxiliary tooling; classified Unverified |
 | **[0.2 update]** Edge Functions (all 14, re-read in full) | Re-read in full | Findings: KI-08 (rewritten), KI-26, KI-28; test-suite break noted separately (see PR review, not duplicated here) |
 | **[0.2 update]** Migrations (`supabase/migrations/*`, 35 files as of this update, including one untracked file) | Read in full, in order, reconstructed as current effective schema (later migrations superseding earlier ones) | Findings: KI-25, KI-27, KI-29; frontend/firmware/docs were **not** re-read for this update |
+| **[0.3 update]** Every Known Issue (KI-01…KI-29) | Re-checked against the code at `d74dc81`; database-side ones also probed on a local PostgreSQL 16 built from all 52 migrations | Status column added to §5.15; new KI-30, KI-31. Rows outside §5.15 were updated only where a KI status change or a checked fact required it |
+| **[0.3 update]** Pages, routes, Edge Functions (16), migrations (52) | Listed and spot-read where a KI or requirement row depends on them | Not a full re-read of every page |
 
 ### Known limitations of this review
 
@@ -45,6 +48,7 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 2. **The live database may differ from the repository.** The repository's own documents state that production's migration history differs from `supabase/migrations/` and that the live definition of `get_auth_role()` has never been inspected (`docs/CHANGELOG_AUDIT_REMEDIATION.md` §11, `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md` §4).
 3. **No owner-supplied requirements document is in the repository.** Code comments cite requirement IDs (`SW-2.1.1` … `SW-2.6.3`, `HW-1.1.5` … `HW-1.5.2`) from a specification that is *not present*. Those IDs are recorded here as *referenced, unconfirmed requirements*.
 4. Test results quoted from `docs/` or `testing/reports/` are **self-reported by the repository authors and were not re-executed** here.
+6. **[0.3]** Line numbers in rows not touched by the 0.3 update are those of the 0.1/0.2 commits; the code has moved since. Function, file and migration names are the stable reference.
 5. **[0.2]** During the 0.2 incremental review, the working tree was under active concurrent edit (a migration file was renamed mid-review — `20261022000000_support_requests.sql` → `20261022000001_support_requests.sql` — and others were added). All 0.2 findings were re-verified against the file paths current at the time each was written into this document, but the repository may have moved on further by the time it is read; treat filenames/line numbers in KI-08 and KI-25–KI-29 as accurate as of this update's citations, not as a live guarantee.
 
 ### Change history
@@ -52,14 +56,15 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 | Version | Date | Change |
 |---|---|---|
 | 0.1 | 2026-10-12 | First specification baseline (this document). |
+| 0.3 | 2026-10-16 | Re-checked every Known Issue at `d74dc81`: 11 fixed, 5 partly fixed, 8 still open (KI-10 escalated after a local reproduction); added KI-30 (no default session-timeout settings) and KI-31 (OTA image integrity). Ran the local DB, edge, unit and firmware host suites (§5.14). Updated §5.3 B/C, the affected FR rows, §5.6, §5.8, §5.11, §5.12 and §19 accordingly. |
 | 0.2 | 2026-10-13 | Incremental backend-only re-review (all Edge Functions, full migration history re-read as current effective schema). Resolved the `get_dashboard_stats()` Unverified note into confirmed KI-25. Added KI-25–KI-29 (dashboard-stats privilege exposure, login-lockout case-sensitivity bypass, `get_device_api_key_secure()` missing `search_path` pin, `manage-registration` duplicate-device gap, `reviewed_by`/`unlocked_by` FK convention break). Rewrote KI-08, B7, C8, FR-RESP-005, FR-NOTIF-007 and §5.10/§5.12 Resend entries: the Resend e-mail support path they described was replaced by an in-app admin inbox (`support_requests` table, PR #107) before this update; added the `support_requests` table to §5.8 and new gaps found in its replacement. |
 
 ### Relationship to existing documents (not overwritten)
 
 | Existing document | Assessment | Evidence |
 |---|---|---|
-| `docs/AGAPSENSE_SYSTEM_SPECIFICATION.md` | **Stale; not authoritative.** Written at commit `df2cfe4…` (before audit remediation). Left untouched. | Cites paths that do not exist (`src/pages/Dashboard.tsx`, `src/pages/RegisterResident.tsx`); says the Web Push service worker "is absent" while `public/sw.js` exists; describes responders updating `alert_events` directly, now superseded by `transition_incident()`; says no GUI edits `station_settings` while `ResponderSettings.tsx` does. |
-| `docs/FEATURES.md` | **Partly inaccurate.** | Lists `ResponderTeam.tsx` and `ResponderDevices.tsx` (not in `src/pages/responder/`, which holds 3 files); says SMS goes to "Resident and BFP (Responders)" — the BFP SMS goes to the single per-device `devices.bfp_contact` number (`trigger-alert/index.ts:456`, `get-device-config/index.ts:72`); says pending users are blocked by RLS "mathematically" — see KI-09. |
+| `docs/AGAPSENSE_SYSTEM_SPECIFICATION.md` | **Summary only; not authoritative.** [0.3] Since 0.2 it has been refreshed to the current code and now defers to this document for detail. | |
+| `docs/FEATURES.md` | [0.3] **Consistent with the code** in the places checked. The 0.2 findings (non-existent responder pages, SMS recipients, "mathematically" blocked pending users) are no longer in the file. | |
 | `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`, `docs/CHANGELOG_AUDIT_REMEDIATION.md`, `docs/STAGING_DRY_RUN_RUNBOOK.md`, `docs/FIRMWARE_GUIDE.md`, `docs/MIGRATION_GUIDE.md` | Consistent with code in every place checked; used as secondary evidence. | |
 
 > **Owner action:** decide whether `AGAPSENSE_SYSTEM_SPECIFICATION.md` and `FEATURES.md` are to be superseded by this document (OQ-14).
@@ -73,6 +78,7 @@ Separate axes are always kept apart: **Implemented (in repo)** ≠ **Tested** �
 ### Deployment state (important context for every status below)
 
 * Audit-remediation work (PR #94: profiles RLS, recipient eligibility, notification ledger, `raise_alert`, incident lifecycle, firmware retry) **is merged to `main` but, per `docs/CHANGELOG_AUDIT_REMEDIATION.md` header and §11, has not been deployed** to any shared database, Edge Function runtime, or device. Items marked *Implemented (repo) — not deployed* below describe code, not the running system.
+* [0.3] The repository does not record which migrations after `20261018…` reached production (PR #153 removes "production grant drift" found by comparing against production ACLs, so production was inspected at least for grants). Read **[R]** as "deployment not recorded", not as proof that it is absent.
 * Earlier fixes (`20260917…`–`20261018…` migrations and `login` function) are reported as deployed and re-verified live in `testing/reports/LIVE_TESTING_SUMMARY.md` (self-reported; not re-verified here).
 
 ---
@@ -132,27 +138,29 @@ Separate axes are always kept apart: **Implemented (in repo)** ≠ **Tested** �
 | # | Item | Why unverified |
 |---|---|---|
 | B1 | Telegram station notifications | Requires bot token/chat; delivery never demonstrated in repo evidence |
-| B2 | Web Push to admins/responders/resident | VAPID keys, browser subscriptions, push services not observable; UI wiring to `subscribeUserToPush` found only on Admin Settings and Resident Alert Settings (responder push UI not found) |
+| B2 | Web Push to admins/responders/resident | VAPID keys, browser subscriptions, push services not observable. [0.3] Opt-in UI exists for all three roles (Admin Settings, Responder Settings "Browser notifications", Resident Alert Settings) |
 | B3 | SIM800L SMS path and `+CMGS` outcome reporting | Hardware; only host-simulated tests reported |
 | B4 | Nominatim reverse geocoding + 24 h in-memory cache | External service, per-isolate cache |
 | B5 | Realtime (`postgres_changes`) live updates | Needs live Supabase; remediation notes say profile-filtered Realtime "not verified live" |
 | B6 | Idle-timeout hook, password reset flow | Only partly read; live-verified per self-reported reports |
-| B7 | Support request inbox (in-app, `support_requests` table; replaced Resend e-mail, #107) | Insert path verified in code (service-role, bypasses RLS by construction); admin-side inbox UI not re-read in the 0.2 update; see KI-08 |
+| B7 | Support request inbox (in-app, `support_requests` table; replaced Resend e-mail, #107) | [0.3] Admin inbox page `/admin/support` (`SupportRequests.tsx`), `resolve-support-request` and admin push/Telegram notification exist; delivery unverified; see KI-08 |
 | B8 | OSM tile rendering, Vercel hosting | External |
-| B9 | Auxiliary tooling (`seed_script.ts`, `verify2.py`, `patch_*.cjs`, Postman collection) | Not reviewed |
+| B9 | Auxiliary tooling | [0.3] `seed_script.ts`, `verify2.py`, `patch_*.cjs` and `scripts/*` are no longer in the repository. Remaining: Postman collection (`testing/postman/`), `supabase/maintenance/*.sql` — not reviewed |
 
 ### C. Incomplete or Defective
 
 | # | Item | Summary | Reference |
 |---|---|---|---|
-| C1 | Per-user Telegram alerts | Account linking exists; **no code sends alerts to `profiles.telegram_chat_id`**; webhook tells users "You will receive fire alerts here" | KI-24, issue #95 |
-| C2 | Backend enforcement of account approval | `get_auth_role()` in the repo ignores `profiles.status`; live behaviour unknown | KI-09 |
-| C3 | Fabricated display metrics (resident "System Uptime 99.98%", responder "connectivity %") | Hard-coded values | KI-01, KI-02 |
-| C4 | `station_settings` UI vs schema mismatch | UI reads/writes `station_name`, `email`; migrations define `team_name`, `commander_name` … | KI-07 |
-| C5 | Auto-resolution policy and device-clear display | Owner decision D6.1 pending (Step 6.3) | KI-13, issue #96 |
-| C6 | Direct `UPDATE` on `alert_events` still granted (Step 6c) | Revoke migration written (`20261022000000`), not deployed; apply only after 6.1/6.2 are live | issue #97 |
+| C1 | *(Resolved, 0.3)* Per-user Telegram alerts | `trigger-alert` now sends to each eligible recipient's linked `telegram_chat_id` (ledger channel `telegram_user`) | KI-24 |
+| C2 | *(Resolved in repo, 0.3)* Backend enforcement of account approval | `get_auth_role()` returns NULL unless `status='approved'` and `is_active` (`20261031000000`, `20261030000000`); local tests pass. Deployment state unknown | KI-09 |
+| C3 | *(Resolved, 0.3)* Fabricated display metrics | "System Uptime" and "connectivity %" no longer exist in `src/` | KI-01, KI-02 |
+| C4 | *(Resolved, 0.3)* `station_settings` UI vs schema mismatch | `station_name`, `email` added by `20261103000000` | KI-07 |
+| C5 | *(Resolved, 0.3)* Auto-resolution policy | D6.1 implemented: two consecutive below-threshold readings, and only incidents still `active` | KI-13 |
+| C6 | *(Resolved in repo)* Direct `UPDATE` on `alert_events` | Revoked by `20261022000000`; local test passes. Deployment state unknown | KI-11 |
 | C7 | Stale-sensor detection in firmware | `last_co_ms`/`last_temp_ms` written, never read | KI-17 |
-| C8 | *(Resolved by #107, confirmed 0.2)* `admin-support-request` no longer reads a `profiles.email` column or sends e-mail; it inserts into `support_requests` via service-role. New gaps found in the replacement (unapproved accounts can file requests; `category` unvalidated) | See updated KI-08 | KI-08 |
+| C8 | Support requests from unapproved accounts; `category` unvalidated | Still open in 0.3; now also triggers admin push/Telegram | KI-08 |
+| C9 [0.3] | Account deactivation can be undone by the deactivated user | `protect_profile_fields` does not cover `is_active`; reproduced locally | KI-10 |
+| C10 [0.3] | Idle sign-out disabled by default | No `settings` rows are seeded; the hook does nothing until an admin saves Settings | KI-30 |
 
 ### D. Proposed but Not Approved
 
@@ -183,11 +191,11 @@ Roles are exactly those in `profiles.role` CHECK (`20260717000000_init.sql:29`):
 | Aspect | Detail | Evidence |
 |---|---|---|
 | Purpose | Approve users, manage devices/thresholds, monitor all incidents, security settings | |
-| UI pages | `/dashboard`, `/admin/map`, `/admin/devices`, `/admin/users`, `/admin/status` ("Device Status"; `/admin/alerts` redirects there), `/admin/logs`, `/admin/settings/security` | `App.tsx:64-75`; nav `AdminLayout.tsx:21-32` (map has route but no sidebar entry — navigation reaches it from elsewhere; not traced) |
-| Backend authority | RLS `FOR ALL` via `get_auth_role()='admin'` on `devices`, `alert_events` (incl. DELETE), `settings`, `station_settings`, `registration_requests`, `address_discrepancies`, `login_lockout_overrides`; read on `sensor_readings`, `login_attempts`; sole reader of other users' profiles (`is_approved_admin()`); executes `manage-registration`, `create-user`, `assign-device`, `regenerate_device_api_key`, `admin_unlock_login` | init.sql:278-352; `20261019000000`; function files |
+| UI pages | `/dashboard`, `/admin/map` ("Live Map"), `/admin/devices`, `/admin/users`, `/admin/status` ("Device Status"; `/admin/alerts` redirects there), `/admin/logs`, `/admin/support` ("Support Requests"), `/admin/settings/security` | `App.tsx:74-83`; nav `AdminLayout.tsx:24-34` (every page has a sidebar entry) |
+| Backend authority | RLS `FOR ALL` via `get_auth_role()='admin'` on `devices`, `alert_events` (incl. DELETE), `settings`, `station_settings`, `registration_requests`, `address_discrepancies`, `login_lockout_overrides`; read on `sensor_readings`, `login_attempts`; sole reader of other users' profiles (`is_approved_admin()`); executes `manage-registration`, `create-user`, `manage-user` (edit, deactivate/reactivate with auth ban), `assign-device`, `register_device`, `resolve-support-request`, `regenerate_device_api_key`, `admin_unlock_login` | init.sql:278-352; `20261019000000`; function files |
 | Data visibility | Everything, including `devices.api_key` (via `get_device_api_key_secure` in `devices_safe`) | `20261015000000` |
 | Restrictions | Cannot self-register; admin bootstrap is a manual SQL insert (`init.sql:372-378`). Manual close of an incident is admin-only from `active` (`transition_incident`) | |
-| Gap | `AuthGuard` checks `status='approved'` but not `is_active`; Edge admin checks do not check `is_active` either | `AuthGuard.tsx:55`; `assign-device/index.ts:42` |
+| Gap | *(Resolved, 0.3)* `AuthGuard` and the admin Edge Functions now check `is_active` as well as `status` | `AuthGuard.tsx:58`; `assign-device`, `create-user`, `manage-registration`, `manage-user` caller checks |
 
 ### BFP Responder (`bfp_responder`)
 
@@ -195,10 +203,10 @@ Roles are exactly those in `profiles.role` CHECK (`20260717000000_init.sql:29`):
 |---|---|---|
 | Purpose | Monitor incidents and devices, handle incidents, maintain station info | |
 | UI pages | `/responder`, `/responder/alerts`, `/responder/settings` | `App.tsx:78-84` |
-| Backend authority | `SELECT` on `devices` (column-restricted, no `api_key`), `sensor_readings`, `alert_events`; incident changes through `transition_incident()` (approved+active checked inside); **also** direct column `UPDATE` on `alert_events` (`incident_status, acknowledged_by, acknowledged_at, outcome_notes, resolved_at`) and **`FOR ALL` on `station_settings`** by role only | `20261012000001`, init.sql:341-342 |
+| Backend authority | `SELECT` on `devices` (column-restricted, no `api_key`), `sensor_readings`, `alert_events`; incident changes through `transition_incident()` (approved+active checked inside); `get_incident_resident_contact()` for an open Tier 2 incident (`20261104000000`); **`FOR ALL` on `station_settings`** (KI-11). [0.3] Direct column `UPDATE` on `alert_events` revoked in `20261022000000` | init.sql:341-342; `20261022000000` |
 | Data visibility | All devices' readings/incidents (not scoped to a station or area — no such concept in schema) | init.sql:301-302 |
 | Prohibited | User management, device edits, API keys, other users' profiles | enforced by RLS absence of policies (Verified in repo) |
-| Concern | Role-only RLS (KI-09/KI-11) — a pending/rejected responder account may hold these rights if live `get_auth_role()` matches the repo definition | |
+| Concern | [0.3] KI-09 resolved in repo (`get_auth_role()` now requires approved + active). Remaining: `FOR ALL` on `station_settings` lets any responder insert or delete the singleton row (KI-11) | |
 
 ### Resident (`resident`)
 
@@ -208,7 +216,7 @@ Roles are exactly those in `profiles.role` CHECK (`20260717000000_init.sql:29`):
 | UI pages | `/setup` (mandatory first), `/home`, `/home/alerts`, `/home/settings`, `/home/devices`, `/account` (`/home/logs` redirects to `/home/alerts`) | `App.tsx:87-95` |
 | Backend authority | Read own device (`devices_safe`/column grants), own `sensor_readings`/`alert_events` (`device_id = own`); `update_own_device_alert_settings()` (CO 0–1000, temp 0–100; approved resident only); `resolve_address_discrepancy()` (own rows; approval overwrites the device's registered address and coordinates); self-update of own profile (non-protected columns); `link-device` Edge Function | `20260917080000`, `20261016000000`, `link-device/index.ts` |
 | Prohibited | Other residents' data; role/status/device_id changes via direct update (trigger resets them) | `protect_profile_fields` init.sql:236-261 |
-| Concerns | `protect_profile_fields` does not cover `is_active`, `setup_complete`, `telegram_chat_id` (KI-10). A resident's approval of a drift prompt changes the *device-wide* registered location used by all subsequent drift checks (design as implemented) | |
+| Concerns | `protect_profile_fields` does not cover `is_active` or `setup_complete` (KI-10; `telegram_chat_id` was added in `20261026000000`). A resident's approval of a drift prompt changes the *device-wide* registered location used by all subsequent drift checks (design as implemented) | |
 
 ### IoT device / system process (non-human)
 
@@ -228,15 +236,15 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 
 | ID | Requirement (current behaviour) | Source | Role | Status | Evidence | Acceptance criteria | Limitations / questions |
 |---|---|---|---|---|---|---|---|
-| FR-AUTH-001 | Public registration (`register`) for roles `resident` and `bfp_responder` only; creates the auth user (`email_confirm:true`), a `profiles` row with `status='pending'`, and a `registration_requests` row; rolls back both on failure. Validates required fields, PH mobile `09XXXXXXXXX`, e-mail shape, password ≥ 6 chars; resident requires address, responder requires organization | Implemented (C) | Public | Verified [L] | `register/index.ts:24-140` | Register each role → pending profile + request exist; duplicate e-mail → 409; admin role request → 400 | Password policy minimum is 6 (Not Specified — Requires Approval). E-mail is auto-confirmed (no ownership verification) — OQ-15 |
-| FR-AUTH-002 | Sign-in goes through `login`: checks `check_login_lockout`, forwards credentials to GoTrue, records every attempt in `login_attempts`, returns tokens or a lockout response. Lockout tiers within a 15-min window: ≥3 failures→10 s, ≥5→30 s, ≥7→900 s; admin override via `admin_unlock_login` | `SW-2.6.2` (cited, unconfirmed) | Public | Verified [L] | `login/index.ts:80-103`; `20260924090000`; `20260924010000` | 3 bad logins → 429/locked with decreasing countdown; admin unlock → immediate success | Direct calls to GoTrue `/auth/v1/token` bypass the lockout; owner accepted this trade-off (`LIVE_TESTING_SUMMARY.md`). Lockout keyed by e-mail only, not IP |
+| FR-AUTH-001 | Public registration (`register`) for roles `resident` and `bfp_responder` only; creates the auth user (`email_confirm:true`), a `profiles` row with `status='pending'`, and a `registration_requests` row; rolls back both on failure. Validates required fields, PH mobile `09XXXXXXXXX`, e-mail shape, password ≥ 6 chars. [0.3] Resident: mobile number and structured address (house/street, barangay, city/municipality, province) required, device code optional. Responder: fire station required; mobile, rank and BFP ID optional | Implemented (C) | Public | Verified [L] | `register/index.ts`; `RegisterResident.tsx`, `RegisterResponder.tsx` | Register each role → pending profile + request exist; duplicate e-mail → 409; admin role request → 400 | Password policy minimum is 6 (Not Specified — Requires Approval). E-mail is auto-confirmed (no ownership verification) — OQ-15 |
+| FR-AUTH-002 | Sign-in goes through `login`: lower-cases the e-mail, checks `check_login_lockout`, forwards credentials to GoTrue, records every attempt in `login_attempts`, returns tokens or a lockout response. Lockout tiers within a 15-min window: ≥3 failures→10 s, ≥5→30 s, ≥7→900 s; admin override via `admin_unlock_login` | `SW-2.6.2` (cited, unconfirmed) | Public | Verified [L]; case-folding tested locally (0.3) | `login/index.ts:67-117`; `20260924090000`; `20260924010000`; `tests/edge/login_lockout_case.test.mjs` | 3 bad logins → 429/locked with decreasing countdown; admin unlock → immediate success | Direct calls to GoTrue `/auth/v1/token` bypass the lockout; owner accepted this trade-off (`LIVE_TESTING_SUMMARY.md`). Lockout keyed by e-mail only, not IP |
 | FR-AUTH-003 | UI shows Pending/Rejected screens and blocks app routes for any non-`approved` profile | C | All | Verified | `AuthGuard.tsx:55-79`; policy allowing own-profile read `20261019000000` | Pending account logs in → sees "Account Pending", no dashboard | UI only; see FR-AUTH-004 |
-| FR-AUTH-004 | Backend data access is denied to non-approved accounts | C (stated aim of `20260917030000`, FEATURES.md) | All | **Conflicting** | repo `get_auth_role()` = `SELECT role FROM profiles …` with **no status check** (`init.sql:192-195`); `20261019000000` header says so; older migration comments and `LIVE_RBAC_VERIFICATION.md` row 38 say live behaviour revokes immediately | Query `alert_events` as a *pending responder* via PostgREST → expect 0 rows | Live definition never inspected (OQ-03). Only profile reads and `transition_incident`/Edge functions are explicitly status-checked |
+| FR-AUTH-004 | Backend data access is denied to non-approved and deactivated accounts | C (stated aim of `20260917030000`, FEATURES.md) | All | Verified (code + local tests, 0.3) **[R]** | `get_auth_role()` returns NULL unless `status='approved'` and `is_active` (`20261031000000`, `20261030000000`); `get_auth_role_approval.test.sql` (11 checks), `deactivated_access.test.sql` (9 checks) pass | Query `alert_events` as a *pending responder* via PostgREST → expect 0 rows | Live definition still not inspected (OQ-03). A deactivated user can re-enable itself while its token is valid (KI-10) |
 | FR-AUTH-005 | Route protection by role with redirect to the role's home | C | All | Verified | `AuthGuard.tsx:81-91`; `App.tsx` | Resident opening `/admin/users` → redirected to `/home` | UI-only |
 | FR-AUTH-006 | Resident must complete `/setup` (valid, confirmed mobile number) before any other resident page | C | Resident | Verified | `AuthGuard.tsx:94-100`; `ResidentSetup.tsx:30-55` | New resident cannot reach `/home` before setup | Phone format checked only client-side + register function |
-| FR-AUTH-007 | Per-role idle timeout, minutes read from `settings` keys `timeout_admin`, `timeout_bfp`, `timeout_resident` (UI defaults 15/15/60), sign-out → `/session-expired` | `SW-2.6.1` (cited) | All | Partially Verified [L] | `useIdleTimeout.ts:1-40` (head read); `Settings.tsx:115-134` | Idle beyond limit → redirected to session-expired | Remainder of hook not read; defaults live in UI, not DB |
+| FR-AUTH-007 | Per-role idle timeout, minutes read from `settings` keys `timeout_admin`, `timeout_bfp`, `timeout_resident`, re-read every 5 min; sign-out → `/session-expired` | `SW-2.6.1` (cited) | All | Verified (code) [L] | `useIdleTimeout.ts:33-66`; `Settings.tsx:17-19` | Idle beyond limit → redirected to session-expired | [0.3] **No migration seeds these keys**: with no row the hook does nothing, so idle sign-out is off until an admin saves Settings. The 15/15/60 values are UI display fallbacks only (KI-30) |
 | FR-AUTH-008 | Password reset by e-mail link (`resetPasswordForEmail` → `/reset-password` → `updateUser`) | C | Public | Partially Verified | `ForgotPassword.tsx:17`, `ResetPassword.tsx:61` | Request link → set new password | Depends on Supabase e-mail + redirect URL config (Unverified) |
-| FR-AUTH-009 | Non-admin users cannot change their own `role`, `status` or `device_id` (trigger reverts them) | C | All | Verified [L] | `init.sql:236-261` | Direct PATCH of own role → unchanged | Trigger omits `is_active`, `setup_complete`, `telegram_chat_id` (KI-10) |
+| FR-AUTH-009 | Non-admin users cannot change their own `role`, `status`, `device_id` or `telegram_chat_id` (trigger reverts them) | C | All | Verified [L]; `telegram_chat_id` tested locally | `init.sql:236-261`; `20261026000000`; `telegram_chat_id.test.sql` | Direct PATCH of own role → unchanged | Trigger omits `is_active` and `setup_complete` (KI-10, reproduced in 0.3) |
 | FR-AUTH-010 | Only approved admins can read other users' profiles | C (remediation Step 1) | Admin | Verified [R] | `20261019000000` (`is_approved_admin()`); test `profiles_rls.test.sql` (reported 13 checks) | Resident reads another profile → 0 rows | Not deployed; see FR-AUTH-004 |
 
 ### FR-ADMIN — Administrator
@@ -244,35 +252,35 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | ID | Requirement (current behaviour) | Source | Status | Evidence | Acceptance | Limitations |
 |---|---|---|---|---|---|---|
 | FR-ADMIN-001 | Dashboard: device list with connectivity state, active (unresolved) alerts, user count, recent readings, with Realtime refresh | C | Partially Verified | `Dashboard.tsx:56-96` | Counts match DB; new alert appears without reload | Realtime not verifiable offline |
-| FR-ADMIN-002 | User management: list profiles and registration requests; approve (optionally assigning a device), reject, delete (auth-user delete cascades); create a pre-approved user; assign/unassign a device | C | Verified (code) | `Users.tsx:76-250`; `manage-registration/index.ts:67-126`; `create-user/index.ts`; `assign-device/index.ts` | Approve → profile `approved`, request marked reviewed | `create-user` inserts without `status`, so new rows take DB default `approved` (init.sql:33) — intended per "pre-approved" comment; role value validated only by DB CHECK |
-| FR-ADMIN-003 | Device registration: create (code, label, address text, coordinates, thresholds, BFP contact), edit thresholds/contact, activate/deactivate, regenerate API key (RPC, admin-only, key shown once in UI) | C | Verified (code) | `Devices.tsx:97-176`; `20260924000000`; `20260924050000` (CHECK 0–1000 / 0–100) | New device appears with server-generated key (`sk_`+48 hex, `20260917050000`) | Key stored plaintext in `devices.api_key` (existing design) |
+| FR-ADMIN-002 | User management: list profiles and registration requests; approve (optionally assigning a device, refused if another resident holds it), reject, delete; create a pre-approved user; assign/unassign a device; [0.3] edit a user and deactivate/reactivate (`manage-user`: sets `is_active` and bans/unbans the auth user) | C | Verified (code) | `Users.tsx`; `manage-registration/index.ts:67-93`; `create-user/index.ts`; `assign-device/index.ts`; `manage-user/index.ts:160-180` | Approve → profile `approved`, request marked reviewed | `create-user` inserts without `status`, so new rows take DB default `approved` (init.sql:33) — intended per "pre-approved" comment; role value validated only by DB CHECK |
+| FR-ADMIN-003 | Device registration: [0.3] `register_device()` creates a device with the next generated code (`AGS-NNN`) and column-default thresholds; the admin then edits label, thresholds, BFP contact, firmware target, activation, and confirms the resident-set install pin; regenerate API key (RPC, admin-only, key shown once) | C | Verified (code); `device_registration_location.test.sql` (23 checks) passes | `Devices.tsx`; `20261102000000`; `20260924000000`; `20260924050000` (CHECK 0–1000 / 0–100) | New device appears with server-generated key (`sk_`+48 hex, `20260917050000`) | Key stored plaintext in `devices.api_key` (existing design) |
 | FR-ADMIN-004 | "Device Status" (formerly "System Overview"): fleet status, manual resolve through `transition_incident`. Enable/disable (`is_active`) moved to Devices → Edit device, behind a typed confirmation; disabled devices have their own "Disabled" status | C | Verified (code) [R for resolve] | `DeviceStatus.tsx:158-167` | Resolve → incident closed with `resolved_by` set | Direct `devices.update` from the browser relies on admin RLS |
-| FR-ADMIN-005 | System Log merges recent alert events, login attempts, device registrations (50 each), with export | C | Partially Verified | `Logs.tsx:50-130,161` | Entries visible, export produces file | Fixed description text for every alert (KI-04); only latest 50 per source |
+| FR-ADMIN-005 | System Log merges recent alert events, login attempts, device registrations and other sources, with search, filters and CSV export | C | Partially Verified | `Logs.tsx`; `lib/systemLog.ts`; `tests/system-log.test.ts` | Entries visible, export produces file | [0.3] Alert text now derived from tier and device (KI-04 fixed) |
 | FR-ADMIN-006 | Interactive map of devices (live/last-known/registered markers) and a live alert feed | `A10` | Partially Verified | `InteractiveMap.tsx:111-132`; `lib/location.ts` | Markers distinct per state | Tiles external (B8) |
-| FR-ADMIN-007 | Security settings: session timeouts, unlock a locked login, push-notification toggle | `SW-2.6.x` | Verified (code) | `Settings.tsx:28-65` | Saved values appear in `settings` | Settings saved with client `upsert` (admin RLS) |
+| FR-ADMIN-007 | Security settings: session timeouts, unlock a locked login, push-notification toggle | `SW-2.6.x` | Verified (code) | `Settings.tsx` | Saved values appear in `settings` | Settings saved with client `upsert` (admin RLS). Until first saved, no timeout applies (KI-30) |
 
 ### FR-RESP — BFP Responder
 
 | ID | Requirement (current behaviour) | Source | Status | Evidence | Acceptance | Limitations |
 |---|---|---|---|---|---|---|
-| FR-RESP-001 | Dashboard: devices with state (fire / fault(pre-alert) / offline / normal), unresolved incidents feed, map, audible "klaxon" for unacknowledged critical fire | C | Partially Verified | `ResponderDashboard.tsx:225-300` | Tier 2 incident shows as fire | "Connectivity %" is simulated (KI-02); offline cut-off is 5 min (KI-03) |
+| FR-RESP-001 | Dashboard: Tier 2 incidents only, summary cards, devices with state from the shared connectivity helper, map, audible alarm for unacknowledged fires, resident contact while a fire is open | C | Partially Verified | `ResponderDashboard.tsx`; `lib/deviceStatus.ts`; `20261104000000` | Tier 2 incident shows as fire | [0.3] KI-02 and KI-03 fixed |
 | FR-RESP-002 | Incident handling only via `transition_incident()`: acknowledge, responding, resolved, false alarm (confirmation on close; errors mapped to messages) | remediation 6.1/6.2 | Verified (code) **[R: DB function must be deployed first]** | `lib/incidents.ts`; `20261021000000`; `ResponderDashboard.tsx:230-240`; test `incident_lifecycle.test.sql` (reported 64) | Full transition table in §5.9 | Without the migration, actions fail with `PGRST202` message (`incidents.ts:62`) |
 | FR-RESP-003 | Alert log with filtering and export | C | Partially Verified | `ResponderAlertLogs.tsx:61-130` | Filters narrow list | |
-| FR-RESP-004 | Own profile (name, contact) and Telegram link; station information editor (`station_settings` id=1) | C | **Conflicting** (schema) | `ResponderSettings.tsx:49-135`; init.sql:90-100 | Save station info succeeds | Columns `station_name`, `email` not in migrations (KI-07) |
-| FR-RESP-005 | Support request filed in-app via `admin-support-request` into `support_requests`, reviewed by an admin inbox (replaced Resend e-mail, #107) | C | Verified (backend code, 0.2); admin-inbox UI not re-read in 0.2 | `AdminSupportModal.tsx:40`; `admin-support-request/index.ts`; `20261022000001_support_requests.sql` | Row appears in `support_requests` | Any authenticated caller, not just approved accounts; `category` unvalidated (KI-08) |
+| FR-RESP-004 | Own profile (name, contact), Telegram link and browser-notification switch; station information editor (`station_settings` id=1: `station_name`, `address`, `contact_number`, `email`) | C | Verified (code) | `ResponderSettings.tsx`; `20261103000000` | Save station info succeeds | [0.3] KI-07 fixed. Responders hold `FOR ALL` on the table (KI-11) |
+| FR-RESP-005 | Support request filed in-app via `admin-support-request` into `support_requests`; admins are notified by push and Telegram, review it at `/admin/support`, and `resolve-support-request` replies to the requester | C | Verified (code) | `admin-support-request/index.ts`; `resolve-support-request/index.ts`; `SupportRequests.tsx`; `MySupportRequests.tsx`; `20261022000001_support_requests.sql` | Row appears in `support_requests` | Any authenticated caller, not just approved accounts; `category` unvalidated (KI-08) |
 
 ### FR-RES — Resident
 
 | ID | Requirement (current behaviour) | Source | Status | Evidence | Acceptance | Limitations |
 |---|---|---|---|---|---|---|
-| FR-RES-001 | Mandatory setup of mobile number (see FR-AUTH-006) | C | Verified | | | |
+| FR-RES-001 | Mandatory setup: mobile number (confirmed), then, if a device is linked and its pin unconfirmed, install address and pin (skippable) | C | Verified (code) | `ResidentSetup.tsx` | | |
 | FR-RES-002 | Link a device by `device_code` (`link-device`): caller must be resident, approved, active; device must exist, be active, not be linked to another resident; cannot silently replace an existing link | C; Step 2 | Verified (code) [R: approved/active gate] | `link-device/index.ts:42-143`; unique index `20260917040000` | Linking an already-claimed device → 409 | Device code is the only proof of ownership (OQ-16) |
-| FR-RES-003 | Home: device status, current readings, last 24 readings chart, latest 10 alerts, activity log, Realtime refresh | C | Partially Verified | `ResidentHome.tsx:101-143,254-283` | | "System Uptime" hard-coded (KI-01); online = 5 min (KI-03) |
+| FR-RES-003 | Home: status panel, readings with 24-reading chart, recent alerts, emergency contacts, notification status, device health, install location, device-link form when none is linked; Realtime refresh | C | Partially Verified | `ResidentHome.tsx` | | [0.3] KI-01 and KI-03 fixed |
 | FR-RES-004 | Edit CO and temperature thresholds of own device via `update_own_device_alert_settings` (CO 0–1000 ppm, temp 0–100 °C) | C | Verified | `20260917080000`; `ResidentAlertSettings.tsx:141-190` | Out-of-range → rejected | Residents can lower thresholds arbitrarily; no policy limit (Not Specified — Requires Approval) |
 | FR-RES-005 | Review "address discrepancy" prompts; approving copies GPS-derived address+coordinates onto the device's registered location | C | Verified (code) | `ResidentHome.tsx:303-330`; `20261016000000`; `20261018000000` | Approve → `devices.location_desc/latitude/longitude` updated | Changes the location used for all later drift checks; no admin review step |
 | FR-RES-006 | Device information page (recent readings) and Alert History of own alerts | C | Partially Verified | `ResidentDeviceInfo.tsx:37-38`; `ResidentAlerts.tsx` | | |
 | FR-RES-007 | Account page: name/contact edit | C | Partially Verified | `ResidentAccount.tsx:47-70` | | Direct profile update, client-side validation only |
-| FR-RES-008 | Notification preferences: Web Push opt-in; Telegram link-token generation | C | Partially Verified | `ResidentAlertSettings.tsx:71-140`; `create_telegram_link_token` | Push subscribe row appears | Telegram link has no downstream alert use (KI-24) |
+| FR-RES-008 | Notification preferences: SMS number, Web Push opt-in, Telegram link-token generation | C | Partially Verified | `ResidentAlertSettings.tsx`; `create_telegram_link_token` | Push subscribe row appears | [0.3] Linked Telegram now receives Tier 2 alerts (KI-24 fixed) |
 
 ### FR-IOT — Device and firmware
 
@@ -284,7 +292,7 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | FR-IOT-004 | Alert FSM (evaluated every 2 s, only after `sensor_ready`): Tier 1 = exactly one sensor ≥ its threshold, Tier 2 = both; 3 consecutive readings to enter (and to escalate T1→T2), 2 consecutive safe readings to clear/de-escalate | `HW-1.x` (cited) | Verified (code) | `connectivity.cpp:126-134,503-608`; `ALERT_DEBOUNCE_COUNT`=3, `ALERT_RESOLUTION_COUNT`=2 | Simulated readings walk the FSM | Host simulation reported; compiled firmware not verified (OQ-10) |
 | FR-IOT-005 | Telemetry POST to `ingest-reading` every 30 s when ONLINE (CO, temp, lat/lng, gps_valid, battery_mv, rssi, on_battery, sensor_ready, mq7_phase); a failure sets DEGRADED | C | Verified (code) | `connectivity.cpp:175-205,615-630` | | Backend persists only `co_ppm, temp_celsius, latitude, longitude, gps_valid, on_battery, sensor_ready`; `battery_mv`, `rssi`, `mq7_phase` are discarded (`ingest-reading/index.ts:129-138,166-175`) |
 | FR-IOT-006 | Remote config: at boot and every 10 min fetch `co_alert_ppm`, `temp_alert_c`, `owner_number`, `bfp_number` from `get-device-config` | C | Verified (code) | `connectivity.cpp:328-374,478-482` | Admin changes threshold → device adopts within ≤ 10 min | Offline at boot → compiled-in defaults only (KI-06, KI-19) |
-| FR-IOT-007 | Wi-Fi provisioning by WiFiManager captive portal (`AgapSense-Setup`, open AP); reconnect attempts every 60 s; portal relaunched after 30 s disconnected | C | Verified (code) | `connectivity.cpp:410-415,446-458`; `main.cpp:218-249` | | Open AP without password is a design choice, flagged OQ-17 |
+| FR-IOT-007 | Wi-Fi provisioning by WiFiManager captive portal (`AgapSense-Setup`, WPA2 password `WIFI_AP_PASSWORD`); the portal also takes the device ID and API key (stored in NVS); reconnect attempts every 60 s; portal relaunched after 30 s disconnected, restarting after a 180 s portal timeout | C | Verified (code) | `connectivity.cpp:540-595`; `main.cpp:231-258`; `identity.cpp` | | [0.3] AP is no longer open, but the password is a compile-time constant shared by every unit unless changed per build (OQ-17) |
 | FR-IOT-008 | Local indicators: yellow = Tier 1, red + buzzer = Tier 2, blue = online (blinks when DEGRADED) | C | Verified (code) | `connectivity.cpp:88-123` | | |
 | FR-IOT-009 | Device authenticates every Edge call with `X-Device-Key`; HTTPS validated against a pinned root CA (`setCACert`) | C | Verified (code) | `connectivity.cpp:146-159` | | Pinned CA expiry/rotation Unverified |
 | FR-IOT-010 | Battery state: ADC divider ×2, `on_battery` when < 4000 mV | C | Partially Verified | `readBatteryMv`, `config.example.h` | | Calibration/hardware dependent |
@@ -298,8 +306,8 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | FR-ALERT-001 | Backend recomputes the tier from the device's stored thresholds (`>=`): both → 2; one → 1; neither → HTTP 400 `below_threshold`. The firmware-sent tier is ignored | C | Verified [L-prior version] | `trigger-alert/index.ts:325-339` | POST sub-threshold → 400 | A device whose stored thresholds differ from its local ones is rejected |
 | FR-ALERT-002 | At most one open incident per device (`resolved_at IS NULL`); `raise_alert()` upserts atomically, tier only ever increases; repeated/late posts return the same incident | remediation 5.1/5.2 | Verified (code) **[R, gated]**; legacy select-then-insert fallback runs until migration applied (`persistence:"legacy"`) | `20261020000100`; `trigger-alert/index.ts:385-406,470-520`; tests reported | 20 concurrent posts → 1 incident | Index creation aborts if duplicate open incidents exist |
 | FR-ALERT-003 | Incident lifecycle `active → acknowledged → responding → resolved / false_alarm`; closed ⇔ status∈{resolved,false_alarm} ⇔ `resolved_at` set; closed incidents are immutable; guard trigger normalises legacy writers | remediation 6.1 | Verified (code) **[R]** | `20261021000000` | See §5.9 table | CHECK is `NOT VALID` until an approved backfill (D6.3) |
-| FR-ALERT-004 | Auto-resolution: a telemetry post with `sensor_ready` and both readings **strictly below** thresholds sets `resolved_at` on all of the device's open incidents (including acknowledged/responding ones) | C | Verified (code); **policy undecided** | `ingest-reading/index.ts:180-196` | | D6.1 pending; closes responder-owned incidents without responder action (KI-13) |
-| FR-ALERT-005 | Device connectivity state: online <2 min, reconnecting 2–15 min, offline >15 min or never, from `last_seen_at` | `SW-2.4.3` (cited) | Verified in `lib/deviceStatus.ts`; **Conflicting** across pages | `deviceStatus.ts:11-12` vs `ResidentHome.tsx:168,254`, `ResponderDashboard.tsx` (5 min) | | KI-03 |
+| FR-ALERT-004 | Auto-resolution: when two consecutive telemetry posts are `sensor_ready` and both readings are strictly below thresholds, the device's open incidents still in status `active` are closed (`resolution_source='device'`); acknowledged/responding incidents are left for a responder | Owner decision D6.1 | Verified (code) | `ingest-reading/index.ts:202-260` | | [0.3] KI-13 fixed |
+| FR-ALERT-005 | Device connectivity state: online <2 min, reconnecting 2–15 min, offline >15 min or never, from `last_seen_at` | `SW-2.4.3` (cited) | Verified; [0.3] consistent across pages | `lib/deviceStatus.ts:11-21`, used by every admin, responder and resident page | | KI-03 fixed |
 | FR-ALERT-006 | Retention/archival of readings and alerts | — | **Not Specified — Requires Approval** | No retention/cleanup code or policy found | | `sensor_readings` grows unbounded (30 s per device) — OQ-12 |
 
 ### FR-LOC — Location
@@ -316,13 +324,13 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 
 | ID | Requirement (current behaviour) | Source | Status | Evidence | Acceptance | Limitations |
 |---|---|---|---|---|---|---|
-| FR-NOTIF-001 | Telegram: one message to the **single shared station chat** (`TELEGRAM_CHAT_ID`) for Tier 2 only (includes GPS and a Google Maps link); Tier 1 warnings go to linked admin chats only | O/C | Verified (code); delivery Unverified | `trigger-alert/index.ts:117-143,189-199,413-422` | Message arrives in the chat | Plain text; times printed in UTC without label (D5.6) |
-| FR-NOTIF-002 | Web Push to all approved+active admins (Tier 1 and 2) and, on Tier 2 only, responders and the resident linked to the device | C | Verified (code); delivery Unverified | `trigger-alert/index.ts:201-261`; `send-push-notification/index.ts` | Subscribed browser shows notification | Responder push opt-in UI not found; recipients not area-scoped |
+| FR-NOTIF-001 | Telegram: one message to the **single shared station chat** (`TELEGRAM_CHAT_ID`) for Tier 2 only (includes GPS and a Google Maps link); [0.3] plus the same text to every eligible recipient's linked chat (admins on both tiers; responders and the device's resident on Tier 2) | O/C | Verified (code); delivery Unverified | `trigger-alert/index.ts:198-245` | Message arrives in the chat | Plain text; times printed in UTC without label (D5.6) |
+| FR-NOTIF-002 | Web Push to all approved+active admins (Tier 1 and 2) and, on Tier 2 only, responders and the resident linked to the device | C | Verified (code); delivery Unverified | `trigger-alert/index.ts:217-222`; `send-push-notification/index.ts` | Subscribed browser shows notification | Opt-in UI exists for all roles (0.3); recipients not area-scoped |
 | FR-NOTIF-003 | SMS (SIM800L, text mode) on **Tier 2 only**: owner SMS (Filipino evacuation text + Maps link + address) and BFP SMS (device id, time, readings, link, address). 5-min debounce between SMS pairs; queued independently of Wi-Fi and of the alert POST result | O | Verified (code); hardware **Cannot Verify** | `connectivity.cpp:667-681`; `gsm.cpp:136-215,222-298` | SMS received on two handsets | Single-segment limit (~160 chars) — truncation order designed to keep the link; GPS may be 0,0 (KI-18); no SMS for Tier 1 (by design) |
 | FR-NOTIF-004 | Per-SMS outcome (`+CMGS` seen) reported to `confirm-sms-status` → `alert_events.sms_sent_owner/_bfp`; failure never overwrites an earlier success | C | Verified (code) | `confirm-sms-status/index.ts:67-131` | | "Sent" means the modem returned `+CMGS`, not that the handset received it |
 | FR-NOTIF-005 | Notification ledger (`alert_notifications`): claim before send, record outcome; ≤ 3 attempts; stale `pending` reclaimable after 2 min; fail-open if ledger unavailable; delivery semantics are **at-least-once** | remediation 5.1/5.2 | Verified (code) **[R]** | `20261020000000`; `trigger-alert/index.ts:145-178` | Replay → no duplicate send | Not deployed; reclaim happens only when a later request touches the same key |
-| FR-NOTIF-006 | Per-user Telegram alerts to residents/responders | Proposed in repo (D5.4/D5.5) | **Not Implemented** | channel `telegram_user` reserved in `20261020000000` CHECK; no sender code | — | KI-24, issue #95 |
-| FR-NOTIF-007 | Support request stored in-app (`support_requests` table); no e-mail is sent (Resend path removed, #107) | C | Verified (backend code, 0.2) | `admin-support-request/index.ts`; `20261022000001_support_requests.sql` | | KI-08 |
+| FR-NOTIF-006 | Per-user Telegram alerts to linked accounts | D5.4 (#95) | [0.3] **Implemented** (code) | `trigger-alert/index.ts` (`telegram_user` ledger channel) | — | Recipient eligibility shared with push. KI-24 fixed |
+| FR-NOTIF-007 | Support request stored in-app (`support_requests` table); admins notified by push and Telegram; requester notified on resolve; no e-mail (Resend removed, #107) | C | Verified (code) | `admin-support-request/index.ts`; `resolve-support-request/index.ts` | | KI-08 |
 | FR-NOTIF-008 | In-app notification bell lists the 10 latest alert events with Realtime refresh | C | Partially Verified | `HeaderWidgets.tsx:34-55` | | Same query for all roles — result governed by RLS |
 
 **Requirement count:** 10 AUTH · 7 ADMIN · 5 RESP · 8 RES · 12 IOT · 6 ALERT · 5 LOC · 8 NOTIF = **61 functional requirements** (statistics in `requirements-traceability.md`).
@@ -336,15 +344,15 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 | Area | Observed (verified in code) | Target |
 |---|---|---|
 | Security / authorisation | RLS on all tables; device writes service-role only (`20260917010000`); `api_key` masked via `devices_safe`/`get_device_api_key_secure` (`20261015000000`); admin-only RPCs (`is distinct from 'admin'` after NULL-bypass fix `20260924020000`); lockout; Telegram webhook secret compared in constant time (`telegram-webhook:15-25`); push endpoint restricted to service role or self/admin (`send-push-notification:37-60`) | Password policy NS-RA; session lifetime NS-RA; API-key rotation policy NS-RA |
-| Security concerns | CORS `*` on all functions; `register` auto-confirms e-mail; open provisioning AP; plaintext `api_key`; `SECURITY DEFINER` `get_device_api_key_secure` without pinned `search_path` | — (see KI) |
+| Security concerns | CORS `*` on all functions; `register` auto-confirms e-mail; provisioning AP password is a shared compile-time constant; plaintext `api_key`; `SECURITY DEFINER` `get_device_api_key_secure` without pinned `search_path` (KI-27); self-reactivation (KI-10); unsigned OTA images (KI-31) | — (see KI) |
 | Data integrity | CHECK constraints on roles, statuses, tiers, thresholds; unique one-resident-per-device index; one-open-incident index [R]; lifecycle guard [R] | — |
 | Reliability / fault handling | Persist-first-then-notify; bounded provider timeouts (default 3.5 s each, 4 s dispatch budget); fail-open ledger; firmware retry [R]; watchdog | Availability, RTO/RPO NS-RA |
 | Performance | Telemetry every 30 s per device; alert POST synchronous at transition; HTTP timeout 10 s; geocode 3 s | Response-time / capacity targets NS-RA; no load test evidence |
 | Availability / recovery | Reliant on Supabase, Vercel, Telegram, push services; no backups/DR documented except "fresh backup" before production migration (`CHANGELOG §11`) | NS-RA |
-| Maintainability | TypeScript strict-ish, oxlint, CI typecheck/lint/build (`.github/workflows/ci.yml`); **CI does not run the test suites** (only typecheck, lint, build) | — |
+| Maintainability | TypeScript strict-ish, oxlint; [0.3] CI (`.github/workflows/ci.yml`) runs typecheck, lint, `npm test`, the Playwright black-box suite against a local Supabase stack, and the build. Not in CI: `supabase/tests/local/*`, `tests/edge/run_integration.sh`, firmware host tests, ESP32 compile | — |
 | Usability / accessibility | Responsive layouts reported tested at 375/768/1440 px; field-level validation anti-pattern noted by owner's own testing; no accessibility standard claimed | NS-RA |
 | Privacy of location data | RLS limits residents to own device; admins/responders see all; coordinates sent to Nominatim (third party) and embedded in SMS/Telegram/Google Maps links; no retention policy; no privacy notice found | Data-protection compliance basis (e.g., RA 10173) NS-RA — OQ-13 |
-| Deployment / configuration | Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, optional `VITE_VAPID_PUBLIC_KEY`; function secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `RESEND_API_KEY`, optional `ALERT_DISPATCH_BUDGET_MS`, `ALERT_PROVIDER_TIMEOUT_MS`, `ALERT_STRICT_DB`; firmware `config.h` (git-ignored; template `config.example.h`) | — |
+| Deployment / configuration | Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, optional `VITE_VAPID_PUBLIC_KEY`; function secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, optional `VAPID_SUBJECT`, `APP_URL`, `ALERT_DISPATCH_BUDGET_MS`, `ALERT_PROVIDER_TIMEOUT_MS`, `ALERT_STRICT_DB`; firmware `config.h` (git-ignored; template `config.example.h`) | — |
 
 ---
 
@@ -393,7 +401,7 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 
 | Table | Purpose | Key columns / constraints | Access (RLS summary) |
 |---|---|---|---|
-| `devices` | Registered nodes | `id` PK; `device_code` UNIQUE; `label`; `location_desc` NOT NULL (registered address text); `api_key` UNIQUE (default `'sk_'||hex(24 bytes)`); `co_threshold int` default 200 CHECK 0–1000; `temp_threshold float` default 60.0 CHECK 0–100; `bfp_contact`; `is_active`; `last_seen_at`; `latitude`,`longitude` (registered); `local_ip` | Admin ALL; responder/resident SELECT on non-secret columns only (`20261015000000` column grant); view `devices_safe` |
+| `devices` | Registered nodes | `id` PK; `device_code` UNIQUE (generated `AGS-NNN` by `register_device`); `label`; `location_desc` (registered address text); `api_key` UNIQUE (default `'sk_'||hex(24 bytes)`); `co_threshold int` default 200 CHECK 0–1000; `temp_threshold float` default 60.0 CHECK 0–100; `bfp_contact`; `is_active`; `last_seen_at`; `latitude`,`longitude` (registered); `location_verified` (+ `_at`, `_by`); `firmware_version/_url/_md5` (OTA target), `firmware_version_reported`; `local_ip` | Admin ALL; responder/resident SELECT on non-secret columns only (column grant); view `devices_safe` |
 | `profiles` | User profile, extends `auth.users` (CASCADE) | `role`, `status` (default **'approved'**), `is_active`, `setup_complete`, `contact_number`, `address`, `device_id` → `devices`; `telegram_chat_id`; partial UNIQUE `(device_id) WHERE role='resident'` | Own row + approved admin all; admin insert/delete; self-update (trigger-protected columns) |
 | `sensor_readings` | Telemetry | `device_id`, `co_ppm`, `temp_celsius`, `latitude`, `longitude`, `gps_valid`, `on_battery`, `sensor_ready`, `recorded_at`; index `(device_id, recorded_at DESC)` | SELECT by role/own device; INSERT service-role only |
 | `alert_events` | Incident record | `alert_tier` ∈ {1,2}; readings; coords; `address_resolved`; `telegram_sent`, `sms_sent_owner`, `sms_sent_bfp`; `triggered_at`; `resolved_at`; `incident_status`, `acknowledged_by/at`, `outcome_notes`; [R] `resolved_by`, `resolution_source`; [R] unique open-per-device index | Admin ALL; responder SELECT + column UPDATE; resident SELECT own device; INSERT service-role only |
@@ -401,16 +409,19 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 | `address_discrepancies` | GPS-vs-registered drift prompts | `device_id`, `resident_id`, `gps_derived_address`, `registered_address`, lat/lng, `status` ∈ pending/approved/rejected | Admin ALL; resident SELECT own; update only via RPC |
 | `registration_requests` | Review metadata for sign-ups | `user_id` → `profiles` (CASCADE), `requested_role`, `device_code` (free text), `organization`, `position`, `verification_info`, review fields; [0.2] `reviewed_by` → `auth.users` (convention break, see KI-29) | Admin ALL; user reads/creates own |
 | `support_requests` [0.2] | In-app support/contact requests (replaced Resend e-mail, #107) | `user_id` → `profiles` (CASCADE); `category`, `message` (no CHECK/length limit — KI-08); `status` ∈ open/resolved; `reviewed_by` → `auth.users` (convention break, see KI-29) | Admin ALL (`get_auth_role()='admin'`); user insert/select own — but function inserts via service-role, bypassing these checks entirely (KI-08) |
+| `firmware_releases` [0.3] | Fleet OTA release records | `version`, `url`, `md5`, `notes`, `created_by` | Admin manage; see FIRMWARE_GUIDE §8 |
 | `push_subscriptions` | Web Push endpoints | `user_id`, `endpoint` UNIQUE, `p256dh`, `auth` | Owner CRUD; service reads |
 | `telegram_link_tokens` | One-time link tokens (15 min) | `token` PK, `user_id`, `expires_at` | No client grants; RPC + webhook only |
 | `login_attempts` | Lockout evidence | `email`, `success`, `attempted_at`, `ip_address` (never populated by `login`) | Admin read; no client insert |
 | `login_lockout_overrides` | Admin unlocks | `email` PK, `unlocked_at/by` | Admin only |
-| `settings` | Key/value (session timeouts) | `key` PK | Admin ALL; approved users SELECT |
-| `station_settings` | Singleton station info | `id=1` CHECK; **migration columns:** `team_name, commander_name, contact_number, address, latitude, longitude, alert_radius_km`; **UI uses:** `station_name, address, contact_number, email` | Admin ALL, **responder ALL**, resident SELECT |
+| `settings` | Key/value (session timeouts `timeout_admin`, `timeout_bfp`, `timeout_resident`) | `key` PK; **no rows seeded by any migration** (KI-30) | Admin ALL; approved users SELECT |
+| `station_settings` | Singleton station info | `id=1` CHECK; `station_name`, `address`, `contact_number`, `email` (used by the UI; `station_name` and `email` added by `20261103000000`); unused legacy columns `team_name, commander_name, latitude, longitude, alert_radius_km` | Admin ALL, **responder ALL** (KI-11), approved users SELECT |
 
 ### Functions / triggers / views
-`get_auth_role()`, `is_approved_admin()`, `get_dashboard_stats()` (SECURITY DEFINER, unused by pages found; EXECUTE open to PUBLIC — Confirmed, KI-25 [0.2]), `protect_profile_fields` (trigger), `handle_new_user` (no-op), `generate_device_api_key`/`set_device_api_key` (legacy base64 key path, superseded by column default), `regenerate_device_api_key`, `get_device_api_key_secure`, `check_login_lockout`, `admin_unlock_login`, `update_own_device_alert_settings`, `resolve_address_discrepancy`, `create_telegram_link_token`, `claim_/complete_notification` [R], `raise_alert` [R], `alert_events_lifecycle_guard` [R], `transition_incident` [R]; view `devices_safe` (security_invoker).
+`get_auth_role()`, `is_approved_admin()`, `get_dashboard_stats()` (SECURITY DEFINER; [0.3] restricted to approved admins by `20261027000000`, KI-25 fixed), `protect_profile_fields` (trigger), `handle_new_user` (no-op), `generate_device_api_key`/`set_device_api_key` (legacy base64 key path, superseded by column default), `regenerate_device_api_key`, `get_device_api_key_secure`, `check_login_lockout`, `admin_unlock_login`, `update_own_device_alert_settings`, `resolve_address_discrepancy`, `create_telegram_link_token`, `claim_/complete_notification` [R], `raise_alert` [R], `alert_events_lifecycle_guard` [R], `transition_incident` [R]; [0.3] `register_device`, `update_own_device_location`, `get_incident_resident_contact`; view `devices_safe` (security_invoker).
 
+> **[0.3]** The note below is historical: `20261027000000` added a caller check and revoked EXECUTE from PUBLIC/anon; `get_dashboard_stats.test.sql` (8 checks) passes.
+>
 > **Note — `get_dashboard_stats()`** counts all devices/alerts/profiles with `SECURITY DEFINER`, no internal caller check and no `SET search_path` (init.sql:198-218). **[0.2 — resolved, now Confirmed]** Postgres grants `EXECUTE` to `PUBLIC` by default on newly created functions, and no migration in the full history (re-read in the 0.2 update) revokes it or adds a caller-role check — so this is executable by any authenticated (and possibly `anon`) caller today, bypassing every RLS policy that otherwise hides these counts from non-admin roles. See KI-25. No frontend call was found.
 
 ### Location and address data — kept distinct
@@ -425,7 +436,7 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 | Resident profile address | `profiles.address` | User-entered at registration | Residence address | Independent; never reconciled with device address |
 
 ### Authoritative vs derived
-Authoritative: `devices` thresholds/ownership, `alert_events` lifecycle columns, `profiles.status/role`. Derived/display: `devices.local_ip` (see KI-05), connectivity labels (from `last_seen_at`), location kind, all dashboard counts, "uptime"/"connectivity %" (fabricated).
+Authoritative: `devices` thresholds/ownership, `alert_events` lifecycle columns, `profiles.status/role`. Derived/display: `devices.local_ip` (see KI-05), connectivity labels (from `last_seen_at`), location kind, all dashboard counts.
 
 ### Lifecycle and retention
 Not specified (FR-ALERT-006). `registration_requests`/`profiles` removed by auth-user delete (CASCADE). `alert_events.acknowledged_by` has no `ON DELETE` action, so deleting a responder who acknowledged an incident is blocked (noted in repo docs).
@@ -442,16 +453,16 @@ Not specified (FR-ALERT-006). `registration_requests`/`profiles` removed by auth
 | BR-04 Tier classification | Tier 2: CO ≥ T_co **and** temp ≥ T_temp; Tier 1: exactly one; evaluated on device (debounced) and again on server (authoritative) | `connectivity.cpp:126-134`; `trigger-alert:325-339` |
 | BR-05 Debounce / duplicates | Device: 3 consecutive readings; 2 consecutive safe to clear; SMS pair at most once per 5 min (volatile timer); server: one open incident per device [R], ledger de-duplication [R] | `config.example.h`; `20261020000*` |
 | BR-06 Incident status transitions | active→acknowledged (responder, admin); acknowledged→responding / resolved / false_alarm (responder, admin); responding→resolved / false_alarm (responder, admin); admin may also close from `active`; closed = terminal; repeat = no-op | `transition_incident()` [R] |
-| BR-07 Auto-resolution | Telemetry with `sensor_ready` and both readings strictly below thresholds closes all open incidents of the device | `ingest-reading:180-196` (policy pending, D6.1) |
+| BR-07 Auto-resolution | Two consecutive `sensor_ready` readings strictly below thresholds close the device's incidents still in `active`; acknowledged/responding ones are left to a responder | `ingest-reading:202-260` (D6.1) |
 | BR-08 Location staleness | UI: live ≤ 15 min and `gps_valid`; else last-known; device GPS fix valid ≤ 5 s old | `lib/location.ts`, `gps.cpp` |
-| BR-09 Notification recipients | Telegram: shared station chat. Push: approved+active admins & responders (T1,T2) + the device's resident (T2). SMS: owner = approved+active resident linked to the device (`profiles.contact_number`), BFP = `devices.bfp_contact`; Tier 2 only | `trigger-alert:204-213,359-377`; `get-device-config:57-65` |
+| BR-09 Notification recipients | Telegram: shared station chat (Tier 2) plus each eligible recipient's linked chat. Push: approved+active admins & responders (T1,T2) + the device's resident (T2). SMS: owner = approved+active resident linked to the device (`profiles.contact_number`), BFP = `devices.bfp_contact`; Tier 2 only | `trigger-alert:204-213,359-377`; `get-device-config:57-65` |
 | BR-10 Communication fallback | Alert POST: retry/backoff [R]; SMS is parallel, not conditional (§5.7) | |
 | BR-11 Error handling | Backend DB faults → 500 retryable (`trigger-alert`); other functions return 400/401 for many fault types (KI-12) | |
 | BR-12 Administrative operations | Approve/reject/delete users; create pre-approved users; assign device; regenerate API key; unlock login; edit settings | Edge/RPC |
-| BR-13 Responder handling | Via `transition_incident` only (UI); direct column UPDATE still granted in production until Step 6c (`20261022000000`) is deployed | |
+| BR-13 Responder handling | Via `transition_incident` only; direct column UPDATE revoked in the repo (`20261022000000`) | |
 | BR-14 Resident operations | Link device, edit thresholds, resolve drift prompt, edit own contact, push/Telegram preferences | |
 
-**Intended vs implemented where they differ** — documented in the Known Issues (§5.15): DB `approved` default for profiles vs "pending" workflow (only enforced because `register` always sets `pending`); tier computed by two parties with potentially different thresholds; auto-resolve closing responder-owned incidents; per-user Telegram promised in UI copy but not delivered.
+**Intended vs implemented where they differ** — documented in the Known Issues (§5.15): DB `approved` default for profiles vs "pending" workflow (only enforced because `register` always sets `pending`); tier computed by two parties with potentially different thresholds; session timeouts shown in Settings but not in force until saved (KI-30).
 
 ---
 
@@ -463,7 +474,7 @@ Terminology: **generated** (message composed) → **provider-accepted** (HTTP 2x
 | Aspect | Detail |
 |---|---|
 | Trigger | Every `trigger-alert` request that passes validation; one message per `(incident, tier)` once the ledger is deployed |
-| Recipients | One chat id from `TELEGRAM_CHAT_ID`; same chat for all devices |
+| Recipients | One chat id from `TELEGRAM_CHAT_ID`, same for all devices (Tier 2 only); [0.3] plus linked per-user chats (`telegram_user` channel) |
 | Mechanism | Bot API `sendMessage`, plain text, 3.5 s timeout |
 | Config | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (absent ⇒ silently skipped) |
 | Success/failure | 2xx ⇒ `telegram_sent=true` and ledger `sent`; 4xx (except 429) non-retryable; 429/5xx/timeout retryable |
@@ -493,12 +504,12 @@ Terminology: **generated** (message composed) → **provider-accepted** (HTTP 2x
 | Limitations | Duplicates possible after reboot (D5.7); empty/placeholder numbers fail (KI-19); coordinates may be 0,0 (KI-18); hardware **Cannot Verify** |
 
 ### Support request inbox (in-app) [0.2 — replaced Resend e-mail, #107]
-Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `support_requests` via service-role (no e-mail, no `RESEND_API_KEY`). Caller only needs a valid session — `profiles.status`/`is_active`/`role` are not checked, so unapproved accounts can file a request; `category` is checked for truthiness only, not validated against the UI's category list or length-limited (KI-08).
+Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `support_requests` via service-role (no e-mail, no `RESEND_API_KEY`) and [0.3] notifies approved, active admins by push and their linked Telegram (link included only when `APP_URL` is set). Caller only needs a valid session — `profiles.status`/`is_active`/`role` are not checked, so unapproved accounts can file a request; `category` is checked for truthiness only, not validated against the UI's category list or length-limited (KI-08).
 
 ### In-app Realtime
 `postgres_changes` channels on `devices`, `alert_events`, `profiles`, `sensor_readings`; unfiltered subscriptions; availability depends on Supabase Realtime (WebSocket) — not testable in the reviewers' sandbox per `LIVE_TESTING_SUMMARY.md`.
 
-**Not required merely because useful:** e-mail alerts, per-user Telegram, WhatsApp, voice calls — none is in the baseline.
+**Not required merely because useful:** e-mail alerts, WhatsApp, voice calls — none is in the baseline. (Per-user Telegram was implemented after 0.2 under D5.4.)
 
 ---
 
@@ -510,20 +521,21 @@ Triggered by the `AdminSupportModal`; `admin-support-request` inserts into `supp
 | Public | `RegisterResident`, `RegisterResponder` | Register | `functions/register` | Submit | none | Verified | Field-level validation anti-pattern (owner's own report) |
 | Public | `PendingApproval`, `SessionExpired`, `ForgotPassword`, `ResetPassword`, `NotFound` | Account/session screens | Supabase Auth | | none | Verified/Partial | |
 | Admin | `Dashboard` | Fleet overview | `devices`, `alert_events`, `profiles`, `sensor_readings` | View | AuthGuard(admin) / RLS admin | Partial | |
-| Admin | `InteractiveMap` | Map + alert feed | `devices`, `sensor_readings`, `alert_events` | View | same | Partial | no sidebar entry |
-| Admin | `Devices` ("Devices") | CRUD devices, keys | `devices`; RPC | Create, edit, toggle, regenerate key | same | Verified | |
-| Admin | `Users` | Approvals, create, assign | `profiles`, `registration_requests`, `devices`; Edge | Approve/reject/delete/create/assign | same | Verified | No UI to set `is_active` found |
+| Admin | `InteractiveMap` ("Live Map") | Map + alert feed | `devices`, `sensor_readings`, `alert_events` | View | same | Partial | |
+| Admin | `Devices` ("Devices") | Register (generated code), edit, toggle, confirm pin, OTA target, regenerate key | `devices`, `firmware_releases`; RPC | Create, edit, toggle, regenerate key | same | Verified | |
+| Admin | `Users` | Approvals, create, edit, deactivate/reactivate, assign | `profiles`, `registration_requests`, `devices`; Edge (`manage-user` etc.) | Approve/reject/delete/create/edit/deactivate/assign | same | Verified | KI-10 |
 | Admin | `DeviceStatus` ("Device Status") | Fleet + incident close | `devices`, `alert_events`, `sensor_readings` | Resolve | same | Verified | |
-| Admin | `Logs` ("System Log") | Event/log view + export | `alert_events`, `login_attempts`, `devices` | Filter, export | same | Partial | KI-04 |
-| Admin | `Settings` (`/admin/settings/security`) | Timeouts, unlock, push | `settings`; RPC | Save, unlock | same | Verified | |
-| Responder | `ResponderDashboard` | Live incidents/devices | `devices_safe`, `alert_events` | Acknowledge/responding/resolve/false alarm | AuthGuard(bfp) / RLS + RPC | Partial | KI-02, KI-03 |
+| Admin | `Logs` ("System Log") | Event/log view + export | `alert_events`, `login_attempts`, `devices`, others via `lib/systemLog.ts` | Search, filter, export | same | Partial | |
+| Admin | `SupportRequests` (`/admin/support`) [0.3] | Support inbox | `support_requests`; Edge | Resolve/reopen with reply | same | Verified (code) | KI-08 |
+| Admin | `Settings` (`/admin/settings/security`) | Timeouts, unlock, push | `settings`; RPC | Save, unlock | same | Verified | KI-30 |
+| Responder | `ResponderDashboard` | Live Tier 2 incidents/devices | `devices_safe`, `alert_events`; RPC | Acknowledge/responding/resolve/false alarm, call resident | AuthGuard(bfp) / RLS + RPC | Partial | |
 | Responder | `ResponderAlertLogs` | History | `alert_events`, `devices_safe` | Filter, export | same | Partial | |
-| Responder | `ResponderSettings` | Profile, station info, Telegram | `profiles`, `station_settings`; RPC | Save | same | Conflicting | KI-07 |
-| Resident | `ResidentSetup` | First-run contact number | `profiles` | Save | AuthGuard(resident) | Verified | |
-| Resident | `ResidentHome` | Own device dashboard + link + drift prompt | `devices_safe`, `sensor_readings`, `alert_events`, `address_discrepancies`; Edge/RPC | Link device, refresh, approve/reject drift | same / RLS | Partial | KI-01, KI-03 |
-| Resident | `ResidentAlertSettings` | Thresholds, contact, push, Telegram | `devices_safe`, RPC, `profiles` | Save | same | Verified | KI-24 |
+| Responder | `ResponderSettings` | Profile, station info, Telegram, push, support | `profiles`, `station_settings`; RPC | Save | same | Verified (code) | KI-11 |
+| Resident | `ResidentSetup` | First-run mobile number, then install pin if needed | `profiles`, `devices_safe`; RPC | Save, skip pin | AuthGuard(resident) | Verified | |
+| Resident | `ResidentHome` | Own device dashboard + link + drift prompt | `devices_safe`, `sensor_readings`, `alert_events`, `address_discrepancies`; Edge/RPC | Link device, refresh, approve/reject drift | same / RLS | Partial | |
+| Resident | `ResidentAlertSettings` | Thresholds, SMS number, push, Telegram | `devices_safe`, RPC, `profiles` | Save | same | Verified | |
 | Resident | `ResidentDeviceInfo`, `ResidentAlerts` | Device info, alert history | `devices_safe`, `sensor_readings`, `alert_events` | Refresh | same | Verified | `ResidentAlerts.tsx` is routed at `/home/alerts` ("Alert History"); it replaced the resident System Log |
-| Resident | `ResidentAccount` | Name/contact | `profiles`, `devices_safe` | Save | same | Partial | |
+| Resident | `ResidentAccount` | Name, support requests | `profiles`, `devices_safe`, `support_requests` | Save, contact admin | same | Partial | |
 | Shared | `AdminLayout`/`ResponderLayout`/`ResidentLayout`, `HeaderWidgets` (search, bell, user menu), `AdminSupportModal`, `LoadErrorBanner`, `GlobalErrorBoundary`, `LocationBadge` | Shell and helpers | | | | | |
 
 The existing information architecture (routes above) is preserved; no new page is introduced by this document.
@@ -543,7 +555,7 @@ The existing information architecture (routes above) is preserved; no new page i
 | Cellular network / SIM800L | SMS | SMS bodies with coordinates | SIM with credit, coverage | Coverage, credit, antenna, 2G availability ⇒ silent failure (reported as `false`) |
 | Google Maps (links only) | Navigation URLs in messages | coordinates in URL | none | None (links only) |
 | Vercel | SPA hosting | | `vercel.json` | Unverified |
-| Leaflet, lucide-react, Playwright (listed as runtime dependency) | Libraries | | `package.json` | `playwright` is in `dependencies` (not devDependencies) — unusual (Observation) |
+| Leaflet, lucide-react | Libraries | | `package.json` | [0.3] `@playwright/test` is now a devDependency (0.2 observation resolved) |
 
 Internet-dependent behaviours: all device→backend traffic, geocoding, Telegram, Push, tiles. Physical-hardware-dependent: sensing, GPS lock (needs sky view), SMS.
 
@@ -574,73 +586,82 @@ The system does **not** claim fail-safe emergency operation. No field test, soak
 
 The full matrix is in [`requirements-traceability.md`](requirements-traceability.md). Summary of evidence available:
 
-| Evidence type | Where | Executed in this review |
-|---|---|---|
-| Node tests (`tests/*.test.ts`, `tests/edge/*.test.mjs`) | `npm test` (`node --test`) | **No** (dependencies not installed; installation prohibited) |
-| Local PostgreSQL suites | `supabase/tests/local/*` | **No** |
-| Firmware host tests | `firmware/.../host_tests/run.sh` | **No** |
-| Live production checks (RBAC, auth, DB) | `testing/reports/LIVE_*` | **No** (self-reported) |
-| Hardware / field tests | none | **Cannot Verify in Current Environment** |
+| Evidence type | Where | Executed in 0.1/0.2 | Executed in 0.3 (2026-10-16, `d74dc81`) |
+|---|---|---|---|
+| Unit + edge tests (`tests/*.test.ts`, `tests/edge/*.test.mjs`) | `npm test` | No | **Yes**: 187 tests, 179 pass, 0 fail, 8 skipped (the PostgreSQL-backed ones, run separately below) |
+| `trigger-alert` integration tests on local PostgreSQL | `tests/edge/run_integration.sh` | No | **Yes**: 8/8 pass |
+| Local PostgreSQL suites | `supabase/tests/local/*.test.sql` (13 files) | No | **Yes**: 224 PASS, 0 FAIL (PostgreSQL 16 with the repo's Supabase stub, all 52 migrations) |
+| Firmware host tests | `firmware/.../host_tests/run.sh` | No | **Yes**: all groups 0 failed, including the connectivity/GSM simulation (256 checks) |
+| Typecheck / lint | `npm run typecheck`, `npm run lint` | No | **Yes**: clean (lint: 2 warnings, 0 errors) |
+| Playwright black-box suite | `npm run test:e2e` (also in CI) | No | No (needs a running `supabase start` stack) |
+| Live production checks (RBAC, auth, DB) | `testing/reports/LIVE_*` | No (self-reported) | No |
+| ESP32 compile, hardware / field tests | none in repo; checklist `docs/HARDWARE_BENCH_TEST.md` | **Cannot Verify** | **Cannot Verify** |
 
-Every requirement is therefore **Not Tested** in this review; the traceability matrix distinguishes "reported by repository authors" from "no evidence".
+Local results show the repository's code and migrations behave as their tests claim on a fresh database. They say nothing about what is deployed: production's migration history differs from the repository (§5.1 limitation 2).
 
 ---
 
 ## 5.15 Known Issues and Specification Gaps
 
-### Confirmed implementation defects (static evidence)
+### Status of every Known Issue (0.3 re-check)
 
-| ID | Defect | Impact | Evidence | Scope relation | Action |
-|---|---|---|---|---|---|
-| KI-01 | Resident "System Uptime" displays constant `99.98%` when online | Misleading metric on a safety system | `ResidentHome.tsx:268` | Existing feature, defective | Correct (or remove claim) — owner decide |
-| KI-02 | Responder "connectivity %" is a constant per state (98/92/100/0) | Misleading | `ResponderDashboard.tsx` (`connectivity` in `fetchData`) | Same | Correct |
-| KI-03 | Three different "online" definitions (2/15 min helper vs flat 5 min on resident & responder pages) | Inconsistent status across roles | `deviceStatus.ts:11-12`; `ResidentHome.tsx:168,254`; `ResponderDashboard.tsx` | Violates cited `SW-2.4.3` | Correct |
-| KI-04 | Admin log writes the same text ("Thermal threshold exceeded … or smoke detected") for every alert; sensors are CO/temperature, not smoke | Inaccurate log | `Logs.tsx` (alert mapping ≈ line 84) | Existing | Correct text |
-| KI-05 | `devices.local_ip` is filled from `x-forwarded-for`/`x-real-ip` of the request, i.e. the client's *public/forwarded* address, not a LAN address; UI labels it "Device local IP"; firmware does not send `local_ip` | Mislabelled data | `ingest-reading/index.ts:177`; `Devices.tsx:364` | Existing | Clarify intent |
-| KI-06 | Threshold defaults disagree: DB temp 60 °C (`init.sql:18`), admin form default 65 (`Devices.tsx`), firmware fallback 70 (`TEMP_ALERT_PPM_DEFAULT`, misnamed "PPM") ; CO 200 everywhere | Wrong behaviour if first config fetch fails or device created via form | files cited | Existing | Owner to define canonical default |
-| KI-07 | `station_settings`: UI and TS type use `station_name`, `email`, `key_personnel`; migrations define `team_name`, `commander_name`, `alert_radius_km`… | Station editor fails on a DB built from the repo; live schema unknown | `ResponderSettings.tsx:49-135`; `lib/supabase.ts:105-116`; `init.sql:90-100` | Conflicting | Owner: which is intended (OQ-04) |
-| KI-08 | **[0.2 — rewritten]** `admin-support-request` (post-#107 in-app inbox, not the old Resend path) inserts into `support_requests` using the service-role client, so the table's RLS is bypassed by construction. The function itself checks only that the caller has a valid session — not `profiles.status='approved'`/`is_active`/role — so any authenticated account, including pending/unapproved ones, can file a request; `category` is checked for truthiness only, not restricted to the UI's fixed list, and neither `category` nor `message` has a length limit; `full_name` is still selected from `profiles` but never used (dead code left over from the deleted Resend template) | Unapproved accounts can reach the admin inbox; unbounded/arbitrary `category` values can be stored and later rendered in the admin UI; minor storage-abuse vector | `admin-support-request/index.ts:30-37,44-48`; `20261022000001_support_requests.sql` (no CHECK on `category`, no length constraint) | New gaps in the #107 replacement; old Resend-specific defect (missing `profiles.email` column) no longer applies | Confirm unapproved-account access is intended; add `category` validation + length limits if not; drop the unused `full_name` select |
-| KI-09 | Repo `get_auth_role()` ignores `profiles.status`; every `get_auth_role()`-based policy (devices, sensor_readings, alert_events, settings, station_settings…) therefore admits **pending/rejected** accounts holding a role. Contradicted by older migration comments and by a live RBAC test that observed immediate revocation | If live = repo: a self-registered responder (pending) could read all incidents/devices, edit `station_settings` and update incident columns before approval | `init.sql:192-195`; `20261019000000` header; `LIVE_RBAC_VERIFICATION.md` row 38; `CHANGELOG §12` ("none yet") | Security — **Conflicting** | **Owner clarification + live inspection first** (OQ-03); no redesign authorised |
-| KI-10 | `protect_profile_fields` protects only `role,status,device_id` | A user can alter own `is_active`, `setup_complete`, `telegram_chat_id` via PostgREST; no UI to deactivate users was found, so practical risk depends on operations | `init.sql:236-261`; `Users.tsx` (no `is_active`) | Existing | Clarify intent for `is_active` |
-| KI-11 | Responder role has `FOR ALL` on `station_settings` and (in production, until Step 6c is deployed) direct column UPDATE on `alert_events` | Wider than the UI exposes | `init.sql:341-342`; `20261012000001`; revoke migration `20261022000000` | Fixed in code (#97), not yet deployed | Deploy after 6.1/6.2 |
-| KI-12 | Error-code hygiene: `ingest-reading` and `confirm-sms-status` map DB faults to 401/400; firmware treats 4xx as permanent for `confirm-sms-status` ⇒ dropped report | Lost delivery reports on transient faults | `ingest-reading:272-277`; `confirm-sms-status:137-143`; CHANGELOG §9 | Known/accepted risk | Owner decision |
-| KI-13 | Auto-resolve closes acknowledged/responding incidents without a responder | Responder work may vanish from the live feed | `ingest-reading:180-196` | Pending D6.1 | Owner decision |
-| KI-14 | Dead code: `<= 100` geocode shortcut inside a `> 100` branch | None functionally | `ingest-reading:239` | Existing | Optional |
-| KI-17 | Firmware never uses `last_co_ms`/`last_temp_ms`; a failed temperature probe keeps the last valid value forever; CO is held across the heating phase | Fault can silently suppress or fabricate a reading | `sensors.cpp:96,151`; no reader | Detection logic — change needs review (rule 8) | Owner decision |
-| KI-18 | SMS bodies use `fix.lat/lng` even when no fix was ever acquired (0,0) and when `gps_valid=false` | Misleading map link in emergency SMS | `connectivity.cpp:670-675`; `gsm.cpp:150-163` | Existing | Owner decision |
-| KI-19 | Unlinked/unapproved resident ⇒ `owner_number` is `""`; `fetchRemoteConfig` default operator keeps a present-but-empty string ⇒ SMS to empty number fails; compile-time placeholder numbers apply if the first fetch never succeeds | Owner SMS silently fails in those cases | `get-device-config:67-78`; `connectivity.cpp:362-368` | Partially verified (ArduinoJson semantics assumed) | Hardware test |
-| KI-20 | `sw.js` icon `/icon-192x192.png` is not in `public/` | Missing push icon | `public/` listing | Cosmetic | Optional |
-| KI-24 | Telegram account linking stores `telegram_chat_id`; no sender uses it; webhook says "You will receive fire alerts here" | User expectation not met | grep: only `telegram-webhook:76-79` writes it | Incomplete (#95) | Owner D5.4/D5.5 |
-| KI-25 [0.2] | `get_dashboard_stats()` is `SECURITY DEFINER` with no `SET search_path` and no internal caller check; Postgres grants `EXECUTE` to `PUBLIC` by default on new functions and no migration (full 35-file history re-read) revokes it. Corroborating pattern: from `20261017000000` onward, every other sensitive function the team wrote gets an explicit `REVOKE ALL ... FROM PUBLIC/anon/authenticated` in the same migration (`create_telegram_link_token`, `resolve_address_discrepancy`, `is_approved_admin`, `claim_/complete_notification`, `raise_alert`, `transition_incident`) — `get_dashboard_stats()` is among the `SECURITY DEFINER` functions that never received this treatment (also true of `protect_profile_fields()` and the dead-code `handle_new_user()`, all three from the same original `init.sql`, and of `get_device_api_key_secure()` — KI-27, a later and more unusual case), consistent with being a pre-convention oversight rather than an intentionally public RPC | Any authenticated (possibly `anon`) caller can execute it directly (e.g. PostgREST `rpc/get_dashboard_stats`) and get system-wide device/alert/user counts, bypassing every RLS policy hiding these from non-admin roles | `20260717000000_init.sql:197-218`; no later `REVOKE EXECUTE`/role check found; no frontend caller found | Resolves the prior "Unverified" note in §5.8 — Confirmed static defect (subject to the standing live-vs-repo caveat in §5.1 limitation 2) | Security — add `REVOKE EXECUTE ... FROM PUBLIC` + explicit admin-only grant, or an internal role check |
-| KI-26 [0.2] | `check_login_lockout()` keys the failure counter on `email` with a case-sensitive comparison; `login/index.ts` never lower-cases `email` before calling it or writing `login_attempts`; Supabase Auth (GoTrue) authenticates e-mail case-insensitively | An attacker can defeat the app-level lockout tiers by varying case per attempt (`victim@x.com`, `Victim@x.com`, `VICTIM@X.com`…) — each is counted as a fresh, unlocked identity while GoTrue treats them as the same account | `login/index.ts:67-112`; `check_login_lockout()` (migration `20260924090000`) | New — security | Lower-case the e-mail before every lockout read/write and RPC call |
-| KI-27 [0.2] | `get_device_api_key_secure()` is `SECURITY DEFINER` without `SET search_path`. Unlike the pre-convention gaps in `init.sql` (KI-25), this function was created on `20261015000000` — chronologically *after* the hardening convention began (first seen `20260917060000`, made explicit/systematic from `20260924020000`) — making it the only `SECURITY DEFINER` function created after the convention started that doesn't follow it | Low current exploitability (`authenticated`/`anon` lack `CREATE` on the database by default; the function also has its own internal `v_role = 'admin'` check, unlike `get_dashboard_stats()`), but breaks the project's own hardening convention and is the exact class of bug `20260924020000` exists to close | `20261015000000_fix_devices_safe_security_invoker.sql:6-22` | New — hardening consistency | Add `SET search_path = public, pg_temp` to match the convention |
-| KI-28 [0.2] | `manage-registration`'s `approve` action writes `profiles.device_id` with no check that the device isn't already claimed by another resident, unlike `assign-device`/`link-device`, which both guard this | If two profiles end up sharing a `device_id`, `trigger-alert`'s Tier-2 SMS lookup uses `.maybeSingle()`, which errors on multiple matches; the error is swallowed and `owner_contact` resolves to `''` — **the resident's SMS fire alert silently never sends** | `manage-registration/index.ts:67-77`; `trigger-alert/index.ts:359-369` | New — safety-critical (alert delivery) | Add the same pre-write uniqueness check used in `assign-device`/`link-device` to the approve path |
-| KI-29 [0.2] | `support_requests.reviewed_by`, `registration_requests.reviewed_by` and `login_lockout_overrides.unlocked_by` reference `auth.users(id)` directly, while every other actor-tracking column in the schema (`acknowledged_by`, `resolved_by`, `user_id`, `resident_id`…) references `public.profiles(id)` | Not a functional bug (1:1 PK), but breaks a PostgREST embed like `profiles!reviewed_by(full_name)` — the same pattern already used for the analogous `user_id` column — if ever attempted on these columns | `20260717000000_init.sql:116`; `20260924010000_admin_login_unlock.sql:20`; `20261022000000_support_requests.sql:14` | New — schema convention | Optional: point new actor-tracking FKs at `profiles(id)` going forward |
+Status key: **Fixed** = the defect is gone from the code at `d74dc81` (deployment unknown unless stated); **Partly fixed**; **Open**. "Tested 0.3" = reproduced or confirmed by running code locally in this review, not only by reading it.
+
+| ID | Issue (as first recorded) | Status 0.3 | Current evidence | Remaining action |
+|---|---|---|---|---|
+| KI-01 | Resident "System Uptime" constant 99.98% | **Fixed** | No such widget in `src/` | — |
+| KI-02 | Responder "connectivity %" constants | **Fixed** | No such value in `src/` | — |
+| KI-03 | Three "online" definitions across pages | **Fixed** | Every admin, responder and resident page and the header use `lib/deviceStatus.ts` (2 / 15 min) | — |
+| KI-04 | Same "…or smoke detected" text for every alert in the System Log | **Fixed** | `lib/systemLog.ts:89-100` derives the text from tier and device | — |
+| KI-05 | `devices.local_ip` filled from the forwarded client IP, labelled "Device local IP" | **Partly fixed** | Not shown anywhere in the UI any more; `ingest-reading` still stores the last `x-forwarded-for` hop (`ingest-reading/index.ts:120-126,242`) under the name `local_ip` | Owner: drop the column or rename it to what it holds |
+| KI-06 | Default temperature threshold differs (DB 60, admin form 65, firmware 70) | **Partly fixed** | New devices come from `register_device()` with DB defaults (60 °C / 200 ppm); the form's 65 is only an initial state overwritten when a device is opened. Firmware fallback is still 70 °C and still named `TEMP_ALERT_PPM_DEFAULT` (`config.example.h:194`) | Owner to pick one default; align the firmware constant |
+| KI-07 | `station_settings` UI columns missing from the schema | **Fixed** | `20261103000000` adds `station_name`, `email`. Leftovers: unused `key_personnel` in the TS type (`lib/supabase.ts:146`) and unused legacy columns | Optional clean-up |
+| KI-08 | `admin-support-request`: any session (pending, rejected, deactivated) can file; `category` unvalidated, no length limits | **Open** | Unchanged checks (`admin-support-request/index.ts:70-91`); no CHECK on `category`/`message`. Since 0.2 the function also pushes and Telegrams every admin, so an unapproved account can now generate admin notifications | Require approved + active caller; validate `category` against `lib/supportRequests.ts`; cap lengths |
+| KI-09 | `get_auth_role()` ignored `profiles.status` | **Fixed (repo)** — tested 0.3 | `20261031000000` (approved) and `20261030000000` (active); `get_auth_role_approval.test.sql` 11/11, `deactivated_access.test.sql` 9/9 | Confirm on production (OQ-03) |
+| KI-10 | `protect_profile_fields` does not protect `is_active`, `setup_complete` (and `telegram_chat_id`) | **Open — escalated** — tested 0.3 | `telegram_chat_id` added in `20261026000000`; `is_active` and `setup_complete` still not. Since `manage-user` deactivation exists this matters: reproduced locally, a deactivated resident with a still-valid access token ran `update profiles set is_active = true where id = auth.uid()`; `get_auth_role()` went from NULL back to `resident` and the change persisted. The auth ban still blocks new sign-ins and refreshes, but the profile stays active, so the account is back in every alert fan-out (push, linked Telegram) and appears active to admins. Self-update policy: `init.sql:291-292` | Add `is_active` (and `setup_complete`) to the trigger's protected columns; security review (rule 6) |
+| KI-11 | Responder `FOR ALL` on `station_settings`; direct `UPDATE` on `alert_events` | **Partly fixed** — tested 0.3 | `alert_events` UPDATE revoked (`20261022000000`; `alert_events_revoke_update.test.sql` 13/13). The `station_settings` policy is unchanged: any responder may INSERT or DELETE the singleton row, not only update it | Narrow the responder policy to UPDATE |
+| KI-12 | DB faults mapped to 4xx (dropped SMS reports) | **Partly fixed** | `ingest-reading` now returns 500 from its catch block; but a failed device lookup still returns 401 in `ingest-reading` and `confirm-sms-status`, and `confirm-sms-status`'s catch returns 400 (`confirm-sms-status/index.ts:44-55,137-143`), which the firmware treats as permanent | Owner decision (unchanged) |
+| KI-13 | Auto-resolve closed acknowledged/responding incidents | **Fixed** | D6.1: two consecutive safe readings, only `incident_status='active'` (`ingest-reading/index.ts:202-260`) | — |
+| KI-14 | Dead `<= 100` branch inside the `> 100` drift block | **Open** (cosmetic) | `ingest-reading/index.ts:267,305` | Optional |
+| KI-17 | Firmware never reads `last_co_ms`/`last_temp_ms`; failed probe keeps last value | **Open** | Only written (`sensors.cpp:86,175,231`); no reader | Owner decision; rule 8 |
+| KI-18 | SMS map link uses 0,0 / stale fix | **Open** | `connectivity.cpp:881-884` passes `fix.lat/lng` regardless of `fix.valid` | Owner decision |
+| KI-19 | Empty or placeholder SMS numbers | **Partly fixed** | Empty numbers are now skipped (`gsm.cpp:228-233`, host-tested B01-B03); compile-time placeholders still apply if no config fetch ever succeeds (`connectivity.cpp:627-628`) | Hardware test |
+| KI-20 | `sw.js` icon `/icon-192x192.png` missing | **Open** | `public/` has only `favicon.svg`, `icons.svg`, `sw.js` | Optional |
+| KI-24 | Telegram linking had no sender | **Fixed** | `trigger-alert` sends to linked chats (`telegram_user` ledger channel) | — |
+| KI-25 | `get_dashboard_stats()` executable by anyone | **Fixed (repo)** — tested 0.3 | `20261027000000`; `get_dashboard_stats.test.sql` 8/8 | Confirm on production |
+| KI-26 | Lockout bypass by e-mail case | **Fixed** | `login/index.ts:76-79` lower-cases; `tests/edge/login_lockout_case.test.mjs` | — |
+| KI-27 | `get_device_api_key_secure()` lacks `SET search_path` | **Open** — tested 0.3 | `pg_proc.proconfig` is NULL on a DB built from all migrations | Add `set search_path = public, pg_temp` |
+| KI-28 | `manage-registration` approve could double-assign a device | **Fixed** | Pre-write check returns 409 (`manage-registration/index.ts:68-90`); `tests/edge/manage_registration_device_guard.test.mjs` | — |
+| KI-29 | `reviewed_by`/`unlocked_by` reference `auth.users` | **Open** (convention) — confirmed 0.3 | FKs `support_requests_reviewed_by_fkey`, `registration_requests_reviewed_by_fkey`, `login_lockout_overrides_unlocked_by_fkey` | Optional |
+| KI-30 [0.3] | **New.** No migration inserts the `timeout_*` keys into `settings` | **Open** — tested 0.3 | `settings` is empty on a DB built from all migrations. `useIdleTimeout.ts:40-53` treats a missing row as "no timeout", while `Settings.tsx:17-19` displays 15/15/60 as fallbacks, so the admin sees timeouts that are not in force until they press Save. Cited requirement `SW-2.6.1` is therefore off by default on every new project | Seed defaults in a migration, or make the hook use the same fallbacks; owner to confirm values |
+| KI-31 [0.3] | **New (hardening).** OTA images are not signed | **Open** | `connectivity.cpp:379-410`: integrity relies on TLS to a host under the pinned CA and on an MD5 supplied by the same `get-device-config` response; when `firmware_md5` is empty or not 32 hex chars the image is flashed without any digest check. Anyone who can set a device's firmware target (admin) controls the code on that node | Owner decision: require MD5, consider signed images |
+
+KI-15, KI-16, KI-21, KI-22 and KI-23 were never assigned in this document.
 
 ### Incomplete requirements (tracked by the repository)
-Step 5.4 (per-user Telegram, #95) · Step 6.3 (auto-resolve/device-clear/admin reopen, #96) · keep-alive re-assert (D5.2) · UTC label on message times (D5.6) · backfill of legacy incidents (D6.3).
-Step 6c (revoke direct `UPDATE` on `alert_events`, #97) is implemented in code (`20261022000000`) but not yet deployed.
+Keep-alive re-assert (D5.2) · UTC label on message times (D5.6) · backfill of legacy incidents (D6.3) · device-clear display and admin reopen (rest of Step 6.3, #96).
+[0.3] Per-user Telegram (Step 5.4, #95) and the D6.1 auto-resolve rule are implemented. Step 6c (#97) is in the repository (`20261022000000`); whether it is deployed is not recorded.
 
 ### Conflicting implementations
-KI-03, KI-06, KI-07, KI-09; `FEATURES.md` vs code (§5.1); `devices_safe` has been redefined seven times after `init.sql` (`20260917020000`, `…070000`, `20260924060000`, `20261011…`, `20261013…`, `20261014…`, final `20261015…`) — final definition governs (Verified), earlier ones are superseded.
+[0.3] KI-06 (partly), KI-30 (UI shows timeouts that are not in force); KI-03, KI-07 and KI-09 are fixed; `devices_safe` has been redefined many times after `init.sql` (`20260917020000`, `…070000`, `20260924060000`, `20261011…`, `20261013…`, `20261014…`, final `20261015…`) — final definition governs (Verified), earlier ones are superseded.
 
 ### Missing or unclear requirements
-Retention (FR-ALERT-006); password/session policy; SLA/availability/performance targets; whether GSM data fallback is required (OQ-02); who must receive Tier 1 (currently admins only; the station chat, responders and residents get nothing on Tier 1); coverage/area scoping of responders; privacy basis for location data.
+Retention (FR-ALERT-006); password/session policy; SLA/availability/performance targets; whether GSM data fallback is required (OQ-02); who must receive Tier 1 (currently admins only, by push and linked Telegram; the station chat, responders and residents get nothing on Tier 1); coverage/area scoping of responders; privacy basis for location data.
 
 ### Unverified integrations
 Telegram, Web Push, SMS/SIM800L, Nominatim, Realtime, OSM tiles, Vercel (§5.12). *(Resend removed from this list in 0.2 — the integration was removed from the codebase by #107, not merely unverified.)*
 
 ### Unresolved architectural decisions
-D5.2, D5.4, D5.5, D5.6, D5.7, D6.1, D6.3, D6.4, D6.5 (the last is referenced in `CHANGELOG §11` but not defined in any inspected document).
+D5.2, D5.5, D5.6, D5.7, D6.3, D6.4, D6.5 ([0.3] D5.4 and D6.1 are implemented in code) (the last is referenced in `CHANGELOG §11` but not defined in any inspected document).
 
-Other observations (not defects): `get_device_api_key_secure` is `SECURITY DEFINER` without a pinned `search_path`; `get_dashboard_stats()` unauthenticated-in-body `SECURITY DEFINER`; CORS `*`; `playwright` under `dependencies`; CI doesn't run tests; a production device row `QA-UITEST-DEVICE` needs manual cleanup (`LIVE_TESTING_SUMMARY.md`).
+Other observations (not defects): CORS `*`; a production device row `QA-UITEST-DEVICE` may still need manual cleanup (`LIVE_TESTING_SUMMARY.md`). [0.3] Resolved since 0.2: `get_dashboard_stats()` (KI-25), `playwright` moved to devDependencies, CI now runs the unit and e2e suites.
 
 ---
 
 ## 5.16 Explicit Exclusions and Scope Change Rules
 
 ### Exclusions (see §5.3-E; marked ones need ratification)
-No cellular-data transport (pending OQ-02) · no alternative sensors · no framework/database/host/map/geocoder/messaging/hardware-platform migration · no auto-dispatch integrations · no additional user roles · no social login/2FA · no native mobile apps · no per-user Telegram until D5.4/D5.5 approved.
+No cellular-data transport (pending OQ-02) · no alternative sensors · no framework/database/host/map/geocoder/messaging/hardware-platform migration · no auto-dispatch integrations · no additional user roles · no social login/2FA · no native mobile apps.
 
 ### Change-control rules
 1. Existing behaviour must not be redesigned only because an alternative is cleaner or more modern.
@@ -685,20 +706,22 @@ Template: [`change-request-template.md`](change-request-template.md).
 
 | # | Current limitation | Evidence | Proposed change | Why it may help | Scope impact | Risks / dependencies | Owner approval |
 |---|---|---|---|---|---|---|---|
-| R1 | Backend approval enforcement unclear (KI-09) | §5.15 | First **inspect** the live `get_auth_role()`/policies read-only (runbook Phase 0); only then decide whether any change is needed | Removes the largest security uncertainty | None until inspected | Any change touches RLS ⇒ rule 6 review | Yes |
-| R2 | Fabricated metrics (KI-01/02) | cited | Replace constants with derived values or remove the widgets | Honest dashboards | Bug fix within existing pages | Low | Yes (which metric?) |
+| R1 | [0.3] Deactivated users can re-enable themselves (KI-10) | §5.15 | Add `is_active` and `setup_complete` to `protect_profile_fields` | Makes deactivation stick | Bug fix in an existing trigger | RLS-adjacent ⇒ rule 6 review | Yes |
+| R2 | [0.3] Idle sign-out off by default (KI-30) | §5.15 | Seed `timeout_*` defaults in a migration, or apply the UI fallbacks in the hook | Cited requirement SW-2.6.1 holds on every install | Small migration or hook change | Owner confirms values | Yes |
 | R3 | Stale-sensor blindness (KI-17) | `sensors.cpp` | Use existing timestamps to flag stale temperature/CO | Prevents masked Tier 2 | Detection logic ⇒ rule 8 | Physical retest | Yes |
-| R4 | SMS with 0,0 coordinates (KI-18) | `gsm.cpp` | Omit/annotate link when no fix | Avoids misleading responders | Firmware message text | Hardware retest | Yes |
-| R5 | One definition of "online" (KI-03) | `deviceStatus.ts` | Use existing helper on resident/responder pages | Consistency with cited SW-2.4.3 | Bug fix | Low | Yes |
-| R6 | Tests not in CI | `ci.yml` | Run existing `npm test` in CI | Regression safety | CI config only | Needs deps/PG for some suites | Yes |
+| R4 | SMS with 0,0 coordinates (KI-18) | `connectivity.cpp`, `gsm.cpp` | Omit/annotate link when no fix | Avoids misleading responders | Firmware message text | Hardware retest | Yes |
+| R5 | Support requests from unapproved accounts (KI-08) | §5.15 | Require approved + active caller; validate category; cap lengths | Stops admin-notification abuse | Edge Function only | Low | Yes |
+| R6 | Remaining hardening (KI-11, KI-27, KI-31) | §5.15 | Narrow responder `station_settings` policy; pin `search_path`; require MD5 (or signatures) for OTA | Defence in depth | Small migrations; firmware for OTA | Low; OTA change needs hardware test | Yes |
 | R7 | No retention policy | FR-ALERT-006 | Decide retention for `sensor_readings` | Cost/privacy | New requirement + possible schema work | Data-protection input | Yes |
-| R8 | Stale docs | §5.1 | Mark `AGAPSENSE_SYSTEM_SPECIFICATION.md`/`FEATURES.md` superseded | Prevent drift | Docs only | None | Yes |
+| R8 | Local DB, integration and firmware host suites not in CI | `ci.yml` | Add a job with PostgreSQL and `g++` | Regression safety for the safety-critical paths | CI config only | None | Yes |
 | R9 | Documentation of requirement IDs `SW-x/HW-x` | comments | Supply the original specification for import into this baseline | Converts "unconfirmed" to "approved" | Docs only | None | Owner supplies |
+
+[0.3] Done since 0.2: inspect/fix backend approval enforcement (old R1, fixed in repo), remove fabricated metrics (old R2), one definition of "online" (old R5), tests in CI (old R6, partly), mark stale docs (old R8).
 
 ---
 
 ## Appendix A — Evidence index (principal files)
 
-`supabase/functions/trigger-alert/index.ts`, `ingest-reading/index.ts`, `get-device-config/index.ts`, `confirm-sms-status/index.ts`, `link-device`, `assign-device`, `register`, `manage-registration`, `create-user`, `login`, `register-push`, `send-push-notification`, `telegram-webhook`, `admin-support-request` · `supabase/migrations/*` (esp. `20260717000000_init.sql`, `20261015…`, `20261019…`, `20261020…`, `20261021…`) · `firmware/agapsense-firmware/src/{main,sensors,connectivity,gsm,gps}.cpp/.h`, `config.example.h` · `src/App.tsx`, `components/AuthGuard.tsx`, `contexts/AuthContext.tsx`, `lib/{incidents,location,deviceStatus,deviceColumns,supabase,pushNotifications}.ts`, `pages/**` · `docs/*`, `testing/reports/*`.
+`supabase/functions/trigger-alert/index.ts`, `ingest-reading/index.ts`, `get-device-config/index.ts`, `confirm-sms-status/index.ts`, `link-device`, `assign-device`, `register`, `manage-registration`, `manage-user`, `create-user`, `login`, `register-push`, `send-push-notification`, `telegram-webhook`, `admin-support-request`, `resolve-support-request` · `supabase/migrations/*` (esp. `20260717000000_init.sql`, `20261015…`, `20261019…`, `20261020…`, `20261021…`) · `firmware/agapsense-firmware/src/{main,sensors,connectivity,gsm,gps}.cpp/.h`, `config.example.h` · `src/App.tsx`, `components/AuthGuard.tsx`, `contexts/AuthContext.tsx`, `lib/{incidents,location,deviceStatus,deviceColumns,supabase,pushNotifications}.ts`, `pages/**` · `docs/*`, `testing/reports/*`.
 
 Line numbers are those of the inspected commit; for functions inspected through concatenated output, ranges were recomputed per file and may be off by a few lines — function names are the stable reference.

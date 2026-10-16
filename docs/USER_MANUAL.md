@@ -64,7 +64,7 @@ To avoid false alarms, the device needs **3 readings in a row** above the limit 
 
 The CO sensor needs about **2½ minutes (≈150 seconds)** after the device is switched on to stabilise. During this time:
 
-- the app shows **"Initializing sensors..."** instead of readings, and
+- the app shows **"Warming up"** instead of a CO reading, and
 - **no alerts can be raised** (this prevents false alarms at start-up).
 
 This is normal. Wait for readings to appear.
@@ -107,15 +107,15 @@ The web app works in any modern browser on a phone or computer.
 **Residents**
 
 1. On the login page choose to register as a **Resident**.
-2. Fill in: **Full Name**, **Email**, **Contact Number** (format `09XXXXXXXXX`), **Address**, and **Password** (at least 6 characters; confirm it).
-3. *Device ID (optional)*: enter your device code (for example `FA-001`) if you have it. Your administrator will verify and link it.
-4. Submit.
+2. Fill in: **Full name**, **Email address**, **Mobile number** (`09XX XXX XXXX`), and your address: **House/Unit no., street, subdivision**, **Barangay**, **City/Municipality** and **Province**. All are required.
+3. *Device code (optional)*: the code that came with your device (for example `AGS-001`). If you don't have it yet, leave it blank; an administrator links your device during review.
+4. Choose a **Password** (at least 6 characters) and confirm it, then submit.
 
 **BFP responders**
 
 1. Choose to register as a **Responder**.
-2. Fill in: **Full Name**, **Email** (official address, for example `you@bfp.gov.ph`), **Contact Number**, **Organization / Station**, **Position / Rank**, **Badge / ID Number** (used for verification), and **Password**.
-3. Submit.
+2. Fill in: **Full name**, **Email address** (your official BFP email if you have one) and **Fire station** (required). **Mobile number**, **Rank or position** and **BFP ID number** are optional; the ID number helps the administrator verify you faster.
+3. Choose a **Password** (at least 6 characters), confirm it, and submit.
 
 ### 5.2 Wait for approval
 
@@ -127,7 +127,7 @@ Enter your email and password on the login page.
 
 - **Too many wrong passwords locks the account temporarily** (after 3 failures for 10 seconds, after 5 for 30 seconds, after 7 for 15 minutes). Wait for the timer, or ask an administrator to unlock you.
 - **Forgot password?** Use the *Forgot password* link and follow the emailed reset link.
-- **Automatic sign-out:** for safety you are signed out after a period of inactivity (about **60 minutes for residents, 15 minutes for responders**; your administrator may change this). Sign in again to continue.
+- **Automatic sign-out:** if your administrator has turned it on, you are signed out after a period of inactivity (suggested: **60 minutes for residents, 15 minutes for responders**). Sign in again to continue.
 
 ---
 
@@ -139,9 +139,10 @@ Your menu has four pages plus **Account**: **Dashboard**, **Alert History**, **A
 
 The first time you sign in, you must complete a short setup:
 
-1. **Mobile number** — enter it as `09XXXXXXXXX` and re-enter it to confirm. This is the number that receives **SMS fire alerts**, so make sure it is correct and that your phone can receive texts.
-2. **Link your device** — if no device is linked yet, enter your device code (for example `AGS-001`). Only one resident can be linked to a device.
-3. **Install location** — if your device is linked, enter the address where it is installed and place the pin on the map (tap the map, drag the pin, or use **Use my location** while you stand next to the device). Responders are sent to this pin when the device has no GPS signal, so put it on the right building. An administrator checks it afterwards; until then it is shown as *unverified*. You can skip this step and do it later from **Device Information**.
+1. **Mobile number** — enter it as `09XXXXXXXXX` and re-enter it to confirm. During a fire alert your device texts this number directly, so make sure it is correct and that your phone can receive texts.
+2. **Install location** (only if a device is already linked and its pin is not yet confirmed) — enter the address where the device is installed and place the pin on the map (tap the map, drag the pin, or use **Use my location** while you stand next to the device). Responders are sent to this pin when the device has no GPS signal, so put it on the right building. An administrator checks it afterwards; until then it is shown as *unverified*. You can choose **Skip for now** and do it later from **Device Information**.
+
+**No device linked yet?** Your Dashboard asks for your **device code** (for example `AGS-001`). Enter it to link the device. Only one resident can be linked to a device.
 
 ### 6.2 Dashboard
 
@@ -307,18 +308,16 @@ Messages include a navigation link of the form `maps.google.com/?q=<latitude>,<l
 |---|---|---|
 | App says **Offline** | Power off, router off, or Wi-Fi password changed | Check device power and the router. If the Wi-Fi password changed, reconnect to `AgapSense-Setup` and re-enter it |
 | Blue LED **blinking** | Wi-Fi works but no internet | Restart the router; check your internet provider |
-| **"Initializing sensors..."** | Normal 2½-minute warm-up | Wait. If it lasts more than 10 minutes, power-cycle the device and contact your administrator |
+| **"Warming up"** | Normal 2½-minute CO sensor warm-up | Wait. If it lasts more than 10 minutes, power-cycle the device and contact your administrator |
 | **Frequent false alarms** | Thresholds too low, or the device is near a stove, shower or vent | Raise thresholds slightly (see [6.4](#64-alert-settings)) or ask your administrator to move the device |
 | **Not receiving SMS** | Wrong number, SIM out of credit or no signal | Check your number in Alert Settings; report to your administrator so the SIM can be checked |
-| **No push notifications** | Permission blocked in browser | Re-enable notifications for the site in your browser settings, then press **Enable Push Notifications** |
-| **Power card shows "Battery"** | Mains power lost | Check the power outlet or breaker |
-| **"No device registered to your account"** | Device not yet linked | Enter your device code in setup, or ask your administrator to link it |
+| **No push notifications** | Permission blocked in browser | Re-enable notifications for the site in your browser settings, then turn them back on: **Alert Settings → Push notifications → Turn on** (residents) or the **Browser notifications** switch in **Settings** (responders) |
+| **Power shows "On battery"** | Mains power lost | Check the power outlet or breaker |
+| **"No device linked yet"** | Device not yet linked | Enter your device code on the Dashboard, or ask your administrator to link it |
 | **Account locked** | Too many wrong passwords | Wait for the timer or ask an administrator to unlock |
 | **Signed out unexpectedly** | Inactivity timeout | Sign in again |
 | **Pending approval screen** | Account awaiting administrator | Wait for approval or contact your administrator |
 | **Wrong position on map** | GPS has no fix (typical indoors) | Normal; the last-known or registered address is shown |
-
-Some figures on the app (for example "System Uptime", responder "connectivity %", and map "Signal / Latency") are placeholders and should not be relied on yet.
 
 ---
 
@@ -326,7 +325,7 @@ Some figures on the app (for example "System Uptime", responder "connectivity %"
 
 **Can the device see smoke?** It measures **carbon monoxide gas and temperature**, which rise in most fires. It is not a replacement for a certified smoke detector.
 
-**Does it work in a power outage?** Yes, on its backup battery. The dashboard shows *Battery*.
+**Does it work in a power outage?** Yes, on its backup battery. The dashboard shows *On battery*.
 
 **Does it work without internet?** Local alarm (LEDs, buzzer) and Tier 2 SMS still work. Dashboard and push/Telegram alerts need internet.
 
@@ -334,7 +333,7 @@ Some figures on the app (for example "System Uptime", responder "connectivity %"
 
 **Who can see my data?** Residents see only their own device. Responders and administrators see devices across the system.
 
-**How do I change my phone number?** Resident: **Alert Settings → Where Alerts Are Sent → SMS**. Responder: **Settings → Personal Profile**.
+**How do I change my phone number?** Resident: **Alert Settings → Where Alerts Are Sent → SMS**. Responder: **Settings → Personal Details**.
 
 **Is the setup Wi-Fi 5 GHz?** No. The device supports **2.4 GHz** only.
 
@@ -342,7 +341,7 @@ Some figures on the app (for example "System Uptime", responder "connectivity %"
 
 ## 11. Getting help
 
-- In the app, use **Need Admin Help?** (responders) or contact your administrator to file a **support request**.
+- In the app, open **Account** (residents) or **Settings** (responders) and use **Need Help? → Contact administrator** to send a **support request**. Its reply appears under **My Requests**.
 - Include: your **device ID**, a short description of the problem, what the LEDs show, and the time it happened.
 - **In an emergency, always call 911 or your nearest BFP station first.**
 

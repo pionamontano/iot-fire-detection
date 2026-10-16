@@ -107,4 +107,4 @@ Located in `supabase/functions/`. Functions called by the ESP32 authenticate wit
 A trigger on `profiles` reverts non-admin attempts to change `role`, `status` or `device_id`. It does not currently cover `is_active`, `setup_complete` or `telegram_chat_id` (spec KI-10).
 
 ### Session Security
-- Per-role idle timeout (`timeout_admin`, `timeout_bfp`, `timeout_resident` in `settings`; UI defaults 15 / 15 / 60 min) signs the user out and redirects to `/session-expired`.
+- Per-role idle timeout (`timeout_admin`, `timeout_bfp`, `timeout_resident` in `settings`) signs the user out and redirects to `/session-expired`. No defaults are seeded: until an admin saves Settings (which pre-fills 15 / 15 / 60 min) no timeout applies.
