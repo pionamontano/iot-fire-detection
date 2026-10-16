@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { registerServiceWorker } from './lib/pushNotifications';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { alertDestination, ALERT_LINK_PATH } from './lib/alertLink';
 import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
 import { AuthGuard } from './components/AuthGuard';
 import { AdminLayout } from './components/AdminLayout';
@@ -12,6 +13,15 @@ import { ResidentLayout } from './components/ResidentLayout';
 const RedirectKeepingQuery = ({ to }: { to: string }) => {
   const { search } = useLocation();
   return <Navigate to={`${to}${search}`} replace />;
+};
+
+// Target of alert push notifications (/alert?device=<id>, sent by trigger-alert): each role goes to its own page.
+// Rendered inside AuthGuard, so a signed-out user signs in first and is brought back here.
+const AlertRedirect = () => {
+  const { profile } = useAuth();
+  const { search } = useLocation();
+  if (!profile) return null;
+  return <Navigate to={alertDestination(profile.role, new URLSearchParams(search).get('device'))} replace />;
 };
 
 // Pages - Auth
@@ -105,6 +115,11 @@ function App() {
               <Route path="/home/logs" element={<RedirectKeepingQuery to="/home/alerts" />} />
               <Route path="/account" element={<ResidentAccount />} />
             </Route>
+          </Route>
+
+          {/* Alert push notifications open here; every role is sent to its own page for the alert */}
+          <Route element={<AuthGuard />}>
+            <Route path={ALERT_LINK_PATH} element={<AlertRedirect />} />
           </Route>
 
           {/* Root Redirect based on AuthGuard default behavior (if logged in, redirects to role home, else login) */}
