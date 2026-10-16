@@ -124,7 +124,7 @@ The responder dashboard and the admin manual-resolve button now change incidents
 * **Deploy order matters:** migration `20261021000000` must be applied **before** this UI. If the UI runs first, incident actions fail with a clear
   "database update pending" message (PostgREST `PGRST202`) and responders cannot acknowledge from the dashboard. There is deliberately no
   direct-write fallback (a second write path is exactly what Step 6 removes). Direct `UPDATE` remains granted until step 6c (`20261022000000`,
-  written but not yet deployed - see CHANGELOG §8a) is applied, so older clients keep working until then.
+  written but not yet deployed - see spec Appendix B) is applied, so older clients keep working until then.
 * Not in 6.2: the "device readings back to normal" badge (needs `device_cleared_at`, decision D6.1), revoking direct `UPDATE` (6c), and the
   other responder/admin screens, which read `resolved_at` and need no change.
 

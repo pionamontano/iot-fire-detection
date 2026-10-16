@@ -45,7 +45,7 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 ### Known limitations of this review
 
 1. **No access to the live Supabase project, Vercel deployment, Telegram, Resend, Web Push services, SIM800L/ESP32 hardware, or any private credential.** Everything about runtime behaviour is therefore *inferred from code* unless a document is cited as a self-reported result.
-2. **The live database may differ from the repository.** The repository's own documents state that production's migration history differs from `supabase/migrations/` and that the live definition of `get_auth_role()` has never been inspected (`docs/CHANGELOG_AUDIT_REMEDIATION.md` §11, `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md` §4).
+2. **The live database may differ from the repository.** The repository's own documents state that production's migration history differs from `supabase/migrations/` and that the live definition of `get_auth_role()` has never been inspected (Appendix B, `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md` §4).
 3. **No owner-supplied requirements document is in the repository.** Code comments cite requirement IDs (`SW-2.1.1` … `SW-2.6.3`, `HW-1.1.5` … `HW-1.5.2`) from a specification that is *not present*. Those IDs are recorded here as *referenced, unconfirmed requirements*.
 4. Test results quoted from `docs/` or `testing/reports/` are **self-reported by the repository authors and were not re-executed** here.
 6. **[0.3]** Line numbers in rows not touched by the 0.3 update are those of the 0.1/0.2 commits; the code has moved since. Function, file and migration names are the stable reference.
@@ -56,7 +56,7 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 | Version | Date | Change |
 |---|---|---|
 | 0.1 | 2026-10-12 | First specification baseline (this document). |
-| 0.3 | 2026-10-16 | Later the same day: fixed KI-10 (`20261108000000`) and KI-30 (`lib/sessionTimeouts.ts`); local DB suites now 14 files / 235 checks; removed the duplicate `AGAPSENSE_SYSTEM_SPECIFICATION.md`. Before that: re-checked every Known Issue at `d74dc81`: 11 fixed, 5 partly fixed, 8 still open (KI-10 escalated after a local reproduction); added KI-30 (no default session-timeout settings), KI-31 (OTA image integrity) and KI-32 (firmware release workflow builds the wrong variant). Ran the local DB, edge, unit and firmware host suites (§5.14). Updated §5.3 B/C, the affected FR rows, §5.6, §5.8, §5.11, §5.12 and §19 accordingly. |
+| 0.3 | 2026-10-16 | Later the same day: fixed KI-10 (`20261108000000`) and KI-30 (`lib/sessionTimeouts.ts`); local DB suites now 14 files / 235 checks; removed the duplicate `AGAPSENSE_SYSTEM_SPECIFICATION.md`; moved the unique parts of `CHANGELOG_AUDIT_REMEDIATION.md` into Appendix B and removed it. Before that: re-checked every Known Issue at `d74dc81`: 11 fixed, 5 partly fixed, 8 still open (KI-10 escalated after a local reproduction); added KI-30 (no default session-timeout settings), KI-31 (OTA image integrity) and KI-32 (firmware release workflow builds the wrong variant). Ran the local DB, edge, unit and firmware host suites (§5.14). Updated §5.3 B/C, the affected FR rows, §5.6, §5.8, §5.11, §5.12 and §19 accordingly. |
 | 0.2 | 2026-10-13 | Incremental backend-only re-review (all Edge Functions, full migration history re-read as current effective schema). Resolved the `get_dashboard_stats()` Unverified note into confirmed KI-25. Added KI-25–KI-29 (dashboard-stats privilege exposure, login-lockout case-sensitivity bypass, `get_device_api_key_secure()` missing `search_path` pin, `manage-registration` duplicate-device gap, `reviewed_by`/`unlocked_by` FK convention break). Rewrote KI-08, B7, C8, FR-RESP-005, FR-NOTIF-007 and §5.10/§5.12 Resend entries: the Resend e-mail support path they described was replaced by an in-app admin inbox (`support_requests` table, PR #107) before this update; added the `support_requests` table to §5.8 and new gaps found in its replacement. |
 
 ### Relationship to existing documents (not overwritten)
@@ -65,7 +65,7 @@ Companion documents: [`scope-boundary-register.md`](scope-boundary-register.md) 
 |---|---|---|
 | `docs/AGAPSENSE_SYSTEM_SPECIFICATION.md` | [0.3] **Removed** (2026-10-16) as a duplicate of this document and `FEATURES.md`; still in git history. | |
 | `docs/FEATURES.md` | [0.3] **Consistent with the code** in the places checked. The 0.2 findings (non-existent responder pages, SMS recipients, "mathematically" blocked pending users) are no longer in the file. | |
-| `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`, `docs/CHANGELOG_AUDIT_REMEDIATION.md`, `docs/STAGING_DRY_RUN_RUNBOOK.md`, `docs/FIRMWARE_GUIDE.md`, `docs/MIGRATION_GUIDE.md` | Consistent with code in every place checked; used as secondary evidence. | |
+| `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`, Appendix B, `docs/STAGING_DRY_RUN_RUNBOOK.md`, `docs/FIRMWARE_GUIDE.md`, `docs/MIGRATION_GUIDE.md` | Consistent with code in every place checked; used as secondary evidence. | |
 
 > OQ-14 resolved: this document is the specification; `FEATURES.md` is the short overview.
 
@@ -77,7 +77,7 @@ Separate axes are always kept apart: **Implemented (in repo)** ≠ **Tested** �
 
 ### Deployment state (important context for every status below)
 
-* Audit-remediation work (PR #94: profiles RLS, recipient eligibility, notification ledger, `raise_alert`, incident lifecycle, firmware retry) **is merged to `main` but, per `docs/CHANGELOG_AUDIT_REMEDIATION.md` header and §11, has not been deployed** to any shared database, Edge Function runtime, or device. Items marked *Implemented (repo) — not deployed* below describe code, not the running system.
+* Audit-remediation work (PR #94: profiles RLS, recipient eligibility, notification ledger, `raise_alert`, incident lifecycle, firmware retry) **is merged to `main` but, per Appendix B, had not been deployed as of 2026-10-13** to any shared database, Edge Function runtime, or device. Items marked *Implemented (repo) — not deployed* below describe code, not the running system.
 * [0.3] The repository does not record which migrations after `20261018…` reached production (PR #153 removes "production grant drift" found by comparing against production ACLs, so production was inspected at least for grants). Read **[R]** as "deployment not recorded", not as proof that it is absent.
 * Earlier fixes (`20260917…`–`20261018…` migrations and `login` function) are reported as deployed and re-verified live in `testing/reports/LIVE_TESTING_SUMMARY.md` (self-reported; not re-verified here).
 
@@ -315,7 +315,7 @@ Deployment qualifier key: **[R]** = implemented in repo only (not deployed per r
 | ID | Requirement (current behaviour) | Source | Status | Evidence | Acceptance | Limitations |
 |---|---|---|---|---|---|---|
 | FR-LOC-001 | Coordinates (lat/lng) and `gps_valid` stored with each reading and incident; (0,0) treated as "no fix" and stored as NULL | C | Verified | `ingest-reading/index.ts:158-175`; `trigger-alert/index.ts:345-347,390-391` | | A non-live cached fix is stored with `gps_valid=false`; no column records when the fix was actually acquired |
-| FR-LOC-002 | UI classifies a device position as **live** (valid coordinates, `gps_valid`, reported ≤ 15 min ago), **last known**, **registered** (admin-entered install coordinates — never "live") or **unavailable**; never invents a position | owner decision "15 minutes" per CHANGELOG; `SW-2.4.4`? (not confirmed) | Verified (code) | `lib/location.ts:17,59-87`; `tests/location.test.ts` (reported) | | 15-min value is "provisional owner-approved" in code comments (OQ-18) |
+| FR-LOC-002 | UI classifies a device position as **live** (valid coordinates, `gps_valid`, reported ≤ 15 min ago), **last known**, **registered** (admin-entered install coordinates — never "live") or **unavailable**; never invents a position | owner decision "15 minutes" per Appendix B; `SW-2.4.4`? (not confirmed) | Verified (code) | `lib/location.ts:17,59-87`; `tests/location.test.ts` (reported) | | 15-min value is "provisional owner-approved" in code comments (OQ-18) |
 | FR-LOC-003 | Reverse geocoding via Nominatim: builds "house+road, barangay (suburb/village/neighbourhood/quarter), municipality (city/municipality/town/county)", falls back to `display_name`; 3 s timeout; in-memory cache 24 h keyed by lat/lon to 4 decimals (~11 m) per function isolate | `HW-1.2.3`/`SW-2.3.2` (cited) | Verified (code); external service Unverified | `trigger-alert/index.ts:20-79`; `ingest-reading/index.ts:20-69` | | Failure → `null`, UI/Telegram fall back to `devices.location_desc` or "Unknown Location". Nominatim usage-policy/rate-limit exposure Unverified |
 | FR-LOC-004 | Address-drift detection: if a *live* fix (`gps_valid`) is > 100 m from the device's registered coordinates and the device has a resident, create a `pending` `address_discrepancies` row unless a pending one exists or an earlier one lies within 50 m; requires the geocoded address to contain a comma | C | Verified (code) | `ingest-reading/index.ts:198-261` | Move a test device > 100 m → one pending prompt | Dead branch at line 239 (distance ≤ 100 inside a > 100 block). Insert is one of several parallel writes whose errors are not checked individually |
 | FR-LOC-005 | Registered install location = admin-entered `devices.location_desc` (text) + `devices.latitude/longitude`; resident profile also has a free-text `address` | C | Verified | `Devices.tsx:152-165`; `register/index.ts:113` | | The two address texts are not reconciled |
@@ -348,7 +348,7 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 | Data integrity | CHECK constraints on roles, statuses, tiers, thresholds; unique one-resident-per-device index; one-open-incident index [R]; lifecycle guard [R] | — |
 | Reliability / fault handling | Persist-first-then-notify; bounded provider timeouts (default 3.5 s each, 4 s dispatch budget); fail-open ledger; firmware retry [R]; watchdog | Availability, RTO/RPO NS-RA |
 | Performance | Telemetry every 30 s per device; alert POST synchronous at transition; HTTP timeout 10 s; geocode 3 s | Response-time / capacity targets NS-RA; no load test evidence |
-| Availability / recovery | Reliant on Supabase, Vercel, Telegram, push services; no backups/DR documented except "fresh backup" before production migration (`CHANGELOG §11`) | NS-RA |
+| Availability / recovery | Reliant on Supabase, Vercel, Telegram, push services; no backups/DR documented except "fresh backup" before production migration (Appendix B) | NS-RA |
 | Maintainability | TypeScript strict-ish, oxlint; [0.3] CI (`.github/workflows/ci.yml`) runs typecheck, lint, `npm test`, the Playwright black-box suite against a local Supabase stack, and the build. Not in CI: `supabase/tests/local/*`, `tests/edge/run_integration.sh`, firmware host tests, ESP32 compile | — |
 | Usability / accessibility | Responsive layouts reported tested at 375/768/1440 px; field-level validation anti-pattern noted by owner's own testing; no accessibility standard claimed | NS-RA |
 | Privacy of location data | RLS limits residents to own device; admins/responders see all; coordinates sent to Nominatim (third party) and embedded in SMS/Telegram/Google Maps links; no retention policy; no privacy notice found | Data-protection compliance basis (e.g., RA 10173) NS-RA — OQ-13 |
@@ -654,7 +654,7 @@ Retention (FR-ALERT-006); password/session policy; SLA/availability/performance 
 Telegram, Web Push, SMS/SIM800L, Nominatim, Realtime, OSM tiles, Vercel (§5.12). *(Resend removed from this list in 0.2 — the integration was removed from the codebase by #107, not merely unverified.)*
 
 ### Unresolved architectural decisions
-D5.2, D5.5, D5.6, D5.7, D6.3, D6.4, D6.5 ([0.3] D5.4 and D6.1 are implemented in code) (the last is referenced in `CHANGELOG §11` but not defined in any inspected document).
+D5.2, D5.5, D5.6, D5.7, D6.3, D6.4, D6.5 ([0.3] D5.4 and D6.1 are implemented in code) (the last is referenced in Appendix B but not defined in any inspected document).
 
 Other observations (not defects): CORS `*`; a production device row `QA-UITEST-DEVICE` may still need manual cleanup (`LIVE_TESTING_SUMMARY.md`). [0.3] Resolved since 0.2: `get_dashboard_stats()` (KI-25), `playwright` moved to devDependencies, CI now runs the unit and e2e suites.
 
@@ -725,3 +725,35 @@ Template: [`change-request-template.md`](change-request-template.md).
 `supabase/functions/trigger-alert/index.ts`, `ingest-reading/index.ts`, `get-device-config/index.ts`, `confirm-sms-status/index.ts`, `link-device`, `assign-device`, `register`, `manage-registration`, `manage-user`, `create-user`, `login`, `register-push`, `send-push-notification`, `telegram-webhook`, `admin-support-request`, `resolve-support-request` · `supabase/migrations/*` (esp. `20260717000000_init.sql`, `20261015…`, `20261019…`, `20261020…`, `20261021…`) · `firmware/agapsense-firmware/src/{main,sensors,connectivity,gsm,gps}.cpp/.h`, `config.example.h` · `src/App.tsx`, `components/AuthGuard.tsx`, `contexts/AuthContext.tsx`, `lib/{incidents,location,deviceStatus,deviceColumns,supabase,pushNotifications}.ts`, `pages/**` · `docs/*`, `testing/reports/*`.
 
 Line numbers are those of the inspected commit; for functions inspected through concatenated output, ranges were recomputed per file and may be off by a few lines — function names are the stable reference.
+
+---
+
+## Appendix B — Audit remediation record (PR #94)
+
+Moved here on 2026-10-16 from `docs/CHANGELOG_AUDIT_REMEDIATION.md`, which was removed (full text: `git show d74dc81:docs/CHANGELOG_AUDIT_REMEDIATION.md`). Design details are in [`ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`](ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md) and the migration headers; this appendix keeps what is recorded nowhere else.
+
+PR #94 was merged to `main` as `a83a08b`. When written, none of it was deployed and all verification was local.
+
+| Step | Audit finding | What changed | Main files |
+|---|---|---|---|
+| 1 | DB-002 | Profiles readable across users only by approved admins (`is_approved_admin()`) | `20261019000000` |
+| 2 | NOT-005 | Only approved, active accounts are recipients, can register push or link devices (403 otherwise) | `link-device`, `register-push`, `get-device-config`, `trigger-alert`, `send-push-notification` |
+| 3 | DB-001 | Admin pages select explicit device columns; failed queries show `LoadErrorBanner` | `lib/deviceColumns.ts` |
+| 4 | GPS-001 | No fabricated coordinates; live / last known / registered / unavailable labels | `lib/location.ts`, `LocationBadge.tsx` |
+| 5.0 | IOT-001 / IOT-002 | `gps.cpp`, `config.example.h` converted from UTF-16 to UTF-8; retry policy header | `alert_retry.h` |
+| 5.1 / 5.2 | NOT-004 / NOT-001 | Notification ledger and `raise_alert()`; `trigger-alert` records first, then notifies. DB faults now return 500 (`persist_failed`, `internal`) instead of 401/400 | `20261020000000`, `20261020000100`, `trigger-alert` |
+| 5.3 | IOT-002 | Firmware retries the alert POST and binds SMS results to the right incident | `connectivity.cpp`, `gsm.cpp`, `sms_result_hold.h` |
+| 6.1 / 6.2 | FE-002 | Lifecycle guard trigger, `transition_incident()`; UI closes incidents only through it | `20261021000000`, `lib/incidents.ts` |
+| 6c | FE-002 (#97) | Direct `UPDATE` on `alert_events` revoked | `20261022000000` |
+
+**Owner decisions applied at the time:** unapproved or rejected residents are never notification recipients (server-side); no change to auto-resolution until approved (later decided as D6.1); no Telegram to residents yet (later implemented as D5.4); a GPS fix counts as live for 15 minutes; registered coordinates are never labelled live. Thresholds, tiers, recipient rules, the approval workflow and the SMS path were not changed.
+
+**Known residuals of Step 5.3 (still true):** a reboot during a fire can repeat the SMS pair once (D5.7); SMS sent while the alert POST is failing lack the server address and timestamp; after 3 permanent rejections the alert is abandoned until re-escalation or a new incident; `confirm-sms-status` maps database faults to 4xx, so a transient fault drops that result (KI-12).
+
+**Production facts recorded then (2026-10-13):**
+- Production's migration history differs from the repository (the Supabase preview check reports "Remote migration versions not found in local migrations directory"); the live schema had not been compared with the repo.
+- One read-only production result: 3 incidents, none open, all with `resolved_at` set but a non-closed status, so a D6.3 backfill would touch 3 rows.
+- By filename `20261020000100` (uniqueness) sorts before `20261021000000` (lifecycle), but the intended order is ledger → lifecycle → activation gate → uniqueness, so these are applied by hand, not with a tool that orders by version.
+- Deploy order required before production: staging dry run, human review, a fresh backup, decisions D6.3 / D5.7 / D6.5, then ledger migration → lifecycle migration → activation gate → uniqueness migration → `send-push-notification` → `trigger-alert` → frontend → firmware (last, because a pre-5.2 `trigger-alert` makes the 5.3 firmware give up after 3 attempts) → the 6c migration once 6.1 and 6.2 are live.
+- Keep the Supabase "Deploy to production" integration off and the Vercel ignored-build step on `main` until that plan is approved.
+- D6.5 was referenced as a pre-production decision but never defined in any document.

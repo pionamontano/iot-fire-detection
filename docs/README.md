@@ -12,7 +12,6 @@ documents link to them.
 | [`FIRMWARE_GUIDE.md`](FIRMWARE_GUIDE.md) | ESP32 hardware, firmware structure, alert logic, configuring, building, flashing and OTA (version history is in `firmware/agapsense-firmware/src/config.example.h`) |
 | [`HARDWARE_BENCH_TEST.md`](HARDWARE_BENCH_TEST.md) | Checklist to run on a real node before installing it or pushing an OTA update |
 | [`STAGING_DRY_RUN_RUNBOOK.md`](STAGING_DRY_RUN_RUNBOOK.md) | Rehearsing migrations on a throwaway Supabase project before production |
-| [`DEMO_VIDEO_SCRIPT.md`](DEMO_VIDEO_SCRIPT.md) | Script for the project demo video |
 
 ## How the system works
 
@@ -20,7 +19,6 @@ documents link to them.
 |---|---|
 | [`FEATURES.md`](FEATURES.md) | Current features and every Edge Function, kept in step with the code |
 | [`ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`](ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md) | Alert delivery semantics (at-least-once), incident invariants and the writer audit |
-| [`CHANGELOG_AUDIT_REMEDIATION.md`](CHANGELOG_AUDIT_REMEDIATION.md) | Record of the audit-remediation changes (PR #94) and their verification |
 
 ## Baseline and change control
 
@@ -30,7 +28,7 @@ commit each one names, not a live guarantee.
 
 | Document | For |
 |---|---|
-| [`system-specification.md`](system-specification.md) | The detailed baseline specification (draft v0.3), including the status-tracked Known Issues list — the only specification; `FEATURES.md` is the short overview |
+| [`system-specification.md`](system-specification.md) | The detailed baseline specification (draft v0.3), including the status-tracked Known Issues list and the audit-remediation record (Appendix B) — the only specification; `FEATURES.md` is the short overview |
 | [`scope-boundary-register.md`](scope-boundary-register.md) | What is in scope, unverified, defective or excluded (Deliverable B) |
 | [`requirements-traceability.md`](requirements-traceability.md) | Each requirement mapped to its implementation and verification (Deliverable C) |
 | [`open-questions-and-decisions.md`](open-questions-and-decisions.md) | Questions only the project owner can decide (Deliverable D) |

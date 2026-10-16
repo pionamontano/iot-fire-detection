@@ -10,7 +10,7 @@ status, and session lifecycle.
 > against the real Supabase project and a real running instance of the app
 > (via Playwright), using disposable test accounts for every account state
 > (pending, rejected, resident with/without setup, responder). See
-> `LIVE_AUTH_VERIFICATION.md` (same folder) for the full log. **Two real
+> `LIVE_TESTING_SUMMARY.md` (detailed `LIVE_AUTH_VERIFICATION.md` log in git history at `d74dc81`) for the results. **Two real
 > bugs were found and fixed** along the way:
 > - Pending/rejected accounts got stuck on an infinite "Authenticating..."
 >   spinner instead of ever reaching the "Account Pending"/"Account

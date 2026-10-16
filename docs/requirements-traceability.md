@@ -7,7 +7,7 @@ Part of the baseline set started by [`system-specification.md`](system-specifica
 **Reading the status columns**
 
 * **Spec status** — Verified / Partially Verified / Conflicting / Not Implemented / NS-RA (Not Specified — Requires Approval), as defined in the specification. "Verified" means *read in code*, not *works*.
-* **Deploy** — `R` = implemented in repository only, not deployed (per `docs/CHANGELOG_AUDIT_REMEDIATION.md`); `L` = reported live-verified in `testing/reports/LIVE_*` (self-reported); `–` = no deployment information.
+* **Deploy** — `R` = implemented in repository only, not deployed (per system-specification.md Appendix B); `L` = reported live-verified in `testing/reports/LIVE_*` (self-reported); `–` = no deployment information.
 * **Test (this review)** — 0.1/0.2: **Not Tested** for every row: no test suite, build, firmware compile or live call was run (dependency installation and external calls were out of scope). Rows whose tests are *reported by the repository authors* name them under "Evidence".
 * **Source** — `O` owner-supplied objective (task brief); `C` implemented & consistent with objective, awaiting owner ratification (OQ-01); `SW/HW-x` = requirement ID cited in code comments whose parent document is not in the repository (**Unconfirmed Requirement**); `Rem` = introduced by the audit-remediation work (owner decisions recorded in the changelog).
 * Hardware or third-party rows are **Cannot Verify in Current Environment** for delivery/behaviour even if code is verified.
@@ -35,7 +35,7 @@ Per-area: AUTH 10 · ADMIN 7 · RESP 5 · RES 8 · IOT 12 · ALERT 6 · LOC 5 ·
 
 | ID | Requirement (short) | Source | Implementing component | Verification method | Expected result | Spec status | Deploy | Evidence / missing evidence |
 |---|---|---|---|---|---|---|---|---|
-| FR-AUTH-001 | Public registration → pending profile + request, resident/responder only | C | `functions/register` | Integration test (HTTP) + DB inspection | Rows created `pending`; dup e-mail 409; role `admin` rejected | Verified | L | `register/index.ts:24-140`; live duplicate-email check reported in `LIVE_DATABASE_VERIFICATION.md`. Missing: password-policy/e-mail-verification approval |
+| FR-AUTH-001 | Public registration → pending profile + request, resident/responder only | C | `functions/register` | Integration test (HTTP) + DB inspection | Rows created `pending`; dup e-mail 409; role `admin` rejected | Verified | L | `register/index.ts:24-140`; live duplicate-email check reported in `LIVE_TESTING_SUMMARY.md` (detailed `LIVE_DATABASE_VERIFICATION.md` log in git history at `d74dc81`). Missing: password-policy/e-mail-verification approval |
 | FR-AUTH-002 | Login via `login` with tiered lockout (3→10 s, 5→30 s, 7→900 s) and admin unlock | SW-2.6.2 (unconfirmed) | `functions/login`, `check_login_lockout`, `admin_unlock_login` | Integration test; UI test | Lockout escalates with decaying timer; unlock immediate | Verified | L | `login/index.ts:80-103`, `20260924090000`; live results self-reported. Direct GoTrue bypass accepted by owner |
 | FR-AUTH-003 | UI blocks non-approved accounts (pending/rejected screens) | C | `AuthGuard.tsx` | UI test | Pending user sees "Account Pending" | Verified | L | `AuthGuard.tsx:55-79` |
 | FR-AUTH-004 | Backend denies data access to non-approved accounts | C | RLS policies via `get_auth_role()` | Database-policy test as pending responder/resident | 0 rows on `alert_events`/`devices`/`sensor_readings` | Verified | R | `20261031000000`, `20261030000000`; `get_auth_role_approval.test.sql` 11/11 and `deactivated_access.test.sql` 9/9 **run 2026-10-16**. Live definition unknown (OQ-03); self-reactivation blocked by `20261108000000` (`protect_profile_fields.test.sql` 11/11) |
@@ -138,7 +138,7 @@ Per-area: AUTH 10 · ADMIN 7 · RESP 5 · RES 8 · IOT 12 · ALERT 6 · LOC 5 ·
 
 | Item | Verification method | Status | Evidence |
 |---|---|---|---|
-| RLS enforcement per role | DB-policy tests per table/role | Local DB suites pass (2026-10-16); Playwright `api/rbac.spec.ts` in CI; live tests self-reported | `testing/reports/ROLE_BASED_ACCESS_TESTING.md`, `LIVE_RBAC_VERIFICATION.md` |
+| RLS enforcement per role | DB-policy tests per table/role | Local DB suites pass (2026-10-16); Playwright `api/rbac.spec.ts` in CI; live tests self-reported | `testing/reports/ROLE_BASED_ACCESS_TESTING.md`, `LIVE_TESTING_SUMMARY.md` (detailed `LIVE_RBAC_VERIFICATION.md` log in git history at `d74dc81`) |
 | Edge Function boundary/error behaviour (malformed payloads, timeouts) | Integration vs deployed functions | **Not started** per `LIVE_TESTING_SUMMARY.md` ("Not yet started") | `ERROR_EDGE_CASE_TESTING.md` |
 | Performance / load | Load test | None exists | — |
 | Hardware field test (sensors, GPS, SIM800L) | Physical prototype test | **Cannot Verify in Current Environment** | none in repo |

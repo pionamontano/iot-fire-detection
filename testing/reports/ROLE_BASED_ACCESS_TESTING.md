@@ -16,8 +16,7 @@ app.
 > **Live verification status:** items marked `[x]` below were executed
 > against the real Supabase project via disposable admin/resident/responder
 > test accounts, created and deleted through the app's own registration,
-> approval, and deletion Edge Functions. See `LIVE_RBAC_VERIFICATION.md`
-> (same folder) for the full request/response log. One regression was
+> approval, and deletion Edge Functions. See `LIVE_TESTING_SUMMARY.md` (detailed `LIVE_RBAC_VERIFICATION.md` log in git history at `d74dc81`) for the full request/response log. One regression was
 > found and fixed along the way (`devices_safe` returning zero rows for
 > non-admins after the earlier masking-bypass fix — see migration
 > `20260924060000_fix_devices_safe_visibility_regression.sql`) and one

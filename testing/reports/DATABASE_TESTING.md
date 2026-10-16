@@ -9,8 +9,7 @@ types, and query correctness, independent of who is asking.
 > against the real Supabase project (`fnfgakcmdosxsthvekwj`) across three
 > rounds — anonymous, authenticated as a real admin, and via disposable
 > resident test accounts created and deleted through the app's own
-> registration/approval flow. See `LIVE_DATABASE_VERIFICATION.md` (same
-> folder) for the full log of every request/response. Two critical bugs
+> registration/approval flow. See `LIVE_TESTING_SUMMARY.md` (detailed `LIVE_DATABASE_VERIFICATION.md` log in git history at `d74dc81`) for the full log of every request/response. Two critical bugs
 > were found and fixed along the way (PRs #22 and #24), and one
 > data-integrity gap (#20 below) was fixed in PR #26 and confirmed live.
 > Everything still unchecked needs the service-role key specifically —

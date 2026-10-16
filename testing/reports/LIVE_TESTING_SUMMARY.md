@@ -4,9 +4,8 @@ A single compiled overview of every live-testing pass run against the
 real AgapSense production stack (Supabase project
 `fnfgakcmdosxsthvekwj`, and the deployed app at
 `iot-fire-detection.vercel.app`). The detailed request-by-request logs
-live in `LIVE_DATABASE_VERIFICATION.md`, `LIVE_RBAC_VERIFICATION.md`,
-`LIVE_AUTH_VERIFICATION.md`, and `LIVE_UI_UX_VERIFICATION.md` (this
-folder) — this document synthesizes them into one narrative: what was
+(removed from the repo on 2026-10-16; see `git show d74dc81:testing/reports/<file>`) were `LIVE_DATABASE_VERIFICATION.md`, `LIVE_RBAC_VERIFICATION.md`,
+`LIVE_AUTH_VERIFICATION.md`, and `LIVE_UI_UX_VERIFICATION.md` — this document synthesizes them into one narrative: what was
 tested, what broke, what got fixed, and what's still open.
 
 ## Methodology
