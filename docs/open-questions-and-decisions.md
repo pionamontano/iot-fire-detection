@@ -1,6 +1,23 @@
 # AgapSense Open Questions and Decisions Register (Deliverable D)
 
-> **0.3 update (2026-10-16):** the statuses in this file are from the 0.1/0.2 review. For the current status of every Known Issue (11 fixed, 5 partly fixed, 8 open, plus 2 new open issues) see [`system-specification.md`](system-specification.md) §5.15.
+> **Status check (2026-10-16, `main` at `d74dc81`).** The questions below are kept as asked. Several have since been
+> answered in code or overtaken; the owner still has to confirm each. Known Issue status: [`system-specification.md`](system-specification.md) §5.15.
+>
+> | Item | Status in the code now |
+> |---|---|
+> | OQ-03 / CT-1 | The repo's `get_auth_role()` now requires `approved` + `is_active` (`20261031000000`, `20261030000000`). The live definition is still not recorded, so the read-only Phase 0 inspection is still needed. |
+> | OQ-04 / CT-2 | Resolved in the repo: `20261103000000` adds `station_name` and `email`. |
+> | OQ-06 | The premise has changed: Tier 1 now notifies **admins only** (push + linked Telegram); the station chat and responders get Tier 2 only. The resident still gets nothing on Tier 1 except the Dashboard. |
+> | OQ-07 / D6.1 / F1 | Implemented as recommended in §H: two consecutive safe readings, only `active` incidents. |
+> | OQ-08 / CT-4 | Partly: new devices take the DB default (60 °C); firmware fallback is still 70 °C. |
+> | CT-3 | Resolved: every page uses `lib/deviceStatus.ts` (2 / 15 min). |
+> | OQ-14 / CT-5 / CT-7 | `FEATURES.md` and `AGAPSENSE_SYSTEM_SPECIFICATION.md` were brought up to date; the latter now defers to `system-specification.md`. |
+> | OQ-20 | Deactivation is now an admin action (`manage-user`), `AuthGuard` and `get_auth_role()` honour `is_active`; but a user can still set `is_active` on their own row (KI-10). |
+> | OQ-21 | Overtaken: Resend was replaced by the in-app `support_requests` inbox (#107). Remaining gaps: KI-08. |
+> | OQ-22 | The "System Uptime" and "Connectivity %" widgets were removed. |
+> | OQ-23 / CT-6 / D5.4 / D5.5 | Implemented (§H). |
+> | F2 / D5.6 | Still open: `trigger-alert` `fmtTime` prints unlabeled UTC. |
+> | OQ-25 | Only the Postman collection and `supabase/maintenance/` remain. |
 
 Part of the baseline started by [`system-specification.md`](system-specification.md) (v0.1, commit `5441cb78`). Every item here is something **only the project owner can authorise or clarify**. Until answered, the specification records the uncertainty and implementers must not resolve it by assumption (change rule 10).
 
@@ -131,5 +148,5 @@ Per change rule 10, this is **not deployed**; it exists only as code + tests on 
 
 | Decision | Resolution | Why | Implemented at | Still open |
 |---|---|---|---|---|
-| **D5.4** (OQ-23) | Per-user Telegram delivery, additive to the existing station chat: any approved+active admin/responder (any tier) or the device's resident (Tier 2 only) with a linked `telegram_chat_id` now gets the same alert text on their own chat. | Finishes wiring what was already half-built — `profiles.telegram_chat_id`, the webhook, and the "Link Telegram Account" UI for both residents and responders already existed with nothing sending to them (CT-6 / KI-24). | `supabase/functions/trigger-alert/index.ts` (`telegramUsers` dispatch, reuses the same `recipientRoles` filter and approved+active check as push, ledger channel `telegram_user`); tests in `tests/edge/telegram_user.test.mjs` (8 cases). | None blocking — this is the wiring described in OQ-23/CT-6, now done. |
+| **D5.4** (OQ-23) | Per-user Telegram delivery, additive to the existing station chat: any approved+active admin (any tier), responder (Tier 2 only) or the device's resident (Tier 2 only) with a linked `telegram_chat_id` now gets the same alert text on their own chat. | Finishes wiring what was already half-built — `profiles.telegram_chat_id`, the webhook, and the "Link Telegram Account" UI for both residents and responders already existed with nothing sending to them (CT-6 / KI-24). | `supabase/functions/trigger-alert/index.ts` (`telegramUsers` dispatch, reuses the same `recipientRoles` filter and approved+active check as push, ledger channel `telegram_user`); tests in `tests/edge/telegram_user.test.mjs` (8 cases). | None blocking — this is the wiring described in OQ-23/CT-6, now done. |
 | **D5.5** (OQ-23) | **Refuse**, not move, a chat-link request when that Telegram chat is already linked to a different profile; reply asking the user to unlink it there first. Backed by a DB uniqueness constraint. | Moving a chat id silently could redirect someone else's fire alerts to a new owner without their knowledge — a safety-relevant failure mode worth avoiding outright. | `supabase/functions/telegram-webhook/index.ts` (pre-check + refusal reply, plus a 23505 fallback for a race); `supabase/migrations/20261026000000_telegram_chat_id_uniqueness_and_guard.sql` (partial unique index on `telegram_chat_id`, and `protect_profile_fields()` now also guards `telegram_chat_id` so only the service role or an admin can set it — closing the adjacent gap where a user could overwrite their own link directly via PostgREST, bypassing the webhook's token flow); tests in `tests/edge/telegram_webhook.test.mjs` (5 cases) and `supabase/tests/local/telegram_chat_id.test.sql` (DB-level; **not run locally** — no local PostgreSQL/`psql` available in this environment, written to the repo's existing SQL test convention but unexecuted). | The SQL test file should be run once against a real local Postgres to confirm it passes before relying on it. |

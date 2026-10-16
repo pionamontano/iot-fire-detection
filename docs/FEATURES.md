@@ -13,7 +13,7 @@ Three roles (`profiles.role`): `admin`, `bfp_responder`, `resident`. Route prote
 - **BFP Responder**: sees all devices, readings, incidents and the live map; handles incidents (acknowledge → responding → resolved / false alarm) through `transition_incident()`; edits own profile and station information.
 - **Resident**: sees only the device linked to their account; edits that device's thresholds (via RPC) and their own contact number.
 
-> **Known caveat:** `get_auth_role()` in the repository does not check `profiles.status`, so backend denial of *pending/rejected* accounts is not guaranteed by RLS alone (spec KI-09). The UI blocks them, and profile reads and Edge Functions check status explicitly.
+Backend denial does not depend on the UI: `get_auth_role()` returns NULL unless the profile is `approved` and `is_active`, so RLS gives pending, rejected and deactivated accounts nothing (`20261031000000`, `20261030000000`). Known gap: a deactivated user can re-enable its own profile while its access token is still valid (spec KI-10).
 
 ### 2. Two-Tier Alert System
 Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware evaluates readings only while `sensor_ready` is true and only from valid MQ-7 measuring-phase data.
@@ -25,7 +25,7 @@ Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware 
 - **One open incident per device.** `raise_alert()` upserts atomically; the tier can only increase, and repeated or late posts return the same incident. Notifications are claimed in a ledger (`claim_notification`) so a retry does not re-send the same (incident, tier, channel, recipient).
 - **SMS debounce:** a 5-minute timer in the firmware limits repeated SMS. It does not affect Telegram, Push, LEDs, buzzer or database logging.
 - **Navigation link:** Telegram and SMS messages contain `https://maps.google.com/?q=<lat>,<lng>`.
-- **Auto-resolution:** when a `sensor_ready` reading arrives with both values strictly below threshold, `ingest-reading` closes the device's open incident. *The owner has not yet ratified this policy (spec KI-13).* An admin can close an incident manually from the Device Status page; responders use `transition_incident()`.
+- **Auto-resolution (owner decision D6.1):** after two consecutive `sensor_ready` readings with both values strictly below threshold, `ingest-reading` closes the device's open incidents that are still `active`. An incident a responder has acknowledged or marked responding is left for the responder to close. An admin can close an incident manually from the Device Status page; responders use `transition_incident()`.
 
 ### 3. Incident Lifecycle
 `active → acknowledged → responding → resolved | false_alarm`. A closed incident is immutable. All transitions go through the `transition_incident()` RPC (client helper `src/lib/incidents.ts`). Delivery status of Telegram / SMS (owner, BFP) is recorded per incident.
@@ -33,7 +33,7 @@ Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware 
 ### 4. Location, Mapping and Addresses
 - **GPS:** NEO-6M, parsed continuously. A fix is "live" only if valid and younger than 5 s; otherwise the last good fix is republished with `gps_valid = false`. Before the first fix the cached value is `0,0`.
 - **Reverse geocoding:** OpenStreetMap Nominatim, run in `trigger-alert`. Messages use a tiered address (street → barangay → municipality), falling back to `display_name`, and always include raw coordinates (labelled "estimated — last known" when `gps_valid` is false). Results are cached in memory (4-decimal grid).
-- **Interactive map** (`react-leaflet` + OSM tiles): pins are coloured green (online / normal), red (fire alert), amber (fault / pre-alert) and grey (offline). Each device is labelled live / last-known / registered / unavailable (`src/lib/location.ts`); devices with no usable coordinates are not drawn.
+- **Interactive map** (`react-leaflet` + OSM tiles): pins use the shared status colours from `src/lib/deviceStatus.ts`: red (fire, Tier 2), amber (warning, Tier 1), green (online), blue (reconnecting), grey (offline) and near-black (disabled by an admin). Each device is labelled live / last-known / registered / unavailable (`src/lib/location.ts`); devices with no usable coordinates are not drawn.
 - **Install address and pin:** set by the resident linked to the device (first-login setup or Device Information, `update_own_device_location()`), not at registration. `devices.location_verified` records whether an admin has confirmed it; a database trigger resets it whenever a non-admin changes the address or pin, and only an admin can set it (Devices page → Edit device; the *Pin unverified* filter and a banner on that page list the pending ones). Pins that existed before this change were marked confirmed.
 - **Registered-pin fallback in alerts:** when the device sends no usable GPS, the Tier 2 Telegram message includes the registered pin and a navigation link, labelled *confirmed by admin* or *UNVERIFIED — set by resident*. With no address set, messages say "Location not set".
 - **Address-drift detection:** if a reading is more than 100 m from the device's registered location, a prompt (`address_discrepancies`) is raised to the resident. Approving it overwrites the device's registered address and coordinates.
@@ -41,21 +41,20 @@ Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware 
 ### 5. Communication and Provisioning
 - **Wi-Fi path:** HTTPS (pinned root CA) to Supabase Edge Functions for telemetry (every 30 s), alerts, config and SMS-status reports.
 - **GSM path:** SIM800L is used for **SMS only** (2G). There is no data-over-GSM fallback; whether one is wanted is an open owner question (spec OQ-02).
-- **Captive portal:** with no saved credentials the ESP32 opens an **open** AP named `AgapSense-Setup` (WiFiManager); the user selects a network and enters the password, credentials are stored in NVS. The page is served by the ESP32, separate from the web app. The portal is relaunched after 30 s disconnected.
+- **Captive portal:** with no saved credentials, or no stored device identity, the ESP32 opens a WPA2-protected AP named `AgapSense-Setup` (WiFiManager, password `WIFI_AP_PASSWORD` in `config.h`); the user selects a network and enters its password, plus the Device ID and API key on a new unit. Everything is stored in NVS. The page is served by the ESP32, separate from the web app. The portal is relaunched after 30 s disconnected and the device restarts if it times out (180 s).
 - **Local indicators:** yellow LED = Tier 1, red LED + buzzer = Tier 2, blue LED = solid when online, blinking (500 ms) when Wi-Fi is up but the backend is unreachable (degraded), off when offline.
-- **Power:** mains with backup battery; the device reports `on_battery` (battery ADC < 4000 mV). Admin pages show a "Battery" badge; the resident Dashboard shows Power (Mains / On battery) under Device Health.
+- **Power:** mains with backup battery; the device reports `on_battery` (battery ADC < 4000 mV). Admin pages show an on-battery badge; the resident Dashboard shows Power (Mains / On battery) under Device Health.
 - **Firmware reliability:** alert POST retry with backoff, late-binding of SMS outcome to the correct incident, 30 s hardware watchdog, and OTA update when the backend's target firmware version differs (`FIRMWARE_VERSION` in `config.h`).
 - **No local buffering:** readings generated while offline are not queued and are lost.
 
 ### 6. Dashboards and Real-Time Monitoring
 - **Realtime:** the SPA uses Supabase Realtime (`postgres_changes`) for readings, alerts and device updates.
 - **Connectivity badge** (`src/lib/deviceStatus.ts`): *Online* (< 2 min since last contact), *Reconnecting* (2–15 min, "Last seen X min ago"), *Offline* (> 15 min or never). The status is re-evaluated on a client-side tick.
-- **Sensor initialisation:** while `sensor_ready` is false the resident Dashboard shows "Sensors warming up" in place of values. `sensor_ready` becomes true after the first complete MQ-7 cycle (60 s heating + 90 s measuring ≈ 150 s after power-on).
+- **Sensor initialisation:** while `sensor_ready` is false the resident Dashboard shows "Warming up" in place of the CO value. `sensor_ready` becomes true after the first complete MQ-7 cycle (60 s heating + 90 s measuring ≈ 150 s after power-on).
 - **Admin:** dashboard, map, devices (management table, registration, firmware releases), users, Device Status (fleet status, manual resolve), system log with export, security settings.
 - **Responder (Tier 2 only):** dashboard (open fire incidents oldest first with address, readings, the linked resident's name and tap-to-call number (`get_incident_resident_contact()`, open Tier 2 incidents only), incident actions and directions to the live GPS / last-known / registered pin, device map without Tier 1 warnings, devices reporting, audible alarm for unacknowledged fire), alert logs (fire incidents with status chips, time to acknowledge, detail view, CSV export), settings (profile, Telegram link, browser push, station information; station hotline accepts PH mobile or landline). The header bell counts Tier 2 only.
-- **Resident:** mandatory first-login setup (mobile number, then install address and pin if a device is linked), home (status, readings, last 24 readings, alerts, address prompts), alert settings (thresholds, Web Push, Telegram link), device info, system log, account.
-- **Support requests:** users file in-app requests (`support_requests`), which admins review in an inbox.
-- **Known defects:** some displayed metrics are placeholders (resident "System Uptime", responder "connectivity %", map "Signal / Latency"); see spec KI-01/02.
+- **Resident:** mandatory first-login setup (mobile number, then install address and pin if a device is linked), Dashboard (status, readings, last 24 readings, recent alerts, emergency contacts, address prompts, device-link form when none is linked), Alert History, Alert Settings (thresholds, SMS number, Web Push, Telegram link), Device Information, Account (name, support requests).
+- **Support requests:** users file in-app requests (`support_requests`) from Account (residents) or Settings (responders); admins review them at `/admin/support` and their reply is shown under the requester's My Requests.
 
 ### 7. Registration & Admin Approval Workflow
 - Public sign-up (`register`) is available for `resident` and `bfp_responder` only; the account starts as `pending` and a `registration_requests` row is created.
@@ -77,14 +76,14 @@ Located in `supabase/functions/`. Functions called by the ESP32 authenticate wit
 | **`trigger-alert`** | Device | Validates key, recomputes tier from stored thresholds, reverse-geocodes, raises/updates the incident (`raise_alert`), sends Telegram (station chat on Tier 2 only; linked personal chats) and Web Push through the notification ledger, and returns `owner_contact` / `bfp_contact` and the `alert_event_id` for SMS. |
 | **`get-device-config`** | Device | Returns thresholds, `owner_number`, `bfp_number` and firmware target, so settings change without re-flashing. Fetched at boot and every 10 minutes. |
 | **`confirm-sms-status`** | Device | Reports the real SIM800L `+CMGS` outcome per SMS to `alert_events.sms_sent_owner` / `sms_sent_bfp`. |
-| **`login`** | Frontend | Checks `check_login_lockout`, forwards credentials to GoTrue, records every attempt. Lockout within 15 min: 3 failures → 10 s, 5 → 30 s, 7 → 900 s; an admin can unlock early. |
+| **`login`** | Frontend | Lower-cases the e-mail, checks `check_login_lockout`, forwards credentials to GoTrue, records every attempt. Lockout within 15 min: 3 failures → 10 s, 5 → 30 s, 7 → 900 s; an admin can unlock early. |
 | **`register`** | Public | Creates the auth user, a `pending` profile and a registration request. |
 | **`manage-registration`** | Admin | Approves or rejects a pending registration. |
 | **`create-user`** | Admin | Creates a pre-approved user directly. |
 | **`assign-device`** | Admin | Assigns / unassigns a device to a resident. |
 | **`manage-user`** | Admin | Edits a user (name, contact, address, role, login email, temporary password), deactivates / reactivates accounts (no hard delete), and lists login emails + last sign-in. |
 | **`link-device`** | Resident | Links the caller to a device by device code. |
-| **`telegram-webhook`** | Telegram | Links a user's Telegram chat ID to their profile (`/start <token>`). *No code yet sends alerts to per-user chats; alerts go to the shared station chat only.* |
+| **`telegram-webhook`** | Telegram | Links a user's Telegram chat ID to their profile (`/start <token>`). `trigger-alert` then sends that user the alerts their role receives (admins: Tier 1 and 2; responders and the device's resident: Tier 2). |
 | **`register-push`** / **`send-push-notification`** | Frontend / backend | Web Push (VAPID) subscription storage and delivery. |
 | **`admin-support-request`** | Frontend | Inserts an in-app support request and notifies every approved, active admin (browser push that opens `/admin/support?request=<id>`, plus their linked Telegram chat; the link is added to Telegram only when the `APP_URL` secret is set). |
 | **`resolve-support-request`** | Admin | Resolves or reopens a support request; on resolve, messages the requester (linked Telegram chat + browser push) with the admin's note. |
@@ -101,10 +100,10 @@ Located in `supabase/functions/`. Functions called by the ESP32 authenticate wit
 - Residents can read `sensor_readings` and `alert_events` only for their own `device_id`.
 - Only approved admins can read other users' profiles.
 - Direct client INSERT into `sensor_readings` / `alert_events` is revoked; only Edge Functions (service role) write them.
-- See the caveat under RBAC regarding pending accounts.
+- Pending, rejected and deactivated accounts get no rows (see RBAC above).
 
 ### Self-Promotion Protection
-A trigger on `profiles` reverts non-admin attempts to change `role`, `status` or `device_id`. It does not currently cover `is_active`, `setup_complete` or `telegram_chat_id` (spec KI-10).
+A trigger on `profiles` reverts non-admin attempts to change `role`, `status`, `device_id` or `telegram_chat_id`. It does not cover `is_active` or `setup_complete` (spec KI-10).
 
 ### Session Security
 - Per-role idle timeout (`timeout_admin`, `timeout_bfp`, `timeout_resident` in `settings`) signs the user out and redirects to `/session-expired`. No defaults are seeded: until an admin saves Settings (which pre-fills 15 / 15 / 60 min) no timeout applies.

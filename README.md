@@ -40,7 +40,7 @@ See [`docs/FEATURES.md`](docs/FEATURES.md) for what each feature and Edge Functi
 
 ## Running locally
 
-Requires Node.js 18+ (CI uses 22).
+Requires Node.js 20.19+ or 22.12+ (Vite 8; CI uses 22).
 
 ```bash
 npm install

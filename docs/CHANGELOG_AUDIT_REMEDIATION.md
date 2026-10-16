@@ -4,6 +4,12 @@ Merged to `main` as pull request #94 (merge commit `a83a08b`). **The code is in 
 No migration has been applied to any shared or production database, no Edge Function has been deployed, no physical device was
 touched, and no real notification was sent. All verification was local (see section 10).
 
+> **Status update (2026-10-16, `main` at `d74dc81`).** This is the record of PR #94 and is kept as written. Since then, items in
+> §12 have moved: per-user Telegram (Step 5.4, #95) is implemented; auto-resolution follows D6.1 (part of #96; device-clear display
+> and admin reopen are still open); `get_auth_role()` now requires an approved, active profile (`20261031000000`, `20261030000000`).
+> Which migrations reached production is not recorded here; PR #153 later compared grants against production. The local suites in
+> §10 were re-run and pass (counts in [`system-specification.md`](system-specification.md) §5.14).
+
 Related documents:
 - `docs/ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md` - delivery semantics, incident invariants, writer audit, activation gate, firmware and backend assumptions.
 - `docs/STAGING_DRY_RUN_RUNBOOK.md` - how to rehearse the migrations on a separate Supabase project before production.
@@ -126,11 +132,11 @@ Playwright E2E ran during earlier steps only.
 ## 12. Not done
 | Item | Why | Tracking |
 |---|---|---|
-| Step 5.4 per-user Telegram for residents | needs D5.4, D5.5 | #95 |
+| Step 5.4 per-user Telegram for residents | needs D5.4, D5.5 — *implemented since (2026-10-16 note)* | #95 |
 | Step 6.3 auto-resolution / device-clear, admin reopen | needs D6.1, D6.4 (and D6.3 backfill) | #96 |
 | Keep-alive re-assert of an ongoing alert | D5.2 | none yet |
 | UTC label on message times | D5.6 | none yet |
-| Fix for `get_auth_role()` ignoring `status` | out of scope until its live definition is seen | none yet |
+| Fix for `get_auth_role()` ignoring `status` | out of scope until its live definition is seen — *fixed since in `20261031000000`* | none yet |
 
 ## 13. Where to find things
 - Migrations: `supabase/migrations/20261019000000`, `20261020000000`, `20261020000100`, `20261021000000`, `20261022000000`.

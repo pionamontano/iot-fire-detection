@@ -3,7 +3,7 @@
 **Target length:** ~7 minutes · **Format:** screen recording + hardware shots + voice-over
 **Audience:** panel / evaluators / prospective barangay and BFP users
 
-> Everything shown below is based on `docs/FEATURES.md` and `docs/FIRMWARE_GUIDE.md`. Features marked *(not shown)* are intentionally left out because they are incomplete or unverified in the repo (e.g. per-user Telegram, placeholder metrics like "System Uptime").
+> Everything shown below is based on `docs/FEATURES.md` and `docs/FIRMWARE_GUIDE.md`. Features that are incomplete or unverified in the repo (e.g. offline data buffering, a GSM data path) are intentionally left out.
 
 ---
 
@@ -11,11 +11,12 @@
 
 - [ ] Supabase project running, edge functions deployed, `npm run dev` at `http://localhost:5173`
 - [ ] Three accounts ready, **each in its own browser profile/window**: Admin, BFP Responder, Resident (device linked to the Resident)
-- [ ] One extra **pending** resident registration waiting for approval (for Scene 5)
-- [ ] ESP32 node powered **at least ~150 s before the demo** so `sensor_ready` is true (60 s heat + 90 s measure)
-- [ ] Phones in frame: one for the **Telegram station chat**, one for the **SMS** (resident number and BFP number)
-- [ ] Safe way to trigger the sensors: lighter/incense near the MQ-7 for CO, hair dryer/heat gun (at a safe distance) for the DS18B20. **Do not use open flame near the electronics.**
-- [ ] Optional fallback: lower the thresholds in Alert Settings so the demo trips quickly and safely
+- [ ] One extra **pending** resident registration waiting for approval (for Scene 4)
+- [ ] ESP32 node powered **at least a few minutes before the demo** so `sensor_ready` is true (60 s warm-up on the constant-5V build, ~150 s on the duty-cycle build)
+- [ ] Phones in frame: one for the **Telegram station chat** (Tier 2 only) and an admin's linked Telegram (Tier 1), one for the **SMS** (resident number and BFP number)
+- [ ] Safe way to trigger the sensors: **lower the thresholds first** (Alert Settings or admin Edit device) to just above room readings, then use a hair dryer at a safe distance for the DS18B20 and the smoke of an incense stick held away from the board for the MQ-7. **No open flame near the electronics** (see `HARDWARE_BENCH_TEST.md`).
+- [ ] Wait up to 10 minutes after changing thresholds (or reboot the node) so it picks them up
+- [ ] Admin → Settings: save the session timeouts once (none apply until saved), so the idle-timeout claim in Scene 4 holds
 - [ ] Browser zoom 110–125 %, notifications muted except for the demo ones, dark mode off for readability
 
 ---
@@ -43,9 +44,9 @@
 |---|---|
 | Close-up, labelled overlays: **ESP32**, **MQ-7 (CO)**, **DS18B20 (temperature)**, **NEO-6M GPS**, **SIM800L GSM**, **LEDs + buzzer**. | "The node pairs an MQ-7 carbon-monoxide sensor with a DS18B20 temperature sensor. A NEO-6M GPS gives its location, and a SIM800L modem sends SMS even if Wi-Fi is down." |
 | Power on the board: boot blink sequence (yellow → red → blue → beep). | "On boot it blinks every indicator so installers can confirm the wiring." |
-| Phone: connect to the **AgapSense-Setup** captive portal, pick Wi-Fi, enter password. | "Setup is simple: the node opens a Wi-Fi portal, you choose your network, and it remembers it." |
+| Phone: connect to the password-protected **AgapSense-Setup** portal, pick Wi-Fi, enter its password (and, on a new unit, the device ID and key). | "Setup is simple: the node opens its own password-protected Wi-Fi portal, the installer chooses the home network, and the node remembers it." |
 | Blue LED turns solid. | "Solid blue means it is online. Blinking blue means Wi-Fi is up but the backend is unreachable." |
-| Dashboard shows "Initializing sensors…" | "The MQ-7 needs a warm-up cycle, so for the first couple of minutes the app shows 'Initializing sensors' instead of unreliable numbers." |
+| Dashboard shows "Warming up" | "The CO sensor needs to warm up, so for about the first minute the app shows 'Warming up' instead of unreliable numbers." |
 
 ---
 
@@ -53,11 +54,11 @@
 
 | Visual | Voice-over |
 |---|---|
-| Browser (logged out): `/register` as a **Resident**. Fill in the form, submit. | "A new resident signs up publicly. Responders can too — but admin accounts can only be created by an admin." |
+| Browser (logged out): **Register as a resident** (`/register/resident`). Fill in the form, submit. | "A new resident signs up publicly. Responders can too — but admin accounts can only be created by an admin." |
 | Lands on the **Pending Approval** screen. | "Until approved, the user only sees a pending screen. This is a safeguard so that nobody gets access to fire data without being verified." |
 | Switch to **Admin** window → **Users** → pending request → **Approve** and assign the device. | "The administrator reviews the request, approves it and assigns the resident's device. Admins can also create pre-approved users directly." |
 | Show the login lockout briefly: enter a wrong password 3 times, see the lockout timer. | "Login is protected by progressive lockouts after failed attempts, and idle sessions time out automatically per role." |
-| Log in as the new resident → **mandatory first-login setup** (mobile number). | "On first login the resident gives their mobile number, which is where SMS evacuation alerts will go." |
+| Log in as the new resident → **mandatory first-login setup** (mobile number, then the install address and map pin). | "On first login the resident gives their mobile number, which is where SMS evacuation alerts will go, and pins where the device is installed, so responders can find it even without GPS." |
 
 ---
 
@@ -65,23 +66,23 @@
 
 | Visual | Voice-over |
 |---|---|
-| **Resident Home**: live CO and temperature, status card, Power card (Mains/Battery), last 24 readings. | "The resident home page shows live readings streamed in real time, the device status, and whether the node is on mains or backup battery." |
+| **Resident Dashboard**: status panel, live CO and temperature with the 24-reading chart, Device Health (Power: Mains / On battery). | "The resident home page shows live readings streamed in real time, the device status, and whether the node is on mains or backup battery." |
 | Point out the connectivity badge: Online / Reconnecting / Offline. | "A connectivity badge shows whether the device is online, reconnecting, or offline, with the last-seen time." |
-| **Alert Settings**: adjust the CO and temperature thresholds, enable Web Push, link Telegram. | "Residents tune their own alert thresholds, enable push notifications, and link Telegram — and the node picks up the new values within minutes, without re-flashing." |
-| Briefly show **Device Info** and **Alert History**. | "Every alert the device has raised is listed here, with what was sent and when it was resolved." |
+| **Alert Settings**: adjust the CO and temperature levels, SMS number, push notifications, link Telegram. | "Residents tune their own alert thresholds, enable push notifications, and link Telegram — and the node picks up the new values within minutes, without re-flashing." |
+| Briefly show **Device Information** and **Alert History**. | "Every alert the device has raised is listed here, with what was sent and when it was resolved." |
 
 ---
 
 ## Scene 6 — Live fire scenario (3:50 – 5:30) ⭐ *main event*
 
-Use a **split-screen**: Resident dashboard · Responder dashboard · Node close-up · Phones (Telegram + SMS).
+Use a **split-screen**: Resident dashboard · Admin dashboard (for Tier 1) / Responder dashboard (for Tier 2) · Node close-up · Phones (Telegram + SMS).
 
 ### 6a. Tier 1 — Warning (3:50 – 4:30)
 
 | Visual | Voice-over |
 |---|---|
 | Expose the node to **one** trigger only (CO *or* heat). Readings climb past the threshold. | "AgapSense uses a two-tier alert system. Let's raise just one factor — carbon monoxide." |
-| Yellow LED lights. Telegram message appears on the phone; web push pops up on the Admin and Responder windows. | "One sensor over its limit is a **Tier 1 warning**. The yellow LED lights, a Telegram message goes to the station chat, and responders get a push notification. No SMS is sent yet, to avoid false alarms." |
+| Yellow LED lights. Push pops up in the Admin window and the admin's linked Telegram gets a warning; the resident dashboard turns amber. The responder dashboard stays quiet. | "One sensor over its limit is a **Tier 1 warning**. The yellow LED lights and the administrators are notified so someone can check the site. The fire station isn't called out and no SMS is sent yet, to avoid false alarms." |
 | Callout: "3 consecutive readings required". | "To prevent false triggers, a reading must stay over threshold for three consecutive checks before an alert is raised." |
 
 ### 6b. Tier 2 — Fire alert (4:30 – 5:30)
@@ -91,7 +92,7 @@ Use a **split-screen**: Resident dashboard · Responder dashboard · Node close-
 | Now expose the node to the **second** trigger. Both values cross their thresholds. | "Now the temperature rises too. Both sensors are over their limits." |
 | Red LED + buzzer on the node. Cut to the two SMS arriving on phones. | "That is a **Tier 2 fire alert**. The red LED and buzzer sound locally, and the node sends two SMS messages — a plain-language evacuation message to the resident, and a technical one to the BFP with the device, time, GPS coordinates, address and a Google Maps link." |
 | Responder window: audible alarm, new incident at the top of the dashboard; map pin turns **red**. | "On the responder dashboard an alarm sounds, the incident appears instantly, and the device pin turns red on the live map." |
-| Show Telegram message with address + map link; tap the link to open navigation. | "The message includes a reverse-geocoded address and a navigation link, so responders know exactly where to go." |
+| Show the station-chat Telegram message with address + map link; tap the link to open navigation. Push arrives on the resident's browser too. | "The station's Telegram message includes a reverse-geocoded address and a navigation link, so responders know exactly where to go. The resident also gets a push notification." |
 | Brief overlay: backend recomputes the tier. | "Importantly, the backend re-checks the thresholds itself — the device can't just claim a fire. And there is only ever one open incident per device, so repeated reports never create duplicates." |
 
 ---
@@ -102,9 +103,9 @@ Use a **split-screen**: Resident dashboard · Responder dashboard · Node close-
 |---|---|
 | Responder dashboard → click the incident → **Acknowledge**. Status: `active → acknowledged`. | "The responder acknowledges the incident, which everyone sees immediately." |
 | Change status to **Responding**. | "Then marks the team as responding." |
-| Change status to **Resolved** (or **False alarm**). Pin turns back to green. | "Once the situation is under control, they mark it resolved — or a false alarm. A closed incident is locked and can't be edited afterwards, so the audit trail is trustworthy." |
-| **Alert Logs** page: delivery status for Telegram, SMS-owner, SMS-BFP. | "The log records whether each Telegram and SMS message was actually delivered, based on the modem's real result." |
-| Admin window: **Device Status** → manual close option; mention auto-resolve. | "If readings return to safe levels, the system can resolve the incident automatically, and admins can also close one manually." |
+| Change status to **Resolved** (or **False alarm**). The incident leaves the active list. | "Once the situation is under control, they mark it resolved — or a false alarm. A closed incident is locked and can't be edited afterwards, so the audit trail is trustworthy." |
+| **Alert Logs** detail (BFP SMS confirmed) and the resident's **Alert History** (SMS / BFP / TG tags). | "The system records which messages went out; for SMS it uses the modem's own confirmation, not a guess." |
+| Admin window: **Device Status** → manual close option; mention auto-resolve. | "If readings return to safe levels before anyone has acknowledged it, the system closes the incident itself; once a responder has taken it, only a person closes it. Admins can also close one manually." |
 
 ---
 
@@ -113,8 +114,8 @@ Use a **split-screen**: Resident dashboard · Responder dashboard · Node close-
 | Visual | Voice-over |
 |---|---|
 | **Admin Dashboard**: totals, active alerts, devices online. | "Administrators get the big picture: total alerts, active devices, system health." |
-| **Interactive Map**: green / amber / red / grey pins, click a pin. | "The live map shows every device: green is normal, amber is a pre-alert or fault, red is fire, and grey is offline." |
-| **Devices** page: add a device, show the generated API key, rename, power toggle, firmware version. | "Devices are registered here, each with its own secret key. Admins can regenerate the key, and push firmware updates over the air." |
+| **Live Map**: red / amber / green / blue / grey / black pins, click a pin. | "The live map shows every device: red is fire, amber is a warning, green is online, blue is reconnecting, grey is offline and black is switched off by an admin." |
+| **Devices** page: **Register Device** (generated `AGS-NNN` code and API key), edit, confirm a resident's pin, enable/disable, firmware version. | "Devices are registered here; each gets its own code and secret key. Admins confirm where each one is installed, can regenerate the key, and push firmware updates over the air." |
 | **System Log** → export. **Support Requests** inbox. | "Every action is logged and exportable, and users can send support requests straight from the app." |
 
 ---
@@ -146,7 +147,7 @@ Use a **split-screen**: Resident dashboard · Responder dashboard · Node close-
 - **Privacy:** blur real phone numbers, API keys, Supabase URL/anon key, and any real addresses.
 - **Captions:** add subtitles — the Telegram/SMS shots are small and easy to miss.
 - **Audio:** record voice-over separately after picture lock; leave 1 s of silence at the start of each scene for easier editing.
-- **Not covered on purpose:** per-user Telegram alerts, uptime/latency metrics, and data buffering while offline are incomplete or placeholders today (see Known defects in `docs/FEATURES.md`). If a panelist asks, answer honestly that they are on the roadmap.
+- **Not covered on purpose:** data buffering while offline (readings taken without Wi-Fi are lost) and a GSM data path (GSM carries SMS only). Open issues are listed in `docs/system-specification.md` §5.15. If a panelist asks, answer honestly.
 
 ## Suggested shot list (for editors)
 
@@ -156,7 +157,7 @@ Use a **split-screen**: Resident dashboard · Responder dashboard · Node close-
 | 2 | Captive portal Wi-Fi setup | Phone screen record |
 | 3 | Registration → pending → admin approval | Screen record (2 windows) |
 | 4 | Resident home + alert settings | Screen record |
-| 5 | Tier 1 trigger: node + Telegram + push | Camera + phone + screen |
+| 5 | Tier 1 trigger: node + admin push/Telegram | Camera + phone + screen |
 | 6 | Tier 2 trigger: node + 2 SMS + responder alarm + map | Camera + phones + screen |
 | 7 | Incident lifecycle and delivery log | Screen record |
 | 8 | Admin dashboard, map, devices, logs | Screen record |

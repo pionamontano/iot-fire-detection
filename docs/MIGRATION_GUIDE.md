@@ -8,9 +8,9 @@ A step-by-step guide to set up this project on a **brand-new Supabase project** 
 
 | Tool | Version | Install |
 |---|---|---|
-| **Node.js** | 18+ | [nodejs.org](https://nodejs.org) |
+| **Node.js** | 20.19+ or 22.12+ (Vite 8 requirement; CI uses 22) | [nodejs.org](https://nodejs.org) |
 | **npm** | 9+ | Comes with Node.js |
-| **Supabase CLI** | Latest | `npm install -g supabase` |
+| **Supabase CLI** | Latest | `npx supabase …`, or Homebrew / Scoop (a global `npm install -g` is not supported) |
 | **Git** | Latest | [git-scm.com](https://git-scm.com) |
 
 ---
@@ -26,7 +26,7 @@ A step-by-step guide to set up this project on a **brand-new Supabase project** 
 | **Project URL** | `Settings → API → Project URL` | `.env` (line 1) |
 | **Anon / Public Key** | `Settings → API → Project API Keys → anon public` | `.env` (line 2) |
 | **Service Role Key** | `Settings → API → Project API Keys → service_role secret` | Supabase Edge Function secrets |
-| **Database Password** | The password you set when creating the project | Only needed if using `migrate.cjs` |
+| **Database Password** | The password you set when creating the project | `supabase link` / `supabase db push` (Step 2, Method A) |
 
 ---
 
@@ -71,7 +71,7 @@ These files create:
 
 ## Step 3 — Create the First Admin User
 
-After running the SQL, you need to manually create an admin account since new users default to `pending` residents.
+After running the SQL, create the first admin by hand: public sign-up only creates `pending` residents or responders, and no trigger creates a `profiles` row for a user added in the dashboard.
 
 1. In Supabase dashboard, go to **Authentication → Users**.
 2. Click **Add user → Create new user**.
@@ -80,13 +80,18 @@ After running the SQL, you need to manually create an admin account since new us
 5. Now go to **SQL Editor** and run this (replace the email with what you used):
 
 ```sql
--- Replace 'admin@agapsense.com' with the email you just created
-UPDATE profiles
-SET role = 'admin', status = 'approved', full_name = 'System Admin'
-WHERE id = (
-  SELECT id FROM auth.users WHERE email = 'admin@agapsense.com'
-);
+-- Replace 'admin@agapsense.com' with the email you just created.
+-- Creates the profile row (an UPDATE alone would match nothing) and is safe to run twice.
+INSERT INTO public.profiles (id, full_name, role, status, setup_complete)
+SELECT id, 'System Admin', 'admin', 'approved', true
+FROM auth.users WHERE email = 'admin@agapsense.com'
+ON CONFLICT (id) DO UPDATE
+  SET role = 'admin', status = 'approved', is_active = true, setup_complete = true;
 ```
+
+It should report `INSERT 0 1`. `INSERT 0 0` means the email did not match the user you just created.
+
+Then sign in as this admin, open **Settings** and press **Save** once: no session-timeout values exist until then, so idle sign-out is off.
 
 > [!CAUTION]
 > If you skip this step, you won't be able to log in as admin to approve other users.
@@ -236,7 +241,7 @@ The project includes a `vercel.json` for SPA routing.
 | Problem | Fix |
 |---|---|
 | "Missing Supabase environment variables" on app start | Your `.env` file is missing or the keys are wrong. See Step 4. |
-| Login works but dashboard shows nothing | The admin user's `status` is probably still `'pending'`. Run the UPDATE query from Step 3. |
+| Login works but dashboard shows nothing, or the admin cannot sign in | The admin has no `profiles` row, or its `status` is not `'approved'`. Run the query from Step 3. |
 | Edge function returns 500 | Check that you linked the correct project (`supabase link`) and secrets are set (`supabase secrets list`). |
 | "infinite recursion detected in policy" | Migrations were applied out of order or an old hand-written policy is still present. Reset the DB and apply every file in `supabase/migrations/` in timestamp order (Step 2). |
 | RLS blocks all data | Make sure the `get_auth_role()` function exists. Run `SELECT get_auth_role();` in the SQL Editor to test. |

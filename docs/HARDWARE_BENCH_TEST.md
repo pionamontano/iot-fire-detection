@@ -11,6 +11,7 @@ Tick each box, write the result in the notes column or below, and keep the fille
 | | |
 |---|---|
 | Tester / date | |
+| Build env (`esp32dev_mq7_5v` for constant-5V MQ-7 wiring, `esp32dev` for heater PWM) | |
 | Firmware version (`FIRMWARE_VERSION`) | |
 | Git commit | |
 | Board / wiring revision | |
@@ -24,20 +25,20 @@ Tick each box, write the result in the notes column or below, and keep the fille
 ## 0. Prerequisites
 
 - [ ] `config.h` created from `config.example.h`; Supabase URL, anon key and CA cert filled in; `WIFI_AP_PASSWORD` changed from the default.
-- [ ] `pio run` succeeds on a machine with internet (note any warnings): ______
+- [ ] `pio run -e <env>` succeeds on a machine with internet (note any warnings): ______. Always pass `-e`: a bare `pio run` also builds `test_components`, which needs its own secrets file.
 - [ ] Build with `-DDEBUG_MODE=1` also succeeds, and a serial monitor (115200) is attached for the logs quoted below.
 - [ ] A test device row exists in the admin Devices page (copy its **ID/label** and **API key**).
 - [ ] The device's `is_active` is true; a test resident is approved and linked to it.
 - [ ] Phone with Wi-Fi, a second phone able to receive SMS, a 2.4 GHz Wi-Fi network you can switch off.
 - [ ] SIM has credit and a registered network; antenna connected; SIM800L on its own 4.0 V supply with the 1000 uF capacitor.
-- [ ] USB cable and a clean flash: `pio run -t erase` then `pio run -t upload`.
+- [ ] USB cable and a clean flash: `pio run -e <env> -t erase` then `pio run -e <env> -t upload`.
 
 ## 1. Power-up and wiring
 
 | # | Check | Expected | Pass | Notes |
 |---|---|---|---|---|
 | 1.1 | Power on | Boot blink: yellow, red, blue, then a short buzzer beep, all off | [ ] | |
-| 1.2 | Serial log (debug build) | Banner with the right `FIRMWARE_VERSION`; four tasks start; no reboot loop / WDT reset for 5 minutes | [ ] | |
+| 1.2 | Serial log (debug build) | Banner with the right `FIRMWARE_VERSION`; five tasks start (MQ7, DS18B20, GPS, Connectivity, GSM); no reboot loop / WDT reset for 5 minutes | [ ] | |
 | 1.3 | Brown-out | Trigger GSM activity (section 7) and watch for resets | [ ] | |
 | 1.4 | Pin map | Compare `config.h` pins with the physical wiring. **GPS: `GPS_RX_PIN`=17 must go to the module's TX** | [ ] | |
 
@@ -85,26 +86,26 @@ These three are the tests the identity change needs before any fleet push.
 | # | Check | Expected | Pass | Notes |
 |---|---|---|---|---|
 | 4.1 | DS18B20 | Reads room temperature (+/- 1 C) every 5 s; unplug it: last value is kept, an error is logged, no false alert | [ ] | |
-| 4.2 | MQ-7 cycle | Heater full power 60 s (no ADC), then 90 s measuring; `mq7_phase` in telemetry alternates `heating`/`measuring` | [ ] | |
-| 4.3 | Warm-up | `sensor_ready` is false for ~150 s after boot and **no alert can fire** (indicators off, "warm-up" log) | [ ] | |
-| 4.4 | MQ-7 calibration | In clean air after several cycles measure Rs; set `MQ7_R0_OHMS = Rs`; re-flash; clean-air reading is a plausible low ppm. R0 used: ______ | [ ] | |
+| 4.2 | MQ-7 reads | **Constant-5V build:** a CO reading every 5 s from boot; `mq7_phase` always `measuring`. **Duty-cycle build:** heater full power 60 s (no ADC), then 90 s measuring; `mq7_phase` alternates `heating`/`measuring`. Check the build matches the wiring (FIRMWARE_GUIDE §4.1) | [ ] | |
+| 4.3 | Warm-up | `sensor_ready` is false for 60 s (constant-5V) or ~150 s (duty-cycle) after boot and **no alert can fire** (indicators off, "warm-up" log) | [ ] | |
+| 4.4 | MQ-7 calibration | In clean air after warm-up (several cycles on the duty-cycle build) measure Rs; set `MQ7_R0_OHMS = Rs`; re-flash; clean-air reading is a plausible low ppm. R0 used: ______ | [ ] | |
 | 4.5 | GPS | Outdoors / at a window: valid fix within a few minutes; telemetry `gps_valid` true; coordinates match the real location. Indoors: `gps_valid` false, last-known coordinates kept | [ ] | |
-| 4.6 | Battery | Run from the battery path: `battery_mv` is plausible and `on_battery` flips below `ON_BATTERY_THRESHOLD_MV` | [ ] | |
+| 4.6 | Battery | Run from the battery path: `battery_mv` in the serial log is plausible (the backend does not store it) and `on_battery` flips below `ON_BATTERY_THRESHOLD_MV`; the dashboards show "On battery" | [ ] | |
 
 ## 5. Dashboard consistency
 
-- [ ] Admin Devices page shows the device, live readings, RSSI, battery and running firmware version = `FIRMWARE_VERSION`.
-- [ ] Resident home / device info shows the same readings; staleness handling is correct when the node is unplugged for > 2 min.
+- [ ] Admin pages show the device online, live readings, the on-battery badge when on battery, and running firmware version = `FIRMWARE_VERSION`. (RSSI and battery voltage are sent but not stored, so they appear only in the serial log.)
+- [ ] Resident Dashboard / Device Information show the same readings; the status changes to *Reconnecting* after 2 min unplugged and *Offline* after 15 min.
 
 ## 6. Alert logic (use lowered thresholds)
 
-Set the device's CO and temperature thresholds just above the current readings in the admin page (e.g. temp = room + 3 C; CO low), wait for the config fetch (or reboot), and wait out the 150 s warm-up.
+Set the device's CO and temperature thresholds just above the current readings in the admin page (e.g. temp = room + 3 C; CO low), wait for the config fetch (or reboot), and wait out the MQ-7 warm-up (test 4.3).
 
 | # | Check | Expected | Pass | Notes |
 |---|---|---|---|---|
-| 6.1 | Tier 1 (one sensor) | Warm only the DS18B20 above its threshold: after 3 consecutive readings (`ALERT_DEBOUNCE_COUNT`) the **yellow** LED lights, a Tier 1 alert appears in the admin page, Telegram/push (no SMS) arrives | [ ] | |
+| 6.1 | Tier 1 (one sensor) | Warm only the DS18B20 above its threshold: after 3 consecutive readings (`ALERT_DEBOUNCE_COUNT`) the **yellow** LED lights, a Tier 1 alert appears in the admin page, push and linked Telegram reach **admins only** (no station chat, no responders, no SMS) | [ ] | |
 | 6.2 | Debounce | A single spike (1-2 readings) does **not** trigger | [ ] | |
-| 6.3 | Tier 2 (both) | Exceed both thresholds: **red** LED + **buzzer**, Tier 2 alert, **SMS to the owner and the BFP numbers**, Telegram/push | [ ] | |
+| 6.3 | Tier 2 (both) | Exceed both thresholds: **red** LED + **buzzer**, Tier 2 alert, **SMS to the owner and the BFP numbers**, station Telegram, linked Telegram chats and push to admins, responders and the resident | [ ] | |
 | 6.4 | SMS content | Owner SMS is the Filipino evacuation text with a Maps link; BFP SMS has device ID, time, readings, Maps link, address. The Maps link survives intact | [ ] | |
 | 6.5 | SMS status | After sending, the admin alert shows `sms_sent_owner` / `sms_sent_bfp` true (confirm-sms-status) | [ ] | |
 | 6.6 | SMS debounce | Staying in Tier 2 does not resend SMS inside 5 min (`SMS_DEBOUNCE_MS`) | [ ] | |
@@ -127,10 +128,10 @@ Use a **test device and a throwaway build**; keep a USB cable to recover it.
 
 | # | Check | Expected | Pass | Notes |
 |---|---|---|---|---|
-| 8.1 | Build A -> B | Flash build A (`2.1.0`) over USB. Build B with a visible change and `FIRMWARE_VERSION 2.1.1` | [ ] | |
-| 8.2 | Release | Upload B to Storage (or run the release workflow), add the release, set the target on **this one device** with the correct MD5 | [ ] | |
-| 8.3 | Update | Within 10 min the log shows `OTA: new firmware 2.1.1 available`, download, flash, reboot | [ ] | |
-| 8.4 | Version | Admin page shows "Running: 2.1.1" after the next telemetry | [ ] | |
+| 8.1 | Build A -> B | Flash build A over USB. Build B from the same env with a visible change and a new `FIRMWARE_VERSION` (in `config.h` for `esp32dev`, in `platformio.ini` for `esp32dev_mq7_5v`) | [ ] | |
+| 8.2 | Release | Upload B to Storage (the release workflow currently builds the wrong env, see FIRMWARE_GUIDE §8.2a), add the release, set the target on **this one device** with the correct MD5 | [ ] | |
+| 8.3 | Update | Within 10 min the log shows `OTA: new firmware <B> available`, download, flash, reboot | [ ] | |
+| 8.4 | Version | Admin page shows "Running: <B>" after the next telemetry | [ ] | |
 | 8.5 | Identity kept | After the update the node needs **no portal** and keeps the same ID/key (`last_seen` continues under the same device) | [ ] | |
 | 8.6 | Wi-Fi kept | Saved Wi-Fi survives; blue LED solid again | [ ] | |
 | 8.7 | Bad MD5 | Set a wrong MD5: the update is rejected (`Update.end failed`) and the node keeps running A | [ ] | |

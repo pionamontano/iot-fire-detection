@@ -62,7 +62,7 @@ To avoid false alarms, the device needs **3 readings in a row** above the limit 
 
 ### Warm-up after power-on
 
-The CO sensor needs about **2½ minutes (≈150 seconds)** after the device is switched on to stabilise. During this time:
+The CO sensor needs about **1 minute** after the device is switched on to stabilise (up to **2½ minutes** on units built with the older heater-cycling firmware). During this time:
 
 - the app shows **"Warming up"** instead of a CO reading, and
 - **no alerts can be raised** (this prevents false alarms at start-up).
@@ -308,7 +308,7 @@ Messages include a navigation link of the form `maps.google.com/?q=<latitude>,<l
 |---|---|---|
 | App says **Offline** | Power off, router off, or Wi-Fi password changed | Check device power and the router. If the Wi-Fi password changed, reconnect to `AgapSense-Setup` and re-enter it |
 | Blue LED **blinking** | Wi-Fi works but no internet | Restart the router; check your internet provider |
-| **"Warming up"** | Normal 2½-minute CO sensor warm-up | Wait. If it lasts more than 10 minutes, power-cycle the device and contact your administrator |
+| **"Warming up"** | Normal CO sensor warm-up (1–2½ minutes) | Wait. If it lasts more than 10 minutes, power-cycle the device and contact your administrator |
 | **Frequent false alarms** | Thresholds too low, or the device is near a stove, shower or vent | Raise thresholds slightly (see [6.4](#64-alert-settings)) or ask your administrator to move the device |
 | **Not receiving SMS** | Wrong number, SIM out of credit or no signal | Check your number in Alert Settings; report to your administrator so the SIM can be checked |
 | **No push notifications** | Permission blocked in browser | Re-enable notifications for the site in your browser settings, then turn them back on: **Alert Settings → Push notifications → Turn on** (residents) or the **Browser notifications** switch in **Settings** (responders) |

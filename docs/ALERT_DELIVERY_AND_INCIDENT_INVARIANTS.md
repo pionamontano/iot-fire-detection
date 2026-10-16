@@ -5,9 +5,17 @@ Status: **design + local/test implementation (Steps 5.1, 5.2, 6.1 and 6.2).** No
 `20261021000000_incident_lifecycle.sql` have only been exercised on a throwaway local PostgreSQL (`supabase/tests/local/`).
 The edge-function changes (Step 5.2) and the UI (6.2) have only been tested locally; nothing is deployed.
 
+> **Status update (2026-10-16, `main` at `d74dc81`).** This document records the design as written for Steps 5.1–6.2; its
+> body is kept as written. Since then: per-user Telegram (Step 5.4, #95) is implemented as ledger channel `telegram_user`;
+> auto-resolution follows owner decision D6.1 (two consecutive safe readings, only incidents still `active`; row 3 of the
+> writer audit below no longer closes acknowledged/responding incidents); the direct-`UPDATE` revoke (6c, #97) is in
+> `20261022000000`. All `supabase/tests/local/` suites and `tests/edge/run_integration.sh` pass on a fresh local database.
+> Which of these migrations reached production is not recorded in the repository. Current issue status:
+> [`system-specification.md`](system-specification.md) §5.15.
+
 ## 1. Delivery semantics: at-least-once, not exactly-once
 
-Notifications (Telegram, Web Push, and in future per-user Telegram) are designed for **at-least-once delivery**.
+Notifications (Telegram, Web Push, and per-user Telegram) are designed for **at-least-once delivery**.
 A recipient can, in rare failure cases, receive the same alert twice. A fire alert that arrives twice is acceptable;
 one that is silently lost is not.
 
