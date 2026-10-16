@@ -7,6 +7,10 @@ import { supabase } from '../../lib/supabase';
 import { readFunctionErrorBody } from '../../lib/functionError';
 import { AuthLayout, AuthAlert, Field, PasswordField, inputClass, AUTH_BTN_PRIMARY, AUTH_BTN_SECONDARY } from '../../components/AuthLayout';
 
+// check_login_lockout tiers: 3 failures -> 10s, 5 -> 30s, 7 -> 900s. A lock with more than the
+// middle tier's 30s left is the 900s one.
+const LONG_LOCKOUT_SECONDS = 30;
+
 export const Login = () => {
   const navigate = useNavigate();
   const { session, profile } = useAuth();
@@ -14,7 +18,9 @@ export const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [locked, setLocked] = useState(false);
+  // True for the longest lockout tier (see LONG_LOCKOUT_SECONDS), which replaces the whole page
+  // until its countdown ends; shorter tiers only disable the button.
+  const [longLockout, setLongLockout] = useState(false);
   const [lockoutTimer, setLockoutTimer] = useState(0);
   const passwordRef = useRef<HTMLInputElement>(null);
 
@@ -23,7 +29,7 @@ export const Login = () => {
     if (lockoutTimer > 0) {
       interval = setInterval(() => {
         setLockoutTimer((prev) => {
-          if (prev <= 1) setLocked(false);
+          if (prev <= 1) setLongLockout(false);
           return prev - 1;
         });
       }, 1000);
@@ -69,8 +75,11 @@ export const Login = () => {
       const body = await readFunctionErrorBody(invokeError) as { error?: string; locked?: boolean; retry_after_seconds?: number } | null;
       setError(body?.error || invokeError.message || 'Incorrect email or password. Try again.');
       if (body?.locked) {
-        setLocked(true);
-        setLockoutTimer(body.retry_after_seconds || 0);
+        const retryAfter = body.retry_after_seconds || 0;
+        // retry_after_seconds is the time *remaining*, so a 900s lock reports less than 900 on any
+        // later attempt; anything above the 30s tier can only be the 900s one.
+        setLongLockout(retryAfter > LONG_LOCKOUT_SECONDS);
+        setLockoutTimer(retryAfter);
       }
       setLoading(false);
       // Keep the email and let them retype the password straight away.
@@ -96,7 +105,7 @@ export const Login = () => {
     // matching the previous signInWithPassword-based behavior.
   };
 
-  if (locked && lockoutTimer >= 900) {
+  if (longLockout && lockoutTimer > 0) {
     return (
       <AuthLayout title="Account temporarily locked">
         <AuthAlert tone="error">

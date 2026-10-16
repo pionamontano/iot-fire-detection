@@ -41,10 +41,7 @@ test('7th failure (900s tier) replaces the page with "Account temporarily locked
 });
 
 test('the "Account temporarily locked" screen stays up while the lock lasts', async ({ page }) => {
-  // Known gap, see README "Findings": Login.tsx shows this screen only while lockoutTimer >= 900,
-  // so one countdown tick later it falls back to the form with a 14:59 countdown. Remove
-  // test.fail once fixed.
-  test.fail();
+  // Regression: the screen used to be keyed to a live countdown >= 900, so it vanished on the first tick.
   const { email } = ACCOUNTS.lockTier3b;
   await clearLoginAttempts(email);
   await seedFailedAttempts(email, 6, 60);
@@ -52,4 +49,30 @@ test('the "Account temporarily locked" screen stays up while the lock lasts', as
   expect(Number(res.retry_after_seconds)).toBeGreaterThanOrEqual(899);
   await page.waitForTimeout(2_500); // a few ticks of the real 1s countdown
   await expect(page.getByRole('heading', { name: 'Account temporarily locked' })).toBeVisible({ timeout: 2_000 });
+});
+
+test('signing in again partway through the 900s lock still shows the lock screen', async ({ page }) => {
+  const { email } = ACCOUNTS.lockTier3c;
+  await clearLoginAttempts(email);
+  await seedFailedAttempts(email, 7, 120); // locked two minutes ago: ~780s left
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 1_000);
+
+  const res = await loginViaUi(page, email, 'wrong-password');
+  expect(res).toMatchObject({ locked: true });
+  expect(Number(res.retry_after_seconds)).toBeLessThan(900);
+  await expect(page.getByRole('heading', { name: 'Account temporarily locked' })).toBeVisible();
+});
+
+test('a 30s (tier 2) lock keeps the form with a countdown, not the lock screen', async ({ page }) => {
+  const { email } = ACCOUNTS.lockTier2;
+  await clearLoginAttempts(email);
+  await seedFailedAttempts(email, 4, 15); // tier-1 cooldown over; the 5th failure starts the 30s tier
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 1_000);
+
+  const res = await loginViaUi(page, email, 'wrong-password');
+  expect(Number(res.retry_after_seconds)).toBeGreaterThan(10);
+  await expect(page.getByRole('status').filter({ hasText: /Too many attempts\. Try again in \d+ seconds\./ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Account temporarily locked' })).toHaveCount(0);
 });
