@@ -128,21 +128,25 @@ export const ResponderDashboard = () => {
   }, [fireAlerts.length]);
 
   // ─── Alarm sound (Web Audio siren) ───
+  // Browsers keep a page's audio suspended until the user has clicked or typed on it, so a dashboard opened or
+  // reloaded with a saved session would stay silent when a fire arrives. The AudioContext is therefore created on
+  // mount: its state tells us up front whether sound is blocked, and the next click or key press anywhere on the
+  // page unlocks it (a siren already started on a suspended context then becomes audible on its own).
   const audioCtxRef = React.useRef<AudioContext | null>(null);
   const oscillatorRef = React.useRef<OscillatorNode | null>(null);
   const gainNodeRef = React.useRef<GainNode | null>(null);
   const sirenIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const isPlayingRef = React.useRef(false);
+  // 'running' when sound can play; 'suspended' (or Safari's 'interrupted') while the browser blocks it.
+  const [audioState, setAudioState] = useState<string>('running');
 
   const startSiren = useCallback(() => {
     if (isPlayingRef.current) return;
+    const ctx = audioCtxRef.current;
+    if (!ctx || ctx.state === 'closed') return;
     isPlayingRef.current = true;
     try {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!audioCtxRef.current && AudioContextClass) audioCtxRef.current = new AudioContextClass();
-      const ctx = audioCtxRef.current;
-      if (!ctx) return;
-      if (ctx.state === 'suspended') ctx.resume();
+      if (ctx.state !== 'running') ctx.resume().catch(console.warn);
 
       const oscillator = ctx.createOscillator();
       const gainNode = ctx.createGain();
@@ -173,26 +177,64 @@ export const ResponderDashboard = () => {
       clearInterval(sirenIntervalRef.current);
       sirenIntervalRef.current = null;
     }
+    const oscillator = oscillatorRef.current;
+    const gainNode = gainNodeRef.current;
+    oscillatorRef.current = null;
+    gainNodeRef.current = null;
     try {
-      if (gainNodeRef.current && audioCtxRef.current) {
-        gainNodeRef.current.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.1);
+      if (gainNode && audioCtxRef.current) {
+        gainNode.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.1);
       }
       setTimeout(() => {
-        oscillatorRef.current?.stop();
-        oscillatorRef.current?.disconnect();
-        oscillatorRef.current = null;
-        gainNodeRef.current?.disconnect();
-        gainNodeRef.current = null;
+        try {
+          oscillator?.stop();
+        } catch { /* already stopped */ }
+        oscillator?.disconnect();
+        gainNode?.disconnect();
       }, 200);
     } catch (err) {
       console.warn('Error stopping audio:', err);
     }
   }, []);
 
-  useEffect(() => () => {
-    stopSiren();
-    audioCtxRef.current?.close().catch(console.warn);
+  useEffect(() => {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    let ctx: AudioContext;
+    try {
+      ctx = new AudioContextClass();
+    } catch (err) {
+      console.warn('AudioContext unavailable:', err);
+      return;
+    }
+    audioCtxRef.current = ctx;
+    const sync = () => setAudioState(ctx.state);
+    ctx.addEventListener('statechange', sync);
+    sync();
+    return () => {
+      stopSiren();
+      ctx.removeEventListener('statechange', sync);
+      audioCtxRef.current = null;
+      ctx.close().catch(console.warn);
+    };
   }, [stopSiren]);
+
+  const audioBlocked = audioState === 'suspended' || audioState === 'interrupted';
+  const unlockAudio = useCallback(() => {
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(console.warn);
+  }, []);
+
+  // While sound is blocked, any click, tap or key press on the page counts as the user gesture that unlocks it.
+  useEffect(() => {
+    if (!audioBlocked) return;
+    window.addEventListener('pointerdown', unlockAudio, true);
+    window.addEventListener('keydown', unlockAudio, true);
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio, true);
+      window.removeEventListener('keydown', unlockAudio, true);
+    };
+  }, [audioBlocked, unlockAudio]);
 
   // The siren sounds while any fire is still unacknowledged.
   const unacknowledgedCount = fireAlerts.filter(a => !a.incident_status || a.incident_status === 'active').length;
@@ -283,11 +325,7 @@ export const ResponderDashboard = () => {
         actions={
           <button
             type="button"
-            onClick={() => {
-              // Turning sound back on is a user gesture, which lets a suspended AudioContext resume.
-              if (!soundOn && audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
-              setSoundOn(on => !on);
-            }}
+            onClick={() => setSoundOn(on => !on)}
             aria-pressed={soundOn}
             className={soundOn ? BTN_SECONDARY : `${BTN} border border-tier1-border/50 bg-tier1-bg text-tier1-text hover:bg-tier1-bg/70`}
           >
@@ -298,6 +336,27 @@ export const ResponderDashboard = () => {
       />
 
       {loadError && <LoadErrorBanner what="dashboard data" error={loadError} onRetry={fetchData} />}
+
+      {/* The browser blocks page audio until the user interacts with the page: say so before a fire is missed. */}
+      {soundOn && audioBlocked && (
+        <div
+          role="alert"
+          className={`flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border ${unacknowledgedCount > 0
+            ? 'border-tier2-border/40 bg-tier2-bg text-tier2-text'
+            : 'border-tier1-border/40 bg-tier1-bg text-tier1-text'}`}
+        >
+          <VolumeX className="w-5 h-5 shrink-0" />
+          <div className="text-sm flex-1 min-w-0">
+            <p className="font-bold">
+              {unacknowledgedCount > 0 ? 'A fire alarm is sounding, but the browser has blocked the sound.' : 'The browser is blocking the alarm sound.'}
+            </p>
+            <p className="mt-0.5">Click anywhere on this page to allow it. Until then a new fire will not be heard.</p>
+          </div>
+          <button type="button" onClick={unlockAudio} className={`${BTN_SECONDARY} shrink-0`}>
+            <Volume2 className="w-4 h-4" /> Enable alarm sound
+          </button>
+        </div>
+      )}
 
       {/* Only for devices that WERE reporting and have all gone silent: alerts cannot arrive. */}
       {allSilent && (

@@ -235,7 +235,7 @@ Your menu has: **Dashboard**, **Alert Logs**, **Settings**, **Logout**.
 You see **fire alerts (Tier 2) only**. Single-sensor warnings (Tier 1) go to the resident and administrators; the household checks the site first.
 
 - **Summary cards**: **Active Fires**, **Not Acknowledged**, **Devices Reporting** (online or reconnecting, out of enabled devices) and **Fire Alerts Today**. A card turns red only when there is something to act on.
-- **Alarm sound on / muted** (top right): the browser siren plays while any fire is unacknowledged. Keep the page open, your volume on, and allow the browser to play sound.
+- **Alarm sound on / muted** (top right): the browser siren plays while any fire is unacknowledged. Keep the page open, your volume on, and allow the browser to play sound. Browsers block sound on a page until you click or press a key on it; if the dashboard shows **"The browser is blocking the alarm sound"**, click anywhere on the page (or **Enable alarm sound**), for example after reloading it.
 - **Active Fire Alerts** (first on phones), oldest first. Each card shows:
   - the device, the resident's registered **address** and the area named by GPS;
   - how long it has been open, the **temperature** and **smoke/CO** readings;
