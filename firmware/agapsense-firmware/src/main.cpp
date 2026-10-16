@@ -82,7 +82,7 @@ static void taskDS18B20(void* pvParams) {
 }
 
 // ============================================================
-// Task 3: NEO-6M GPS continuous parsing (Core 1)
+// Task 3: NEO-6M / NEO-7M GPS continuous parsing (Core 1)
 // ============================================================
 static void taskGPS(void* pvParams) {
     LOG("taskGPS started on core %d", xPortGetCoreID());

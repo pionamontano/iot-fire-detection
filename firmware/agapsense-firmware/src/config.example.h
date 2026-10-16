@@ -1,6 +1,40 @@
 #pragma once
 // ============================================================
-// config.h — AgapSense Firmware Configuration  (v2.1)
+// config.h — AgapSense Firmware Configuration  (v2.2)
+//
+// FIRMWARE_VERSION is no longer one fixed string for every build — it's
+// guarded by #ifndef below so platformio.ini can override it per
+// PlatformIO environment (see platformio.ini's [env:...] sections):
+//   env:esp32dev            -> 2.1.0 (this file's fallback)      — original
+//                              1.4V heat/measure MQ-7 duty cycle
+//   env:esp32dev_mq7_5v     -> 2.2.0                             — AGS-001's
+//                              actual wiring: MQ-7 runs off a constant 5V
+//                              rail, not through MQ7_HEATER_PIN's
+//                              PWM/transistor, so the duty-cycle model
+//                              above always read ADC-saturated garbage on
+//                              this hardware. See sensors.cpp's
+//                              MQ7_CONTINUOUS_5V branch.
+//   env:esp32dev_mq7_5v_diag -> 2.2.0-diag                       — same
+//                              constant-5V fix, plus a bench-only HTTP
+//                              diag log server (ENABLE_DIAG_SERVER).
+//                              Not for production flashes — revert to
+//                              env:esp32dev_mq7_5v once done debugging.
+//   *_ota variants           -> same version as their base env, just adds
+//                              the espota upload protocol (Wi-Fi reflash).
+// Whichever env a node was actually built with is what it reports as
+// devices.firmware_version_reported — not whatever this file's own
+// fallback says.
+//
+// Changes from v2.1:
+//   ~ MQ-7 driving model now selectable via the FIRMWARE_VERSION table
+//     above instead of one model for every build.
+//   + DEVICE_ID / DEVICE_API_KEY moved out of this file entirely —
+//     provisioned once per physical node into NVS via the setup portal
+//     (see identity.h), so one compiled image now runs on every node.
+//   + OTA: device compares get-device-config's firmware_version against
+//     its own compiled FIRMWARE_VERSION and self-flashes via firmware_url
+//     (+ firmware_md5 check) on mismatch. Wi-Fi only, gated to
+//     alertTier == CLEAR so a live alert is never interrupted.
 //
 // Changes from v2.0:
 //   ~ TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID removed — the firmware no
@@ -113,7 +147,8 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 // DS18B20 Temperature Sensor (4.7 kΩ pull-up on data pin)
 #define DS18B20_PIN         4
 
-// NEO-6M GPS (Serial2)
+// NEO-6M / NEO-7M GPS (Serial2) — same NMEA-over-UART protocol, no code or
+// wiring difference between the two modules.
 #define GPS_RX_PIN          17
 #define GPS_TX_PIN          16
 #define GPS_BAUD            9600
