@@ -9,7 +9,10 @@
     "lint": "oxlint",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "test": "node --test \"tests/**/*.test.*\""
+    "test": "node --test \"tests/**/*.test.*\"",
+    "test:e2e": "playwright test",
+    "test:e2e:api": "playwright test --project=api",
+    "test:e2e:report": "playwright show-report tests/e2e/.artifacts/report"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",
