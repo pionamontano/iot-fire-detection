@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// gps.h — NEO-6M GPS Module  (v2.0 — unchanged from v1.0)
+// gps.h — NEO-6M / NEO-7M GPS Module  (v2.0 — unchanged from v1.0)
 // ============================================================
 
 #include <Arduino.h>
