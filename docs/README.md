@@ -1,0 +1,49 @@
+# AgapSense documentation
+
+Where to look, by what you need. File names are kept as they are because code comments, tests and other
+documents link to them.
+
+## Using and running the system
+
+| Document | For |
+|---|---|
+| [`USER_MANUAL.md`](USER_MANUAL.md) | Residents and BFP responders: the device, its lights, and the web app. `USER_MANUAL.pdf` is an exported copy and may lag behind the Markdown; the `.md` is the source. |
+| [`MIGRATION_GUIDE.md`](MIGRATION_GUIDE.md) | Setting up a new Supabase project, Edge Function secrets, and deploying the web app |
+| [`FIRMWARE_GUIDE.md`](FIRMWARE_GUIDE.md) | ESP32 hardware, firmware structure, alert logic, configuring, building, flashing and OTA (version history is in `firmware/agapsense-firmware/src/config.example.h`) |
+| [`HARDWARE_BENCH_TEST.md`](HARDWARE_BENCH_TEST.md) | Checklist to run on a real node before installing it or pushing an OTA update |
+| [`STAGING_DRY_RUN_RUNBOOK.md`](STAGING_DRY_RUN_RUNBOOK.md) | Rehearsing migrations on a throwaway Supabase project before production |
+| [`DEMO_VIDEO_SCRIPT.md`](DEMO_VIDEO_SCRIPT.md) | Script for the project demo video |
+
+## How the system works
+
+| Document | For |
+|---|---|
+| [`FEATURES.md`](FEATURES.md) | Current features and every Edge Function, kept in step with the code |
+| [`ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md`](ALERT_DELIVERY_AND_INCIDENT_INVARIANTS.md) | Alert delivery semantics (at-least-once), incident invariants and the writer audit |
+| [`CHANGELOG_AUDIT_REMEDIATION.md`](CHANGELOG_AUDIT_REMEDIATION.md) | Record of the audit-remediation changes (PR #94) and their verification |
+
+## Baseline and change control
+
+An evidence-based baseline of what the repository contains, separated from what is approved, deployed and
+tested. These are point-in-time documents: file names and line numbers they cite are accurate as of the
+commit each one names, not a live guarantee.
+
+| Document | For |
+|---|---|
+| [`system-specification.md`](system-specification.md) | The detailed baseline specification (draft v0.2) — the authoritative one of the two specs |
+| [`AGAPSENSE_SYSTEM_SPECIFICATION.md`](AGAPSENSE_SYSTEM_SPECIFICATION.md) | Earlier, shorter specification; superseded by `system-specification.md` |
+| [`scope-boundary-register.md`](scope-boundary-register.md) | What is in scope, unverified, defective or excluded (Deliverable B) |
+| [`requirements-traceability.md`](requirements-traceability.md) | Each requirement mapped to its implementation and verification (Deliverable C) |
+| [`open-questions-and-decisions.md`](open-questions-and-decisions.md) | Questions only the project owner can decide (Deliverable D) |
+| [`change-request-template.md`](change-request-template.md) | Form to fill in before changing behaviour (Deliverable E) |
+
+## Testing
+
+Testing material lives outside this folder:
+
+- [`../testing/`](../testing) — manual QA checklists and live verification reports, plus a Postman collection
+  that simulates a device.
+- [`../tests/e2e/README.md`](../tests/e2e/README.md) — the automated Playwright black-box suite that covers
+  those checklists.
+- [`../firmware/agapsense-firmware/host_tests/README.md`](../firmware/agapsense-firmware/host_tests/README.md) —
+  firmware logic tests.

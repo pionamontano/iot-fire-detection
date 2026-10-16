@@ -1,6 +1,6 @@
 # Authentication Testing Checklist
 
-Manual QA checklist for the AgapSense login/logout flow (`src/pages/Login.tsx`,
+Manual QA checklist for the AgapSense login/logout flow (`src/pages/auth/Login.tsx`,
 `src/contexts/AuthContext.tsx`, `src/components/AuthGuard.tsx`,
 `src/hooks/useIdleTimeout.ts`). Covers Supabase-backed email/password auth,
 role-based redirects (`admin`, `bfp_responder`, `resident`), account approval

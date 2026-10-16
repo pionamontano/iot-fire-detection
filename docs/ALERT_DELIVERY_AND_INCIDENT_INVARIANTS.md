@@ -65,7 +65,7 @@ hidden** (the responder dashboard filters out `incident_status = 'resolved'`).
 | 6 | Responder `handleUpdateStatus` (`responding`) | responder | `incident_status` | n/a | Compatible. |
 | 7 | Responder `handleUpdateStatus` (`resolved`, `false_alarm`) | responder | `incident_status` **only** | **No: defect** | The row stays open to the index. **Confirmed by test.** Mitigated by the stopgap below. **Fixed at write time by the 6.1 guard trigger** (section 3); the UI itself is changed in 6.2. |
 | 8 | `confirm-sms-status` | service | `sms_sent_owner/bfp` | n/a | Compatible; `raise_alert` preserves these flags. |
-| 9 | `supabase/reset_and_seed_devices.sql` (manual) | superuser | deletes rows | n/a | Unaffected. |
+| 9 | `supabase/maintenance/reset_and_seed_devices.sql` (manual) | superuser | deletes rows | n/a | Unaffected. |
 | 10 | Any manual SQL / future code | any | any | not guaranteed | Needs the Step 6 database guard (trigger + `CHECK`). |
 
 ### How `raise_alert()` protects itself until Step 6

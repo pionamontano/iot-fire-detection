@@ -81,5 +81,5 @@ types, and query correctness, independent of who is asking.
 - [x] A resident cannot see another resident's/another device's data by tampering with a request parameter — confirmed live: querying a real device (`DEV-001`) the test resident didn't own returned `200 []`
 - [ ] `ResponderDevices` device lookup by `device_id` returns the correct single device (`maybeSingle()`), and a not-found id returns `null` cleanly — not tested (no responder test account created)
 - [ ] `useIdleTimeout`'s settings lookup returns the timeout for the *current user's role*, not a stale or wrong-role value after a role changes mid-session — not tested (requires driving the actual app UI, not just raw REST calls)
-- [ ] Admin-facing list views (`Users.tsx`, `Devices.tsx`, `Alerts.tsx`, `Logs.tsx`) are not accidentally under-scoped — not tested
+- [ ] Admin-facing list views (`Users.tsx`, `Devices.tsx`, `DeviceStatus.tsx`, `Logs.tsx`) are not accidentally under-scoped — not tested
 - [ ] Pagination/limit clauses don't allow a large offset/page-forward request to leak rows belonging to a different device — not tested
