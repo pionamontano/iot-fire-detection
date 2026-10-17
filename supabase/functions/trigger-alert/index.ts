@@ -307,6 +307,8 @@ async function dispatchNotifications(p: {
           userIds: claimed,
           title: p.push.title,
           body: p.push.body,
+          // Tapping the notification opens the page where the recipient's role handles this alert (src/components/AlertLink.tsx).
+          url: alertId ? `/alert/${alertId}?device=${device.id}` : undefined,
           // Lets a push service replace an undelivered duplicate of the same alert+tier (partial duplicate mitigation).
           topic: alertId ? `a${alertId.replace(/-/g, '').slice(0, 24)}t${tier}` : undefined,
         }),

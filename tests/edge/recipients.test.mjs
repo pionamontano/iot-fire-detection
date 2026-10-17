@@ -142,3 +142,10 @@ test('send-push-notification: all-ineligible list sends nothing', async () => {
   assert.equal((await res.json()).sentCount, 0);
   assert.equal(sent.length, 0);
 });
+
+test('trigger-alert: the push links to /alert/<id>, which each role resolves to the page where it handles the alert', async () => {
+  const { pushCalls, payload } = await runTrigger({ tier: 2 });
+  const id = payload.alert_id ?? payload.incident?.alert_id;
+  assert.match(pushCalls[0].url, new RegExp(`^/alert/[^/?]+\\?device=${DEV}$`));
+  if (id) assert.equal(pushCalls[0].url, `/alert/${id}?device=${DEV}`);
+});
