@@ -12,6 +12,7 @@ const RESOLVED_BY: Record<string, string> = {
   device: 'Auto-cleared by device',
   responder: 'Resolved by responder',
   admin: 'Resolved by admin',
+  resident: 'Resolved by resident',
 };
 
 /** "Fire alert triggered" / "Warning resolved" etc. */

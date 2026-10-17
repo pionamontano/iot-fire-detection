@@ -10,9 +10,7 @@
 //       temperature probe is reported as TEMP_FAULT_C instead of its
 //       frozen last value — unless that value was over threshold, which
 //       is kept so a probe that dies in a fire never clears the alert.
-//  [27] Tier 1 chirps: a 100 ms beep every 10 s alongside the yellow LED
-//       (was LED only). Tier 2 keeps its continuous buzzer.
-//  [28] ALERT_DEBOUNCE_COUNT / ALERT_RESOLUTION_COUNT now count new sensor
+//  [27] ALERT_DEBOUNCE_COUNT / ALERT_RESOLUTION_COUNT now count new sensor
 //       readings, not ~2 s FSM ticks — one 5 s reading could be counted up
 //       to three times, so a single reading raised (or cleared) an alert.
 //
@@ -75,6 +73,7 @@
 #include "connectivity.h"
 #include "gsm.h"
 #include "identity.h"
+#include "buzzer.h"
 
 #include <WiFi.h>
 #include <WiFiManager.h>
@@ -119,38 +118,25 @@ static void attemptAlertPost(ConnectivityCtx* ctx, const SensorData& sd, const G
 static void serviceSmsReports(ConnectivityCtx* ctx);
 
 // ── Indicator helpers ──────────────────────────────────────
+// The buzzer pin itself is driven by taskBuzzer (buzzer.h); these only pick its pattern.
 static void indicatorsOff() {
     digitalWrite(LED_YELLOW_PIN, LOW);
     digitalWrite(LED_RED_PIN,    LOW);
-    digitalWrite(BUZZER_PIN,     LOW);
+    buzzerSetMode(agap::BuzzerMode::OFF);
 }
 
-// [27] Tier 1 warning chirp: yellow LED plus one short beep every
-//      TIER1_CHIRP_INTERVAL_MS (the first as soon as Tier 1 starts), so a
-//      warning is audible but distinct from Tier 2's continuous buzzer.
-#ifndef TIER1_CHIRP_INTERVAL_MS
-#define TIER1_CHIRP_INTERVAL_MS 10000UL
-#endif
-#ifndef TIER1_CHIRP_MS
-#define TIER1_CHIRP_MS          100
-#endif
-
-static void setTier1Indicators(ConnectivityCtx* ctx) {
+// Tier 1: yellow LED + 3 short beeps, repeated every 45 s while the warning lasts.
+static void setTier1Indicators() {
     digitalWrite(LED_YELLOW_PIN, HIGH);
     digitalWrite(LED_RED_PIN,    LOW);
-    uint32_t now = millis();
-    if (ctx->lastChirp_ms == 0 || now - ctx->lastChirp_ms >= TIER1_CHIRP_INTERVAL_MS) {
-        ctx->lastChirp_ms = now ? now : 1;   // 0 means "chirp now"
-        digitalWrite(BUZZER_PIN, HIGH);
-        delay(TIER1_CHIRP_MS);
-    }
-    digitalWrite(BUZZER_PIN, LOW);
+    buzzerSetMode(agap::BuzzerMode::CHIRP);
 }
 
+// Tier 2: red LED + continuous tone.
 static void setTier2Indicators() {
     digitalWrite(LED_YELLOW_PIN, LOW);
     digitalWrite(LED_RED_PIN,    HIGH);
-    digitalWrite(BUZZER_PIN,     HIGH);
+    buzzerSetMode(agap::BuzzerMode::CONTINUOUS);
 }
 
 // Blue LED blink handler — call every task tick when not ONLINE
@@ -189,7 +175,7 @@ bool isTier1(float co_ppm, float temp_c, const ConnectivityCtx* ctx,
     return (coHigh || tempHigh) && !(coHigh && tempHigh);
 }
 
-// [28] Debounce counts readings, not ticks. The FSM runs every ~2 s but each
+// [27] Debounce counts readings, not ticks. The FSM runs every ~2 s but each
 //      sensor reads every 5 s, so counting ticks let one reading count up to
 //      three times: a single reading could raise an alert, and one low
 //      reading could clear it. A step now counts only once every sensor it
@@ -677,7 +663,6 @@ void connectivityInit(ConnectivityCtx* ctx) {
     gsmSetIncidentSeq(0);
     ctx->coFault      = false;
     ctx->tempFault    = false;
-    ctx->lastChirp_ms = 0;
     ctx->stepCoMs     = 0;
     ctx->stepTempMs   = 0;
     strncpy(ctx->ownerNumber, OWNER_SMS_NUMBER_DEFAULT, sizeof(ctx->ownerNumber) - 1);
@@ -808,9 +793,6 @@ void connectivityUpdate(ConnectivityCtx* ctx,
         const bool tempHigh = sd.temp_valid && sd.temperature_c >= ctx->temp_alert_c;
         const bool coLive   = sd.co_valid && coFresh;
 
-        // Every entry into Tier 1 (from CLEAR or down from Tier 2) chirps at once.
-        if (ctx->alertTier != AlertTier::TIER1) ctx->lastChirp_ms = 0;
-
         switch (ctx->alertTier) {
 
             // ── CLEAR ─────────────────────────────────────
@@ -841,7 +823,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                             ctx->alertTier      = AlertTier::TIER1;
                             ctx->alertRiseCount = 0;   // [21] reset so TIER1→TIER2 debounce starts fresh
                             ctx->alertFallCount = 0;
-                            setTier1Indicators(ctx);
+                            setTier1Indicators();
                             CLOG("TIER 1 WARNING — single sensor over threshold");
                             fireTier1Warning(ctx, sd, fix);
                         }
@@ -853,7 +835,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
 
             // ── TIER 1 ────────────────────────────────────
             case AlertTier::TIER1:
-                setTier1Indicators(ctx);
+                setTier1Indicators();
                 if (tier2Now) {
                     if (!newReading(ctx, sd, coHigh, tempHigh)) break;
                     ctx->alertRiseCount++;
@@ -905,7 +887,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                         ctx->alertTier      = AlertTier::TIER1;
                         ctx->alertRiseCount = 0;
                         ctx->alertFallCount = 0;
-                        setTier1Indicators(ctx);
+                        setTier1Indicators();
                     }
                 } else {
                     ctx->alertFallCount = 0;

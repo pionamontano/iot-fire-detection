@@ -218,7 +218,7 @@ export const ResponderSettings = () => {
           <section className={CARD}>
             <h2 className={CARD_TITLE}>Fire Alert Notifications</h2>
             <p className="text-sm text-text-subtle mt-1">
-              You are alerted for fires (Tier 2) only. Single-sensor warnings (Tier 1) go to administrators, who check the site first.
+              You are alerted for fires (Tier 2) only. Single-sensor warnings (Tier 1) go to the resident and administrators; the household checks the site first.
             </p>
 
             <ul className="mt-5 flex flex-col divide-y divide-border-warm border border-border rounded-lg">

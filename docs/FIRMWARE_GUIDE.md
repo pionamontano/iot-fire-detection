@@ -51,6 +51,7 @@ firmware/agapsense-firmware/
     ├── identity.h/.cpp     Per-node device ID + API key in NVS (set via the setup portal)
     ├── gsm.h/.cpp          SIM800L AT commands, async SMS queue
     ├── alert_retry.h       Retry/backoff policy for the alert POST (host-tested)
+    ├── buzzer.h/.cpp       Buzzer task: off / Tier 1 chirp / Tier 2 continuous (pattern in buzzer_pattern.h, host-tested)
     ├── sms_result_hold.h   Late-binding of SMS results to the right incident (host-tested)
     ├── diag_log.h/.cpp     Log ring buffer, only in the diag build (ENABLE_DIAG_SERVER)
     ├── diag_server.h/.cpp  /log web viewer + ArduinoOTA, only in the diag build
@@ -126,7 +127,7 @@ There are two builds of the MQ-7 code, chosen by the PlatformIO environment (see
 
 | Build | Env | Heater | Reads | `sensor_ready` after |
 |---|---|---|---|---|
-| **Constant 5V** (`MQ7_CONTINUOUS_5V`) | `esp32dev_mq7_5v` (v2.2.0) | Sensor on a fixed 5 V rail; `MQ7_HEATER_PIN` is not wired to it | Every 5 s, always "measuring", converted with Vc = 5 V | 60 s warm-up |
+| **Constant 5V** (`MQ7_CONTINUOUS_5V`) | `esp32dev_mq7_5v` (v2.3.0) | Sensor on a fixed 5 V rail; `MQ7_HEATER_PIN` is not wired to it | Every 5 s, always "measuring", converted with Vc = 5 V | 60 s warm-up |
 | **Duty cycle** (default) | `esp32dev` | PWM through a transistor, 60 s at 5 V / 90 s at 1.4 V | Only during the 90 s measuring phase | First full cycle, ~150 s |
 
 According to `platformio.ini`, every deployed node so far is wired for the **constant-5V** build;
@@ -226,8 +227,8 @@ so thresholds can be retuned from the admin dashboard without reflashing.
 | Tier | Condition | Indicators | Backend / SMS |
 |---|---|---|---|
 | **CLEAR** | Neither sensor over threshold | All off | — |
-| **TIER 1** | Exactly one sensor over threshold | Yellow LED | `trigger-alert` POST (tier=1) only — backend notifies **admins** (push + their linked Telegram), **no SMS** |
-| **TIER 2** | Both sensors over threshold simultaneously | Red LED + buzzer | `trigger-alert` POST (tier=2) + owner SMS + BFP SMS — backend sends the station Telegram, linked Telegram chats and push |
+| **TIER 1** | Exactly one sensor over threshold | Yellow LED + 3 short beeps (150 ms), repeated every 45 s while it lasts | `trigger-alert` POST (tier=1) only — backend notifies the **resident and admins** (push + their linked Telegram), **no SMS** |
+| **TIER 2** | Both sensors over threshold simultaneously | Red LED + continuous buzzer | `trigger-alert` POST (tier=2) + owner SMS + BFP SMS — backend sends the station Telegram, linked Telegram chats and push |
 
 State transitions are debounced to avoid flapping on noisy readings:
 - **Rising** into TIER1/TIER2 requires `ALERT_DEBOUNCE_COUNT` (3) consecutive
@@ -300,8 +301,8 @@ environments:
 | Env | What it builds | `FIRMWARE_VERSION` from |
 |---|---|---|
 | `esp32dev` | Production firmware, duty-cycle MQ-7 | `config.h` |
-| `esp32dev_mq7_5v` | Production firmware, constant-5V MQ-7 (current hardware) | `platformio.ini` (`2.2.0`) |
-| `esp32dev_mq7_5v_diag` | As above plus an unauthenticated `/log` web viewer and ArduinoOTA. Bench debugging only | `platformio.ini` (`2.2.0-diag`) |
+| `esp32dev_mq7_5v` | Production firmware, constant-5V MQ-7 (current hardware) | `platformio.ini` (`2.3.0`) |
+| `esp32dev_mq7_5v_diag` | As above plus an unauthenticated `/log` web viewer and ArduinoOTA. Bench debugging only | `platformio.ini` (`2.3.0-diag`) |
 | `*_ota` variants | Same build, flashed over Wi-Fi with `espota` (`--upload-port <device-ip>`) | as their base env |
 | `test_components` (+ `_ota`) | Separate bench-test sketch; needs `src/config_test_secrets.h` | — |
 

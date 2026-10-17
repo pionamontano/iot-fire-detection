@@ -16,10 +16,11 @@ test('an approved+active resident with a linked chat gets their own Telegram mes
   assert.deepEqual(chatIds, ['chat', 'chat-res-ok']);
 });
 
-test('Tier 1: neither the resident nor the station chat is messaged (same role rule as push)', async () => {
-  const t = setup({ tables: { profiles: withTelegramLinks({ 'res-ok': 'chat-res-ok' }) } });
+test('Tier 1: the resident is messaged on their own chat, the station chat is not (same role rule as push)', async () => {
+  const t = setup({ tables: { profiles: withTelegramLinks({ 'res-ok': 'chat-res-ok', 'res-other': 'chat-other-device' }) } });
   await t.send(TIER1);
-  assert.equal(t.calls.telegram.length, 0, 'the station chat is the fire station\'s: Tier 2 only');
+  const chatIds = t.calls.telegram.map((c) => c.chat_id);
+  assert.deepEqual(chatIds, ['chat-res-ok'], 'the station chat is the fire station\'s: Tier 2 only');
 });
 
 test('Tier 1: only admins with a linked chat are messaged; BFP responders are not', async () => {

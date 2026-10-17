@@ -113,6 +113,7 @@ export function buildLogEntries(src: LogSources): LogEntry[] {
         actor: auto ? code
           : a.resolution_source === 'responder' ? 'BFP Responder'
           : a.resolution_source === 'admin' ? 'Admin'
+          : a.resolution_source === 'resident' ? 'Resident'
           : 'System',
         details: auto
           ? `Readings at ${where} dropped back below thresholds.`

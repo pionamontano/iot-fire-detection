@@ -116,7 +116,7 @@ serve(async (req) => {
            return new Response("Database Error", { status: 500 });
         }
 
-        await reply('✅ Your Telegram account is now successfully linked to AgapSense! You will receive fire alerts here.');
+        await reply('✅ Your Telegram account is now successfully linked to AgapSense! You will receive AgapSense alerts here.');
       }
     }
     return new Response("OK", { status: 200 });

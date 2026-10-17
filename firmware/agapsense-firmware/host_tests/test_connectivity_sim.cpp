@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include "connectivity.h"
 #include "gsm.h"
+#include "buzzer.h"
 #include "sensors.h"
 #include <WiFi.h>
 #include <esp_task_wdt.h>
@@ -172,18 +173,6 @@ static void d03_one_low_reading_does_not_clear() {
     d.safe();  d.run(30);
     CHECK(d.ctx.alertTier == AlertTier::CLEAR, "two low readings in a row clear it");
 }
-static int buzzerOnWrites() { int n = 0; for (auto& w : g_hal.pinWrites) if (w.first == BUZZER_PIN && w.second == HIGH) ++n; return n; }
-static void c01_tier1_chirps() {
-    printf("C01 Tier 1 chirps: one beep at once, then one every 10 s (not every tick); silent again after CLEAR\n");
-    world(); Dev d; d.boot(); d.run(10);
-    g_hal.pinWrites.clear(); d.tier1(); d.run(8);           // 3-tick rise, then Tier 1
-    CHECK(d.ctx.alertTier == AlertTier::TIER1, "Tier 1 raised");
-    CHECK(buzzerOnWrites() == 1, "chirped once on entering Tier 1 (got %d)", buzzerOnWrites());
-    g_hal.pinWrites.clear(); d.run(60);
-    CHECK(buzzerOnWrites() >= 5 && buzzerOnWrites() <= 7, "about one chirp per 10 s over 60 s (got %d)", buzzerOnWrites());
-    d.safe(); d.run(10); g_hal.pinWrites.clear(); d.run(30);
-    CHECK(d.ctx.alertTier == AlertTier::CLEAR && buzzerOnWrites() == 0, "no chirps after CLEAR (got %d)", buzzerOnWrites());
-}
 static void f01_no_probe_from_boot() {
     printf("F01 DS18B20 missing from boot: readings still posted (temp -127), CO alone raises Tier 1\n");
     world(); Dev d; d.boot(); d.noProbe(); d.run(40);
@@ -303,12 +292,17 @@ static void s05_escalation_while_failing() {
 }
 static void s06_escalation_after_ack() {
     printf("S06 tier 1 acknowledged, then escalation, then de-escalate and re-escalate: tier 2 is (re)POSTed each time, as before 5.3\n");
-    world(); Dev d; d.boot(); d.tier1(); d.run(10);
+    world(); Dev d; d.boot();
+    CHECK(buzzerMode() == agap::BuzzerMode::OFF, "silent while CLEAR");
+    d.tier1(); d.run(10);
     CHECK(srv.alertTiers.size() == 1 && srv.alertTiers[0] == 1 && g_hal.smsSent.empty());
+    CHECK(buzzerMode() == agap::BuzzerMode::CHIRP, "Tier 1 chirps");
     d.tier2(); d.run(10);
     CHECK(srv.alertTiers.size() == 2 && srv.alertTiers[1] == 2, "escalation POSTed immediately");
+    CHECK(buzzerMode() == agap::BuzzerMode::CONTINUOUS, "Tier 2 is a continuous tone");
     CHECK(g_hal.smsSent.size() == 2 && srv.reports.size() == 2);
     d.tier1(); d.run(8); CHECK(d.ctx.alertTier == AlertTier::TIER1);
+    CHECK(buzzerMode() == agap::BuzzerMode::CHIRP, "de-escalation back to Tier 1 chirps again");
     d.tier2(); d.run(10);
     CHECK(srv.alertTiers.size() == 3 && srv.alertTiers[2] == 2, "re-escalation re-POSTs (pre-5.3 behaviour) (%zu)", srv.alertTiers.size());
     CHECK(g_hal.smsSent.size() == 2, "...but the 5-minute SMS debounce still suppresses a second SMS pair");
@@ -317,6 +311,7 @@ static void s07_clear_cancels() {
     printf("S07 CLEAR cancels a pending retry\n");
     world(); Dev d; d.boot(); srv.mode = DOWN; d.tier2(); d.run(10);
     d.safe(); d.run(6); CHECK(d.ctx.alertTier == AlertTier::CLEAR);
+    CHECK(buzzerMode() == agap::BuzzerMode::OFF, "CLEAR silences the buzzer");
     int n = countCalls("trigger-alert"); srv.mode = OK; d.run(300);
     CHECK(countCalls("trigger-alert") == n, "no alert POST after CLEAR (%d -> %d)", n, countCalls("trigger-alert"));
     CHECK(srv.incidents == 0, "server never created the stale incident");
@@ -555,7 +550,6 @@ int main() {
     r06c_two_ready_results_one_failing_report_per_tick(); r12b_wdt_alert_after_config_and_telemetry_coincide(); r12c_wdt_telemetry_and_report_coincide();
     b01_cleared_bfp_contact_is_not_texted(); b02_replaced_bfp_contact_is_used_at_once(); b03_cleared_at_boot_and_server_down();
     f01_no_probe_from_boot(); f02_probe_fails_at_room_temperature(); f03_probe_dies_hot_during_tier2();
-    c01_tier1_chirps();
     d01_one_high_reading_does_not_alert(); d02_three_readings_raise_after_about_15s(); d03_one_low_reading_does_not_clear();
     printf("\n%d checks, %d failed\n", g_checks, g_fails);
     return g_fails ? 1 : 0;

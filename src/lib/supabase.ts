@@ -131,7 +131,7 @@ export interface AlertEvent {
   incident_status?: 'active' | 'acknowledged' | 'responding' | 'resolved' | 'false_alarm';
   acknowledged_by?: string | null;
   resolved_by?: string | null;
-  resolution_source?: 'device' | 'responder' | 'admin' | 'legacy' | null;
+  resolution_source?: 'device' | 'responder' | 'admin' | 'legacy' | 'resident' | null;
   acknowledged_at?: string | null;
   outcome_notes?: string | null;
   devices?: Device; // For joined queries

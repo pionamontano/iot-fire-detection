@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  availableTransitions, closeConfirmMessage, describeIncidentError, isClosedStatus, transitionIncident,
+  availableTransitions, closeConfirmMessage, describeIncidentError, describeResidentResolveError, isClosedStatus,
+  residentResolveWarning, transitionIncident,
 } from '../src/lib/incidents.ts';
 import type { ActorRole, IncidentStatus, IncidentTarget } from '../src/lib/incidents.ts';
 
@@ -135,4 +136,27 @@ test('the responder dashboard offers its buttons from availableTransitions, not 
   assert.match(code, /availableTransitions\(alert\.incident_status, 'bfp_responder'\)/);
   assert.doesNotMatch(code, /incident_status === 'acknowledged'/);
   assert.doesNotMatch(code, /acknowledged_by:/, 'the client must not write acknowledged_by');
+});
+
+test('residentResolveWarning calls its own RPC and maps errors; never throws', async () => {
+  const calls: unknown[] = [];
+  const ok = await residentResolveWarning({ rpc: async (fn, args) => { calls.push([fn, args]); return { data: { id: 'a1' }, error: null }; } }, 'a1');
+  assert.equal(ok.ok, true);
+  assert.deepEqual(calls, [['resident_resolve_warning', { p_alert_id: 'a1' }]]);
+
+  const closed = await residentResolveWarning({ rpc: async () => ({ data: null, error: { code: '55000' } }) }, 'a1');
+  assert.equal(closed.ok, false);
+  assert.equal(!closed.ok && closed.refresh, true);
+  assert.equal(describeResidentResolveError({ code: '42501' }).refresh, false);
+
+  const net = await residentResolveWarning({ rpc: async () => { throw new Error('offline'); } }, 'a1');
+  assert.equal(net.ok, false);
+});
+
+test('residents get a Resolve action only through the RPC, never a direct table write', () => {
+  for (const p of ['src/pages/resident/ResidentHome.tsx', 'src/pages/resident/ResidentAlerts.tsx']) {
+    const src = read(p);
+    assert.match(src, /residentResolveWarning\(/, p);
+    assert.doesNotMatch(src, /from\('alert_events'\)\s*\.update/, p);
+  }
 });
