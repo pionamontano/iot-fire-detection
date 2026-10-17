@@ -218,9 +218,9 @@ test('the push topic is a valid, per-alert, per-tier value (lets a push service 
   assert.notEqual(a, b);
 });
 
-test('the push opens the alert in the app: a same-site /alert link for the alerting device, on both tiers', async () => {
+test('the push opens the alert in the app: a same-site /alert/<id> link for the alerting device, on both tiers', async () => {
   const t = setup(); await t.send(TIER1); await t.send(TIER2);
-  for (const p of t.calls.push) assert.equal(p.url, `/alert?device=${device.id}`);
+  for (const p of t.calls.push) assert.match(p.url, new RegExp(`^/alert/[^/?]+\\?device=${device.id}$`));
 });
 
 test('telegram_sent on the incident is set after a successful station notification only', async () => {

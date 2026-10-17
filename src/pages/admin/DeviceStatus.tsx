@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { PageHeader } from '../../components/PageHeader';
-import { supabase } from '../../lib/supabase';
+import { supabase, realtimeChannel } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
@@ -131,15 +131,15 @@ export const DeviceStatusPage = () => {
   useEffect(() => {
     fetchData();
 
-    const deviceSub = supabase.channel('sysoverview_devices')
+    const deviceSub = realtimeChannel('sysoverview_devices')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, fetchData)
       .subscribe();
-    const alertSub = supabase.channel('sysoverview_alerts')
+    const alertSub = realtimeChannel('sysoverview_alerts')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'alert_events' }, fetchData)
       .subscribe();
     // So a resident's device (re)assignment in admin/Users.tsx is reflected
     // here without waiting on an unrelated device/alert change.
-    const profileSub = supabase.channel('sysoverview_profiles')
+    const profileSub = realtimeChannel('sysoverview_profiles')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchData)
       .subscribe();
 

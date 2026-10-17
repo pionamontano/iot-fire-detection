@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { registerServiceWorker, refreshPushSubscription } from './lib/pushNotifications';
+import { installAlarmSoundUnlock } from './lib/alarmSound';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
@@ -30,8 +31,8 @@ const NotificationLinkListener = () => {
       const url = e.data?.type === 'open-url' ? e.data.url : null;
       if (typeof url !== 'string' || !/^\/(?![/\\])/.test(url)) return;
       const link = new URL(url, window.location.origin);
-      const alertId = /^\/alert\/([^/]+)$/.exec(link.pathname)?.[1];
-      navigate(alertId && role ? alertPagePath(role, decodeURIComponent(alertId), link.searchParams.get('device')) : url);
+      const alertLink = /^\/alert(?:\/([^/]+))?$/.exec(link.pathname);
+      navigate(alertLink && role ? alertPagePath(role, alertLink[1] && decodeURIComponent(alertLink[1]), link.searchParams.get('device')) : url);
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);
@@ -79,6 +80,8 @@ function App() {
   useEffect(() => {
     // A browser still subscribed with an old push key would never receive alerts; renew it quietly.
     registerServiceWorker().then((registration) => { if (registration) refreshPushSubscription(); });
+    // The tap on "Sign in" already allows the BFP alarm sound, so a responder never has to enable it after signing in.
+    installAlarmSoundUnlock();
   }, []);
     return (
     <AuthProvider>
@@ -136,7 +139,8 @@ function App() {
 
           {/* Alert notification link: sends each role to the page where it handles the alert. */}
           <Route element={<AuthGuard />}>
-            <Route path="/alert/:alertId" element={<AlertLink />} />
+            {/* /alert?device=<id> (no alert id) was sent by an earlier build; it still opens the role's page. */}
+            <Route path="/alert/:alertId?" element={<AlertLink />} />
           </Route>
 
           {/* Root Redirect based on AuthGuard default behavior (if logged in, redirects to role home, else login) */}

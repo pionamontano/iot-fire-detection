@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { supabase, realtimeChannel } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
@@ -61,11 +61,11 @@ export const InteractiveMap = () => {
   useEffect(() => {
     fetchData();
 
-    const deviceSub = supabase.channel('map_devices')
+    const deviceSub = realtimeChannel('map_devices')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, fetchData)
       .subscribe();
 
-    const alertSub = supabase.channel('map_alerts')
+    const alertSub = realtimeChannel('map_alerts')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'alert_events' }, fetchData)
       .subscribe();
 

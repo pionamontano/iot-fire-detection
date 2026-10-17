@@ -5,6 +5,7 @@ import { NotificationDropdown, HeaderSearchBar, UserMenuDropdown } from './Heade
 import { useAuth } from '../contexts/AuthContext';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
 import { BrandMark } from './BrandMark';
+import { ResponderAlarm } from './ResponderAlarm';
 
 export const ResponderLayout: React.FC = () => {
   const { signOut } = useAuth();
@@ -117,6 +118,7 @@ export const ResponderLayout: React.FC = () => {
         {/* ─── Main Content ─── */}
         <main className="flex-1 h-full overflow-y-auto flex flex-col relative z-0">
           <div className="p-6 md:p-10 flex-1">
+            <ResponderAlarm />
             <GlobalErrorBoundary>
               <Outlet />
             </GlobalErrorBoundary>
