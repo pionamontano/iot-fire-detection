@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { AlertEvent } from '../../lib/supabase';
 import { displayAddress } from '../../lib/location';
@@ -19,7 +19,7 @@ import { DeviceMap, MapLegend } from '../../components/DeviceMap';
 import { AlertStatusPill } from '../../components/StatusBadge';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
-import { BTN, BTN_SECONDARY } from '../../components/ui';
+import { BTN_SECONDARY } from '../../components/ui';
 import {
   AlertTriangle,
   Flame,
@@ -115,9 +115,11 @@ export const ResponderDashboard = () => {
   const [loadError, setLoadError] = useState<LoadErrorInfo | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [soundOn, setSoundOn] = useState(true);
   const [focusDeviceId, setFocusDeviceId] = useState<string | null>(null);
   const navigate = useNavigate();
+  // ?alert=<id> comes from a tapped fire notification: that card is scrolled to and highlighted.
+  const [searchParams] = useSearchParams();
+  const linkedAlertId = searchParams.get('alert');
   const now = useNowTick();
   // Per-second clock for the "open for" timers (the shared tick is 30 s).
   const [clock, setClock] = useState(() => Date.now());
@@ -260,12 +262,13 @@ export const ResponderDashboard = () => {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
-  // The siren sounds while any fire is still unacknowledged.
+  // The siren sounds while any fire is still unacknowledged. It cannot be muted here: acknowledging the fire is
+  // the only way to silence it, so a responder cannot switch it off by accident and then miss the next fire.
   const unacknowledgedCount = fireAlerts.filter(a => !a.incident_status || a.incident_status === 'active').length;
   useEffect(() => {
-    if (unacknowledgedCount > 0 && soundOn) startSiren();
+    if (unacknowledgedCount > 0) startSiren();
     else stopSiren();
-  }, [unacknowledgedCount, soundOn, startSiren, stopSiren]);
+  }, [unacknowledgedCount, startSiren, stopSiren]);
 
   const fetchData = useCallback(async () => {
     const todayStart = new Date();
@@ -325,6 +328,11 @@ export const ResponderDashboard = () => {
     setBusyId(null);
   };
 
+  const linkedAlertOpen = !loading && fireAlerts.some(a => a.id === linkedAlertId);
+  useEffect(() => {
+    if (linkedAlertOpen) document.getElementById(`fire-alert-${linkedAlertId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [linkedAlertOpen, linkedAlertId]);
+
   const deviceById = useMemo(() => new Map(devices.map(d => [d.id, d])), [devices]);
   const mapDevices = toMapDevices(devices, now);
   const devicesWithoutLocation = mapDevices.filter(d => d.location.kind === 'unavailable');
@@ -346,23 +354,12 @@ export const ResponderDashboard = () => {
       <PageHeader
         title="Dashboard"
         description="Fire alerts (Tier 2) from AgapSense devices, and whether each device is reporting."
-        actions={
-          <button
-            type="button"
-            onClick={() => setSoundOn(on => !on)}
-            aria-pressed={soundOn}
-            className={soundOn ? BTN_SECONDARY : `${BTN} border border-tier1-border/50 bg-tier1-bg text-tier1-text hover:bg-tier1-bg/70`}
-          >
-            {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            {soundOn ? 'Alarm sound on' : 'Alarm sound muted'}
-          </button>
-        }
       />
 
       {loadError && <LoadErrorBanner what="dashboard data" error={loadError} onRetry={fetchData} />}
 
       {/* The browser blocks page audio until the user interacts with the page: say so before a fire is missed. */}
-      {soundOn && audioBlocked && (
+      {audioBlocked && (
         <div
           role="alert"
           className={`flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border ${unacknowledgedCount > 0
@@ -430,7 +427,7 @@ export const ResponderDashboard = () => {
               <ShieldCheck className="w-9 h-9 mx-auto text-success" />
               <p className="text-sm font-bold text-text mt-3">No active fire alerts</p>
               <p className="text-xs text-text-subtle mt-1 leading-relaxed">
-                When a device detects fire, it appears here{soundOn ? ' and the alarm sounds' : ''}.
+                When a device detects fire, it appears here and the alarm sounds until it is acknowledged.
               </p>
             </div>
           ) : (
@@ -444,7 +441,11 @@ export const ResponderDashboard = () => {
                 const busy = busyId === alert.id;
                 const unacknowledged = !alert.incident_status || alert.incident_status === 'active';
                 return (
-                  <li key={alert.id} className={`bg-surface-card border rounded-lg overflow-hidden ${unacknowledged ? 'border-tier2-border/60 ring-1 ring-tier2-border/30' : 'border-border'}`}>
+                  <li
+                    key={alert.id}
+                    id={`fire-alert-${alert.id}`}
+                    className={`bg-surface-card border rounded-lg overflow-hidden scroll-mt-4 ${unacknowledged ? 'border-tier2-border/60' : 'border-border'} ${alert.id === linkedAlertId ? 'ring-2 ring-primary' : unacknowledged ? 'ring-1 ring-tier2-border/30' : ''}`}
+                  >
                     <div className={`flex items-center justify-between gap-2 px-4 py-2 ${unacknowledged ? 'bg-tier2-bg' : 'bg-surface-alt'}`}>
                       <AlertStatusPill alert={alert} />
                       <span className="text-[11px] font-bold text-tier2-text tabular-nums" title={new Date(alert.triggered_at).toLocaleString()}>
