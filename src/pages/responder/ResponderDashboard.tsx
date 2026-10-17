@@ -207,6 +207,12 @@ export const ResponderDashboard = () => {
       console.warn('AudioContext unavailable:', err);
       return;
     }
+    // iOS plays Web Audio in the "ambient" category, which the ring/silent switch mutes; "playback" keeps the
+    // siren audible on a phone set to silent (Safari 17+; ignored elsewhere).
+    const nav = navigator as Navigator & { audioSession?: { type: string } };
+    if (nav.audioSession) {
+      try { nav.audioSession.type = 'playback'; } catch { /* unsupported value */ }
+    }
     audioCtxRef.current = ctx;
     const sync = () => setAudioState(ctx.state);
     ctx.addEventListener('statechange', sync);
@@ -222,19 +228,37 @@ export const ResponderDashboard = () => {
   const audioBlocked = audioState === 'suspended' || audioState === 'interrupted';
   const unlockAudio = useCallback(() => {
     const ctx = audioCtxRef.current;
-    if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(console.warn);
+    if (!ctx || ctx.state === 'running' || ctx.state === 'closed') return;
+    ctx.resume().catch(console.warn);
+    // iOS only unlocks a context that starts a sound inside the gesture itself: play one silent sample.
+    try {
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch { /* resume() alone suffices elsewhere */ }
   }, []);
 
   // While sound is blocked, any click, tap or key press on the page counts as the user gesture that unlocks it.
+  // iOS Safari grants audio only on touchend/click, not on pointerdown (which fires at touch start).
   useEffect(() => {
     if (!audioBlocked) return;
-    window.addEventListener('pointerdown', unlockAudio, true);
-    window.addEventListener('keydown', unlockAudio, true);
-    return () => {
-      window.removeEventListener('pointerdown', unlockAudio, true);
-      window.removeEventListener('keydown', unlockAudio, true);
-    };
+    const events = ['pointerdown', 'touchend', 'click', 'keydown'] as const;
+    events.forEach(e => window.addEventListener(e, unlockAudio, true));
+    return () => events.forEach(e => window.removeEventListener(e, unlockAudio, true));
   }, [audioBlocked, unlockAudio]);
+
+  // iOS leaves the context 'interrupted' after the app was backgrounded or the phone locked: try to resume on return.
+  useEffect(() => {
+    const onVisible = () => {
+      const ctx = audioCtxRef.current;
+      if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running' && ctx.state !== 'closed') {
+        ctx.resume().catch(console.warn);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   // The siren sounds while any fire is still unacknowledged.
   const unacknowledgedCount = fireAlerts.filter(a => !a.incident_status || a.incident_status === 'active').length;
@@ -350,7 +374,7 @@ export const ResponderDashboard = () => {
             <p className="font-bold">
               {unacknowledgedCount > 0 ? 'A fire alarm is sounding, but the browser has blocked the sound.' : 'The browser is blocking the alarm sound.'}
             </p>
-            <p className="mt-0.5">Click anywhere on this page to allow it. Until then a new fire will not be heard.</p>
+            <p className="mt-0.5">Tap or click anywhere on this page to allow it. Until then a new fire will not be heard.</p>
           </div>
           <button type="button" onClick={unlockAudio} className={`${BTN_SECONDARY} shrink-0`}>
             <Volume2 className="w-4 h-4" /> Enable alarm sound
