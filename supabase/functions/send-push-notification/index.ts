@@ -79,7 +79,7 @@ serve(async (req: Request) => {
       callerIsAdmin = profile?.role === 'admin' && profile?.status === 'approved' && profile?.is_active !== false;
     }
 
-    const { userIds, title, body, icon, topic, url } = await req.json();
+    const { userIds, title, body, icon, topic, url, ttl } = await req.json();
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
       return new Response(JSON.stringify({ error: 'Missing or invalid userIds array' }), {
@@ -142,7 +142,10 @@ serve(async (req: Request) => {
     const payload = JSON.stringify({ title, body, icon, url: safeUrl });
     // A timeout stops one slow push service from holding the whole alert; `topic` (<= 32 URL-safe chars) lets the push
     // service replace an undelivered duplicate of the same alert. Expired endpoints are REPORTED, never deleted here.
-    const sendOptions: Record<string, unknown> = { timeout: 3000 };
+    // TTL: how long the push service holds a push for a device that is offline (seconds). An alert shown hours or days
+    // late (the library's default is 4 weeks) is misleading, so it is dropped after an hour unless the caller asks otherwise.
+    const ttlSeconds = Number.isInteger(ttl) && ttl >= 0 && ttl <= 86400 ? ttl : 3600;
+    const sendOptions: Record<string, unknown> = { timeout: 3000, TTL: ttlSeconds };
     if (typeof topic === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(topic)) sendOptions.topic = topic;
 
     const outcomes = await Promise.all(subscriptions.map(async (sub: any) => {
