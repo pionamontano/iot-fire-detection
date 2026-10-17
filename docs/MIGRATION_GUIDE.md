@@ -115,7 +115,7 @@ VITE_SUPABASE_ANON_KEY=your_anon_public_key_here
 | 1 | `VITE_SUPABASE_URL` | Your Project URL from Supabase dashboard |
 | 2 | `VITE_SUPABASE_ANON_KEY` | Your anon/public API key from Supabase dashboard |
 
-For browser push notifications on a new project, also add `VITE_VAPID_PUBLIC_KEY=...` with the public key you set in Step 5b. If it is unset, the app falls back to the original project's built-in public key (`src/lib/pushNotifications.ts`), which will not match your private key.
+Browser push needs no extra variable here: the app fetches the public key from the `register-push` function (the `VAPID_PUBLIC_KEY` secret from Step 5b). `VITE_VAPID_PUBLIC_KEY` is only a fallback for when that function can't be reached; if you set it, it must be that same public key.
 
 ---
 
