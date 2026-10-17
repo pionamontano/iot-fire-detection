@@ -1,6 +1,11 @@
 // ============================================================
 // sensors.cpp — MQ-7 & DS18B20 Implementation  (v2.0)
 //
+// Changes from v2.0:
+//   ~ mq7RawToPpm(): a saturated ADC (Rs ≈ 0) returns the top of the
+//     range instead of 0 ppm, which read as clean air; readings are
+//     capped at the MQ-7's rated 2000 ppm (MQ7_PPM_MAX, was 10000)
+//
 // Changes from v1.0:
 //   + sensor_ready flag: set true after first full heat+measure cycle
 //   + MQ7 ADC reads throttled to every MQ7_READ_INTERVAL_MS (5 s)
@@ -54,9 +59,12 @@ float mq7RawToPpm(int rawAdc) {
     if (Vout <= 0.0f) return 0.0f;
     float Rs    = MQ7_RL_OHMS * (Vc - Vout) / Vout;
     float ratio = Rs / MQ7_R0_OHMS;
-    if (ratio <= 0.0f) return 0.0f;
+    // Full-scale ADC (Vout == Vc) means Rs ≈ 0: the sensor is saturated by a
+    // very high concentration. Report the top of the range so it raises an
+    // alert, never 0 ppm (which reads as clean air).
+    if (ratio <= 0.0f) return MQ7_PPM_MAX;
     float ppm = 100.0f * powf(ratio, -1.513f);
-    ppm = constrain(ppm, 0.0f, 10000.0f);
+    ppm = constrain(ppm, 0.0f, MQ7_PPM_MAX);
     return ppm;
 }
 
@@ -126,9 +134,10 @@ float mq7RawToPpm(int rawAdc) {
     if (Vout <= 0.0f) return 0.0f;
     float Rs    = MQ7_RL_OHMS * (Vc - Vout) / Vout;
     float ratio = Rs / MQ7_R0_OHMS;
-    if (ratio <= 0.0f) return 0.0f;
+    // Saturated (Vout == Vc, Rs ≈ 0): top of the range, never 0 ppm.
+    if (ratio <= 0.0f) return MQ7_PPM_MAX;
     float ppm = 100.0f * powf(ratio, -1.513f);
-    ppm = constrain(ppm, 0.0f, 10000.0f);
+    ppm = constrain(ppm, 0.0f, MQ7_PPM_MAX);
     return ppm;
 }
 

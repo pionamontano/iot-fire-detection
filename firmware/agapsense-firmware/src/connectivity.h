@@ -83,6 +83,14 @@ struct ConnectivityCtx {
     // Incremented on every CLEAR -> TIERx transition; tags SMS jobs so a result is only ever bound to the
     // incident it belongs to.
     uint32_t    incidentSeq;
+    // Sensor-fault state as last logged (TEMP_STALE_MS / CO_STALE_MS), so a fault and its recovery are
+    // each logged once instead of every tick.
+    bool        coFault;
+    bool        tempFault;
+    // Sensor reading times (SensorData::last_*_ms) at the last counted rise/fall step, so the debounce
+    // counts new readings rather than FSM ticks.
+    uint32_t    stepCoMs;
+    uint32_t    stepTempMs;
 };
 
 // ── Public API ─────────────────────────────────────────────
@@ -123,11 +131,15 @@ bool fetchRemoteConfig(ConnectivityCtx* ctx,
 /** Read battery voltage ADC and return millivolts. */
 int  readBatteryMv();
 
-/** Return true if both sensors exceed their alert thresholds. */
-bool isTier2(float co_ppm, float temp_c, const ConnectivityCtx* ctx);
+/** Return true if both sensors exceed their alert thresholds. A sensor that
+ *  has never produced a reading (coValid/tempValid false) never counts. */
+bool isTier2(float co_ppm, float temp_c, const ConnectivityCtx* ctx,
+             bool coValid = true, bool tempValid = true);
 
-/** Return true if either sensor (but not both) exceeds alert threshold. */
-bool isTier1(float co_ppm, float temp_c, const ConnectivityCtx* ctx);
+/** Return true if either sensor (but not both) exceeds alert threshold. A
+ *  sensor with no reading is ignored, so the other one still alerts alone. */
+bool isTier1(float co_ppm, float temp_c, const ConnectivityCtx* ctx,
+             bool coValid = true, bool tempValid = true);
 
 const char* deviceStateStr(DeviceState s);
 const char* alertTierStr(AlertTier t);
