@@ -226,6 +226,13 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 #define PRIO_BUZZER         2
 
 // ── MQ-7 Calibration ──────────────────────────────────────
-// Measure Rs in clean air, set R0 = Rs. Re-flash to apply.
+// R0 is Rs at 100 ppm CO (the curve in mq7RawToPpm() reads Rs/R0 = 1 as
+// 100 ppm), NOT Rs in clean air. Clean air is Rs/R0 ≈ 27.5 (datasheet Fig 3),
+// so after a 24-48 h burn-in, average the clean-air raw ADC and compute:
+//   Vout = raw * 5.0 / 4095        (same scaling as mq7RawToPpm())
+//   Rs   = MQ7_RL_OHMS * (5.0 - Vout) / Vout
+//   R0   = Rs / 27.5
+// Clean air should then read ~0.5-1 ppm. Re-flash to apply.
+// 10000 is an uncalibrated placeholder; each sensor needs its own value.
 #define MQ7_R0_OHMS         10000.0f
 #define MQ7_RL_OHMS         10000.0f

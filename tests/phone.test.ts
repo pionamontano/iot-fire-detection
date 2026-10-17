@@ -40,3 +40,29 @@ test('station hotline: PH mobiles and landlines with area code are accepted, as 
   for (const bad of ['', '911', '8555 1234', '0917123456', '091712345678', '02 8555 12345', 'abc', '+1 415 555 0100', '0917-123-4567 ext 2'])
     assert.equal(isStationPhone(bad), false, bad);
 });
+
+test('device BFP contact: mobiles and landlines normalize and pass, as digits', async () => {
+  const { isBfpPhone, LANDLINE_PATTERN } = await import('../src/lib/phone.ts');
+  for (const [raw, want] of [
+    ['0917 123 4567', '09171234567'],
+    ['+63 917 123 4567', '09171234567'],
+    ['02 8555 1234', '0285551234'],
+    ['(02) 8555-1234', '0285551234'],
+    ['+63 2 8555 1234', '0285551234'],
+    ['044 791 1234', '0447911234'],
+    ['+63 44 791 1234', '0447911234'],
+  ]) {
+    assert.equal(normalizePhone(raw), want, raw);
+    assert.equal(isBfpPhone(normalizePhone(raw)), true, raw);
+  }
+  assert.equal(LANDLINE_PATTERN.test(normalizePhone('02 8555 1234')), true);
+  assert.equal(LANDLINE_PATTERN.test(normalizePhone('0917 123 4567')), false);
+  for (const bad of ['911', '8555 1234', '0917123456', '0185551234'])
+    assert.equal(isBfpPhone(normalizePhone(bad)), false, bad);
+});
+
+test('typing a +63 landline digit by digit ends up local', () => {
+  let value = '';
+  for (const ch of '+63285551234') value = normalizePhone(value + ch);
+  assert.equal(value, '0285551234');
+});

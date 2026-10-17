@@ -137,6 +137,23 @@ test('HANGING push does not delay or break the alert either', async () => {
   assert.equal(t.calls.telegram.length, 1);
 });
 
+test('SLOW push (cold send-push-notification): the response keeps to the budget, push still completes in the background', async () => {
+  // Push is slower than the dispatch budget and the general provider timeout, but within its own push timeout.
+  const background = [];
+  globalThis.EdgeRuntime = { waitUntil: (p) => background.push(p) };
+  try {
+    const t = setup({ providers: { push: 'slow', pushDelayMs: 600 } });
+    const t0 = Date.now(); const { res } = await t.send(); const ms = Date.now() - t0;
+    assert.equal(res.status, 200); assert.ok(ms < 550, `took ${ms} ms`);
+    assert.equal(background.length, 1, 'the dispatch is handed to EdgeRuntime.waitUntil so it outlives the response');
+    await Promise.all(background);
+    const push = t.backend.rows('push');
+    assert.ok(push.length > 0 && push.every((r) => r.status === 'sent'), JSON.stringify(push));
+  } finally {
+    delete globalThis.EdgeRuntime;
+  }
+});
+
 test('a stale pending claim (sender died before recording) is reclaimed: AT-LEAST-ONCE means a duplicate is possible', async () => {
   const t = setup({ providers: { telegram: 'hang' } });
   // simulate a sender that crashed after claiming and never recorded an outcome
@@ -228,13 +245,30 @@ test('response keeps every field the firmware parses; extra fields are additive;
   assert.deepEqual([json.created, json.tier, json.persistence], [true, 2, 'raise_alert']);
 });
 
-test('notification TEXT is unchanged', async () => {
+test('Telegram text is unchanged; push text names what crossed its limit', async () => {
   const t = setup(); await t.send(TIER2);
   assert.match(t.calls.telegram[0].text, /^FIRE ALERT — Tier 2\n\nDevice: T-001\nLocation: Registered Loc\nTime: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d\n\nSensor readings:\n- CO: 500 ppm \(threshold: 200 ppm\)\n- Temp: 90°C \(threshold: 60°C\)\n\nGPS: Unavailable\n\nSMS alerts have been dispatched\.$/);
   const t1 = setup({ tables: { profiles: withAdminChat } }); await t1.send(TIER1);
   assert.match(t1.calls.telegram[0].text, /^WARNING — Tier 1\n\nDevice: T-001\n.*\n\nElevated reading detected:\n- CO: 500 ppm \(threshold: 200 ppm\)\n- Temp: 20°C \(threshold: 60°C\)\n\nMonitor the area\. No SMS dispatched at this level\.$/s);
-  assert.equal(t.calls.push[0].title, 'FIRE ALERT - Tier 2');
-  assert.equal(t.calls.push[0].body, 'Device: T-001\nLocation: Registered Loc');
+  assert.equal(t.calls.push[0].title, 'FIRE ALERT – High CO and temperature');
+  assert.equal(t.calls.push[0].body, 'CO 500 ppm · Temp 90 °C\nT-001 · Registered Loc');
+});
+
+test('push, Tier 1: the sensor over its limit leads (with the limit), then the other reading, then device and address', async () => {
+  const co = setup(); await co.send({ co_ppm: 210.4, temp_celsius: 31.56, gps_valid: false });
+  assert.equal(co.calls.push[0].title, 'WARNING – High CO level');
+  assert.equal(co.calls.push[0].body, 'CO 210 ppm (limit 200 ppm) · Temp 31.6 °C\nT-001 · Registered Loc');
+  const heat = setup(); await heat.send({ co_ppm: 4, temp_celsius: 62, gps_valid: false });
+  assert.equal(heat.calls.push[0].title, 'WARNING – High temperature');
+  assert.equal(heat.calls.push[0].body, 'Temp 62 °C (limit 60 °C) · CO 4 ppm\nT-001 · Registered Loc');
+});
+
+test('push never shows fault sentinels as readings: offline temp probe (-127 °C), saturated CO sensor', async () => {
+  const t = setup(); await t.send({ co_ppm: 2000, temp_celsius: -127, gps_valid: false });
+  assert.equal(t.calls.push[0].title, 'WARNING – High CO level');
+  assert.equal(t.calls.push[0].body, 'CO ≥2000 ppm (limit 200 ppm) · Temp sensor offline\nT-001 · Registered Loc');
+  const old = setup(); await old.send({ co_ppm: 10000, temp_celsius: 31, gps_valid: false });   // pre-2.2 firmware cap
+  assert.match(old.calls.push[0].body, /^CO ≥2000 ppm/);
 });
 
 test('status codes: 401 auth, 400 validation (with a machine-readable code), 500 only for server faults', async () => {
@@ -298,5 +332,5 @@ test('device GPS wins over the registered pin', async () => {
 test('no address set yet: location reads "Location not set"', async () => {
   const t = setup({ tables: { devices: [{ ...device, location_desc: null }] } }); await t.send(TIER2);
   assert.match(t.calls.telegram[0].text, /\nLocation: Location not set\n/);
-  assert.equal(t.calls.push[0].body, 'Device: T-001\nLocation: Location not set');
+  assert.equal(t.calls.push[0].body, 'CO 500 ppm · Temp 90 °C\nT-001 · Location not set');
 });

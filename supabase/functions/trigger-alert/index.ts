@@ -104,6 +104,10 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
 
 const DISPATCH_BUDGET_MS = Number(Deno.env.get('ALERT_DISPATCH_BUDGET_MS')) || 4000;
 const PROVIDER_TIMEOUT_MS = Number(Deno.env.get('ALERT_PROVIDER_TIMEOUT_MS')) || 3500;
+// Push goes through a second edge function (send-push-notification), which on a cold start must boot and load
+// web-push before it can call the browser push services. That regularly takes longer than PROVIDER_TIMEOUT_MS, and
+// Tier 1 warnings are rare enough that the function is almost always cold, so push gets its own, longer timeout.
+const PUSH_TIMEOUT_MS = Number(Deno.env.get('ALERT_PUSH_TIMEOUT_MS')) || 15000;
 const STRICT_DB = Deno.env.get('ALERT_STRICT_DB') === '1';
 
 interface SendResult {
@@ -195,10 +199,41 @@ function registeredPinString(device: { latitude?: unknown; longitude?: unknown; 
   return `GPS: Unavailable\nRegistered pin: ${lat}, ${lng} (${status})\nNavigate: https://maps.google.com/?q=${lat},${lng}\n\n`;
 }
 
+// Push notification text. A notification shows about three short lines, so the reading that crossed its limit comes
+// first, then the other reading, then where. Fault sentinels are never shown as readings: a disconnected DS18B20 reports
+// -127 °C (firmware TEMP_FAULT_C), and a saturated MQ-7 reports the top of its range (2000 ppm; 10000 before 2.2.x).
+const MQ7_RANGE_TOP_PPM = 2000;
+const TEMP_FAULT_C = -127;
+
+function pushText(p: {
+  tier: number; co: number; temp: number; coLimit: number | null; tempLimit: number | null; deviceCode: string; location: string;
+}): { title: string; body: string } {
+  const coHigh = p.coLimit != null && p.co >= p.coLimit;
+  const tempHigh = p.tempLimit != null && p.temp >= p.tempLimit;
+  const coText = p.co >= MQ7_RANGE_TOP_PPM ? `CO ≥${MQ7_RANGE_TOP_PPM} ppm` : `CO ${Math.round(p.co)} ppm`;
+  const tempText = p.temp <= TEMP_FAULT_C ? 'Temp sensor offline' : `Temp ${Math.round(p.temp * 10) / 10} °C`;
+  const withLimit = (text: string, limit: number | null, unit: string) => (limit != null ? `${text} (limit ${limit}${unit})` : text);
+
+  let title: string;
+  let readings: string;
+  if (p.tier >= 2) {
+    title = 'FIRE ALERT – High CO and temperature';
+    readings = `${coText} · ${tempText}`;
+  } else if (tempHigh && !coHigh) {
+    title = 'WARNING – High temperature';
+    readings = `${withLimit(tempText, p.tempLimit, ' °C')} · ${coText}`;
+  } else {
+    title = 'WARNING – High CO level';
+    readings = `${withLimit(coText, p.coLimit, ' ppm')} · ${tempText}`;
+  }
+  return { title, body: `${readings}\n${p.deviceCode} · ${p.location}` };
+}
+
 async function dispatchNotifications(p: {
-  admin: any; alertId: string | null; tier: number; device: any; locationString: string; tgText: string;
+  admin: any; alertId: string | null; tier: number; device: any; tgText: string;
+  push: { title: string; body: string };
 }): Promise<void> {
-  const { admin, alertId, tier, device, locationString, tgText } = p;
+  const { admin, alertId, tier, device, tgText } = p;
 
   // The shared station chat (TELEGRAM_CHAT_ID) is the fire station's, so it gets fires (Tier 2) only, like the
   // BFP responders. Tier 1 warnings reach admins and the resident through push and their own linked Telegram (below).
@@ -270,14 +305,16 @@ async function dispatchNotifications(p: {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
         body: JSON.stringify({
           userIds: claimed,
-          title: tier === 1 ? 'WARNING - Tier 1 Alert' : 'FIRE ALERT - Tier 2',
-          body: `Device: ${device.device_code}\nLocation: ${locationString}`,
+          title: p.push.title,
+          body: p.push.body,
+          // Tapping the notification opens the page where the recipient's role handles this alert (src/components/AlertLink.tsx).
+          url: alertId ? `/alert/${alertId}?device=${device.id}` : undefined,
           // Lets a push service replace an undelivered duplicate of the same alert+tier (partial duplicate mitigation).
           topic: alertId ? `a${alertId.replace(/-/g, '').slice(0, 24)}t${tier}` : undefined,
           // Opens the alert in the app: /alert sends each role to its own page for it (src/lib/alertLink.ts).
           url: `/alert?device=${encodeURIComponent(device.id)}`,
         }),
-        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+        signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
       });
       if (res.ok) {
         reached = true;
@@ -477,13 +514,20 @@ serve(async (req: Request) => {
     if (!skipDispatch) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const budget = new Promise<void>((resolve) => { timer = setTimeout(resolve, DISPATCH_BUDGET_MS); });
-      await Promise.race([
-        dispatchNotifications({
-          admin: supabaseAdmin, alertId: incident?.alert_id ?? null, tier: effectiveTier,
-          device, locationString, tgText,
-        }).catch((e) => console.error('dispatch failed:', (e as Error)?.name)),
-        budget,
-      ]);
+      const dispatch = dispatchNotifications({
+        admin: supabaseAdmin, alertId: incident?.alert_id ?? null, tier: effectiveTier,
+        device, tgText,
+        push: pushText({
+          tier: effectiveTier, co: co_ppm, temp: temp_celsius,
+          coLimit: device.co_threshold ?? null, tempLimit: device.temp_threshold ?? null,
+          deviceCode: device.device_code, location: locationString,
+        }),
+      }).catch((e) => console.error('dispatch failed:', (e as Error)?.name));
+      // The budget only bounds how long the RESPONSE waits. Without waitUntil the runtime may shut the worker down
+      // once the response is sent, killing whatever is still in flight (in practice push, the slowest channel),
+      // which left its ledger claim 'pending' and the push never sent while Telegram had already gone out.
+      (globalThis as any).EdgeRuntime?.waitUntil?.(dispatch);
+      await Promise.race([dispatch, budget]);
       clearTimeout(timer);
     }
 

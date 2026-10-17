@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
-import { registerServiceWorker } from './lib/pushNotifications';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { alertDestination, ALERT_LINK_PATH } from './lib/alertLink';
+import { registerServiceWorker, refreshPushSubscription } from './lib/pushNotifications';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
 import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
 import { AuthGuard } from './components/AuthGuard';
+import { AlertLink } from './components/AlertLink';
+import { alertPagePath } from './lib/alertLink';
+import { useAuth } from './contexts/AuthContext';
 import { AdminLayout } from './components/AdminLayout';
 import { ResponderLayout } from './components/ResponderLayout';
 import { ResidentLayout } from './components/ResidentLayout';
@@ -15,13 +17,26 @@ const RedirectKeepingQuery = ({ to }: { to: string }) => {
   return <Navigate to={`${to}${search}`} replace />;
 };
 
-// Target of alert push notifications (/alert?device=<id>, sent by trigger-alert): each role goes to its own page.
-// Rendered inside AuthGuard, so a signed-out user signs in first and is brought back here.
-const AlertRedirect = () => {
-  const { profile } = useAuth();
-  const { search } = useLocation();
-  if (!profile) return null;
-  return <Navigate to={alertDestination(profile.role, new URLSearchParams(search).get('device'))} replace />;
+// A tapped alert notification while the app is already open: the service worker asks this window to switch to
+// the alert page in place (public/sw.js). The link is resolved straight to the role's page, so a responder already
+// on the dashboard stays on the same mounted page and keeps its unlocked alarm sound (a reload or remount would
+// make the browser block it again until the next tap).
+const NotificationLinkListener = () => {
+  const navigate = useNavigate();
+  const role = useAuth().profile?.role;
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      const url = e.data?.type === 'open-url' ? e.data.url : null;
+      if (typeof url !== 'string' || !/^\/(?![/\\])/.test(url)) return;
+      const link = new URL(url, window.location.origin);
+      const alertId = /^\/alert\/([^/]+)$/.exec(link.pathname)?.[1];
+      navigate(alertId && role ? alertPagePath(role, decodeURIComponent(alertId), link.searchParams.get('device')) : url);
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [navigate, role]);
+  return null;
 };
 
 // Pages - Auth
@@ -62,11 +77,13 @@ import { NotFound } from './pages/common/NotFound';
 function App() {
 
   useEffect(() => {
-    registerServiceWorker();
+    // A browser still subscribed with an old push key would never receive alerts; renew it quietly.
+    registerServiceWorker().then((registration) => { if (registration) refreshPushSubscription(); });
   }, []);
     return (
     <AuthProvider>
       <BrowserRouter>
+        <NotificationLinkListener />
         <GlobalErrorBoundary>
           <Routes>
           {/* Public Routes */}
@@ -117,9 +134,9 @@ function App() {
             </Route>
           </Route>
 
-          {/* Alert push notifications open here; every role is sent to its own page for the alert */}
+          {/* Alert notification link: sends each role to the page where it handles the alert. */}
           <Route element={<AuthGuard />}>
-            <Route path={ALERT_LINK_PATH} element={<AlertRedirect />} />
+            <Route path="/alert/:alertId" element={<AlertLink />} />
           </Route>
 
           {/* Root Redirect based on AuthGuard default behavior (if logged in, redirects to role home, else login) */}

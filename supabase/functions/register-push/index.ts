@@ -11,6 +11,17 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // The web app subscribes with the public key it gets here, so a browser subscription always matches the key pair
+  // send-push-notification signs with (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY). A mismatch makes every push fail with 403.
+  // The public key is not a secret, so no sign-in is needed.
+  if (req.method === 'GET') {
+    const publicKey = Deno.env.get('VAPID_PUBLIC_KEY') ?? '';
+    return new Response(JSON.stringify({ publicKey }), {
+      status: publicKey ? 200 : 503,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

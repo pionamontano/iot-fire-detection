@@ -6,7 +6,7 @@ import type { Device } from '../../lib/supabase';
 import { Thermometer, Wind, HelpCircle, AlertTriangle, Save, Send, X, Phone, Bell, BellOff, ArrowRight } from 'lucide-react';
 import { AlertSettingsSkeleton } from '../../components/SkeletonLoaders';
 import { TABLE_CARD, TABLE, THEAD_ROW, TH, TR, TD, TableScroll } from '../../components/Table';
-import { subscribeUserToPush, unsubscribeUserFromPush, getPushState, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushState, describePushError, isBraveBrowser, needsHomeScreenInstall, HOME_SCREEN_HINT } from '../../lib/pushNotifications';
 import type { PushState } from '../../lib/pushNotifications';
 import { startTelegramLink } from '../../lib/telegramLink';
 import { PageHeader } from '../../components/PageHeader';
@@ -362,7 +362,9 @@ export const ResidentAlertSettings = () => {
                 status={pushState === 'checking' ? 'Checking' : pushState === 'on' ? 'On' : pushState === 'off' ? 'Off' : 'Unavailable'}
                 tone={pushState === 'on' ? 'ok' : pushState === 'off' ? 'warn' : 'none'}
               >
-                {pushState === 'unavailable' ? (
+                {needsHomeScreenInstall() ? (
+                  <p className="text-xs text-text-subtle">{HOME_SCREEN_HINT}</p>
+                ) : pushState === 'unavailable' ? (
                   <p className="text-xs text-text-subtle">This browser doesn't support push notifications, or they're blocked here.</p>
                 ) : (
                   <button type="button" onClick={handleTogglePush} disabled={pushBusy || pushState === 'checking'} className={BTN_SECONDARY}>

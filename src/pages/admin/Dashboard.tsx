@@ -221,7 +221,7 @@ export const Dashboard = () => {
                         <Link
                           to={`/admin/map?device=${device.id}`}
                           title="Show on map"
-                          className={`grid grid-cols-[1fr_auto] ${DEVICE_GRID} gap-x-4 gap-y-1 px-4 sm:px-0 py-4 sm:py-0 hover:bg-surface transition-colors ${status === 'fire' ? 'bg-tier2-bg/40' : status === 'warning' ? 'bg-tier1-bg/40' : ''}`}
+                          className={`grid grid-cols-[1fr_auto] ${DEVICE_GRID} gap-x-4 gap-y-1 sm:gap-0 px-4 sm:px-0 py-4 sm:py-0 hover:bg-surface transition-colors ${status === 'fire' ? 'bg-tier2-bg/40' : status === 'warning' ? 'bg-tier1-bg/40' : ''}`}
                         >
                           <div className="sm:px-6 sm:py-5 flex flex-col justify-center min-w-0">
                             <span className={`text-text font-mono text-xs leading-4 ${isAlert ? 'font-bold' : 'font-medium'}`}>
