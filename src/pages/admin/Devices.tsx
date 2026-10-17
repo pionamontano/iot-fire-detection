@@ -15,7 +15,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { getDeviceStatus, getStatusNote } from '../../lib/deviceStatus';
 import { useNowTick } from '../../hooks/useNowTick';
 import { PinMap } from '../../components/PinMap';
-import { PHONE_PATTERN, PHONE_ERROR, normalizePhone } from '../../lib/phone';
+import { LANDLINE_PATTERN, BFP_PHONE_ERROR, isBfpPhone, normalizePhone } from '../../lib/phone';
 
 // Fleet-wide firmware push. Safe because device ID / API key are stored per node (NVS) rather than compiled
 // into the image (docs/FIRMWARE_GUIDE.md, 5.1 and 8.6). Set to false to disable it again (e.g. while nodes still
@@ -321,11 +321,12 @@ export const Devices = () => {
   const saveEditDevice = async () => {
     if (!editingDevice) return;
 
-    // The device texts this number on a Tier 2 alert, so only a valid PH mobile
-    // number (stored as 09XXXXXXXXX, like resident numbers) or blank (no BFP SMS).
+    // The device texts this number on a Tier 2 alert: a PH mobile (stored as
+    // 09XXXXXXXXX, like resident numbers), a station landline (stored as digits,
+    // e.g. 0285551234 — warned below, it can't receive the SMS), or blank (no BFP SMS).
     const bfpContact = editForm.bfp_contact.trim() ? normalizePhone(editForm.bfp_contact) : '';
-    if (bfpContact && !PHONE_PATTERN.test(bfpContact)) {
-      setBfpError(PHONE_ERROR);
+    if (bfpContact && !isBfpPhone(bfpContact)) {
+      setBfpError(BFP_PHONE_ERROR);
       // The field sits far above the Save button in a scrolling modal, so bring
       // it into view — otherwise the click looks like it did nothing.
       const field = document.getElementById('edit-bfp-contact');
@@ -934,7 +935,7 @@ export const Devices = () => {
                   id="edit-bfp-contact"
                   type="tel"
                   inputMode="tel"
-                  placeholder="09XXXXXXXXX"
+                  placeholder="09XXXXXXXXX or 02 8555 1234"
                   value={editForm.bfp_contact}
                   onChange={e => { setEditForm({ ...editForm, bfp_contact: e.target.value }); setBfpError(null); }}
                   onBlur={() => { if (editForm.bfp_contact.trim()) setEditForm({ ...editForm, bfp_contact: normalizePhone(editForm.bfp_contact) }); }}
@@ -943,8 +944,14 @@ export const Devices = () => {
                   className={`w-full border rounded px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#AF101A]/30 focus:border-[#AF101A] ${bfpError ? 'border-[#AF101A]' : 'border-[#E5E2E1]'}`}
                 />
                 {bfpError && <p role="alert" className="text-xs font-semibold text-[#AF101A]">{bfpError}</p>}
+                {!bfpError && LANDLINE_PATTERN.test(normalizePhone(editForm.bfp_contact)) && (
+                  <p role="status" className="flex items-start gap-1.5 text-xs font-semibold text-[#B45309] bg-tier1-bg rounded px-3 py-2">
+                    <AlertTriangle className="w-3.5 h-3.5 mt-px shrink-0" />
+                    <span>This is a landline. Landlines can't receive SMS, so BFP will get no text from this device during a fire. Use a mobile the station monitors if you can.</span>
+                  </p>
+                )}
                 <p id="edit-bfp-contact-help" className="text-xs text-[#5B403D]">
-                  The mobile number this device texts on a Tier 2 fire alert. Leave blank to send no BFP SMS.
+                  The number this device texts on a Tier 2 fire alert: a mobile (09XXXXXXXXX) or a station landline with area code. Leave blank to send no BFP SMS.
                   A change reaches the device on its next alert, or within 10 minutes.
                 </p>
               </FormField>
