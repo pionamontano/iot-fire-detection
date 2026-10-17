@@ -139,6 +139,8 @@ respond. The incident is persisted before any provider is contacted, so a slow o
   may cold-start, uses `ALERT_PUSH_TIMEOUT_MS`, default 15000) and the response waits for the dispatch at most `ALERT_DISPATCH_BUDGET_MS`
   (default 4000), so the response carrying the SMS contacts stays prompt (the firmware's HTTP timeout is 10 s). Dispatch still in flight when
   the budget runs out keeps running in the background (`EdgeRuntime.waitUntil`) instead of being cut off with the response.
+* **Fresh, not late.** Pushes expire after an hour (`TTL` 3600 s in `send-push-notification`), so a phone or computer that was offline
+  does not show an alert hours or days after it happened. Telegram and SMS are unaffected.
 * **Recorded, not assumed.** Telegram and push outcomes (status, provider reference, error, retryable) are written to `alert_notifications`.
   `send-push-notification` returns a result per recipient (`sent` / `failed` / `skipped`). Failed retryable notifications are retried by a *later*
   request for the same incident (up to 3 attempts); permanent errors (Telegram 403/400, expired push endpoints) are not. Nothing is deleted:

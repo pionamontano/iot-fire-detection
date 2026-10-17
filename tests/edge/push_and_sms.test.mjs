@@ -150,3 +150,15 @@ test('register-push GET returns the server\'s VAPID public key without sign-in, 
   const missing = await get({});
   assert.equal(missing.status, 503, 'no key configured: the app reports push as unavailable instead of using a stale key');
 });
+
+test('pushes expire after an hour by default (no alert shown days late); a valid caller TTL is used, an invalid one ignored', async () => {
+  const p = push(() => undefined);
+  await call(p.handler, { userIds: ['u-ok'], title: 't', body: 'b' });
+  assert.ok(p.options.every((o) => o.TTL === 3600));
+  const q = push(() => undefined);
+  await call(q.handler, { userIds: ['u-ok'], title: 't', body: 'b', ttl: 600 });
+  assert.ok(q.options.every((o) => o.TTL === 600));
+  const r = push(() => undefined);
+  await call(r.handler, { userIds: ['u-ok'], title: 't', body: 'b', ttl: 'forever' });
+  assert.ok(r.options.every((o) => o.TTL === 3600));
+});

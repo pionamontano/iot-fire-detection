@@ -3,7 +3,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { Save, Clock, ShieldCheck, Activity, Unlock, Bell, BellOff, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { SettingsFormSkeleton } from '../../components/SkeletonLoaders';
-import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser, needsHomeScreenInstall, HOME_SCREEN_HINT } from '../../lib/pushNotifications';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import { ONLINE_THRESHOLD_MS, RECONNECTING_THRESHOLD_MS } from '../../lib/deviceStatus';
@@ -271,6 +271,7 @@ export const Settings = () => {
                 Receive fire alert and support-request notifications directly in this browser, even when the dashboard isn't open.
                 This applies to this browser only and is saved immediately.
               </p>
+              {needsHomeScreenInstall() && <p className="text-xs font-semibold text-text-warm mb-5">{HOME_SCREEN_HINT}</p>}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-alt border border-border rounded-lg px-4 py-3.5">
                 {isPushSubscribed ? (
                   <span className="w-fit inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold bg-success/10 text-success-dark border-success/30">

@@ -25,6 +25,24 @@ export const isBraveBrowser = async (): Promise<boolean> => {
   }
 };
 
+/**
+ * True on an iPhone or iPad when AgapSense is open in the browser rather than from
+ * the Home Screen. iOS only allows web push for sites added to the Home Screen
+ * (iOS 16.4+), so there the way to turn push on is to install the app first.
+ */
+export const needsHomeScreenInstall = (): boolean => {
+  if (typeof navigator === 'undefined' || typeof window === 'undefined') return false;
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);   // iPadOS reports itself as a Mac
+  if (!isIos) return false;
+  const standalone = window.matchMedia?.('(display-mode: standalone)').matches
+    || (navigator as unknown as { standalone?: boolean }).standalone === true;
+  return !standalone;
+};
+
+export const HOME_SCREEN_HINT =
+  'On iPhone or iPad: tap Share, then "Add to Home Screen", and open AgapSense from that icon to turn on notifications.';
+
 /** Turns a push subscription failure into a message a user can act on. */
 export const describePushError = (e: unknown, isBrave = false): string => {
   const name = (e as { name?: string } | null)?.name;

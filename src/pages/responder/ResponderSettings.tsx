@@ -11,7 +11,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { BTN_PRIMARY, BTN_SECONDARY, FIELD, LABEL, PILL_OK, PILL_WARN, PILL_OFF } from '../../components/ui';
 import { getRoleLabel } from '../../lib/supportRequests';
 import { PHONE_PATTERN, PHONE_ERROR, normalizePhone, isStationPhone, STATION_PHONE_ERROR } from '../../lib/phone';
-import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser } from '../../lib/pushNotifications';
+import { subscribeUserToPush, unsubscribeUserFromPush, getPushSubscription, describePushError, isBraveBrowser, needsHomeScreenInstall, HOME_SCREEN_HINT } from '../../lib/pushNotifications';
 
 type Msg = { ok: boolean; text: string } | null;
 
@@ -252,6 +252,7 @@ export const ResponderSettings = () => {
                   <p className="text-xs text-text-subtle mt-1 leading-relaxed">
                     A pop-up with sound on this device, even when AgapSense is not open. Turn it on for each phone or computer you use.
                   </p>
+                  {needsHomeScreenInstall() && <p className="text-xs font-semibold text-text-body mt-1 leading-relaxed">{HOME_SCREEN_HINT}</p>}
                 </div>
                 <button
                   type="button"
