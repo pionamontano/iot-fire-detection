@@ -326,6 +326,11 @@ export const Devices = () => {
     const bfpContact = editForm.bfp_contact.trim() ? normalizePhone(editForm.bfp_contact) : '';
     if (bfpContact && !PHONE_PATTERN.test(bfpContact)) {
       setBfpError(PHONE_ERROR);
+      // The field sits far above the Save button in a scrolling modal, so bring
+      // it into view — otherwise the click looks like it did nothing.
+      const field = document.getElementById('edit-bfp-contact');
+      field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      field?.focus({ preventScroll: true });
       return;
     }
 
