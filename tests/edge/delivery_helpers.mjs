@@ -55,7 +55,7 @@ export class MemoryBackend {
   };
 }
 
-// provider behaviours: telegram: ok|500|403|429|hang|throw   push: ok|500|hang|throw  (pushResults overrides per-user outcomes)
+// provider behaviours: telegram: ok|500|403|429|hang|throw   push: ok|500|hang|throw|slow (pushDelayMs, then ok)  (pushResults overrides per-user outcomes)
 export function makeFetch(events, mode) {
   const calls = { telegram: [], push: [] };
   const hang = (init) => new Promise((_, rej) => init?.signal?.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'TimeoutError' }))));
@@ -74,6 +74,7 @@ export function makeFetch(events, mode) {
       const m = mode.push ?? 'ok';
       if (m === 'hang') return hang(init);
       if (m === 'throw') throw new Error('connection reset');
+      if (m === 'slow') await new Promise((r) => setTimeout(r, mode.pushDelayMs ?? 0));
       if (m === '500') return new Response('{}', { status: 500 });
       if (mode.pushLegacy) return new Response(JSON.stringify({ success: true, sentCount: body.userIds.length }), { status: 200 });
       const results = body.userIds.map((id) => (mode.pushResults?.[id] ?? { status: 'sent', provider_status: '201' })).map((r, i) => ({ userId: body.userIds[i], ...r }));
@@ -92,7 +93,7 @@ export function setup({ providers = {}, env = {}, tables = {}, backendSetup } = 
   const { fetchImpl, calls } = makeFetch(events, providers);
   const fullEnv = {
     SUPABASE_URL: 'http://local', SUPABASE_SERVICE_ROLE_KEY: 'srv', TELEGRAM_BOT_TOKEN: 'tok', TELEGRAM_CHAT_ID: 'chat',
-    ALERT_DISPATCH_BUDGET_MS: '400', ALERT_PROVIDER_TIMEOUT_MS: '250', ...env,
+    ALERT_DISPATCH_BUDGET_MS: '400', ALERT_PROVIDER_TIMEOUT_MS: '250', ALERT_PUSH_TIMEOUT_MS: '1000', ...env,
   };
   const handler = loadHandler('trigger-alert', { db, env: fullEnv, fetchImpl });
   const send = async (payload = { co_ppm: 500, temp_celsius: 90, gps_valid: false }, headers = { 'x-device-key': 'k' }) => {
