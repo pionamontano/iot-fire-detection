@@ -160,7 +160,9 @@ serve(async (req: Request) => {
         // log the push service HOST and status only: the endpoint URL itself is a bearer-like secret
         let host = 'unknown';
         try { host = new URL(sub.endpoint).host; } catch { /* keep 'unknown' */ }
-        console.error(`Failed to send push via ${host}: status ${err?.statusCode ?? 'n/a'}`);
+        // The response body says why (e.g. a 403 when the subscription was made with a different VAPID public key).
+        const reason = typeof err?.body === 'string' ? err.body.replace(/\s+/g, ' ').slice(0, 200) : '';
+        console.error(`Failed to send push via ${host}: status ${err?.statusCode ?? 'n/a'}${reason ? ` - ${reason}` : ''}`);
         return { userId: sub.user_id as string, ok: false, statusCode: err?.statusCode as number | undefined };
       }
     }));

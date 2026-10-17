@@ -53,7 +53,7 @@ npm run dev            # http://localhost:5173
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_ANON_KEY=your_anon_key
-# optional, for browser push notifications
+# optional fallback: push uses the server's VAPID_PUBLIC_KEY secret; if set, this must match it
 VITE_VAPID_PUBLIC_KEY=your_vapid_public_key
 ```
 

@@ -133,3 +133,20 @@ test('a same-site url is passed to the notification; an off-site or protocol-rel
   }
   assert.deepEqual(payloads.map((p) => p.url), ['/admin/support?request=r1', undefined, undefined, undefined, undefined]);
 });
+
+test('the push service\'s reason for a rejection is logged (e.g. a 403 for a subscription made with another key)', async () => {
+  const lines = []; const orig = console.error; console.error = (...a) => lines.push(a.join(' '));
+  const rejected = Object.assign(errWith(403), { body: 'the key in the authorization header does not correspond to the sender ID' });
+  try { const p = push(() => rejected); await call(p.handler, { userIds: ['u-failed'], title: 't', body: 'b' }); } finally { console.error = orig; }
+  assert.ok(lines.some((l) => l.includes('status 403') && l.includes('does not correspond')), lines.join('\n'));
+  assert.ok(lines.every((l) => !l.includes('secret-token')));
+});
+
+test('register-push GET returns the server\'s VAPID public key without sign-in, so the app subscribes with the matching key', async () => {
+  const get = (env) => loadHandler('register-push', { db: new FakeDb({}), env })(new Request('http://local/fn', { method: 'GET' }));
+  const ok = await get({ VAPID_PUBLIC_KEY: 'BPublicKey' });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await ok.json(), { publicKey: 'BPublicKey' });
+  const missing = await get({});
+  assert.equal(missing.status, 503, 'no key configured: the app reports push as unavailable instead of using a stale key');
+});

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { registerServiceWorker } from './lib/pushNotifications';
+import { registerServiceWorker, refreshPushSubscription } from './lib/pushNotifications';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
@@ -52,7 +52,8 @@ import { NotFound } from './pages/common/NotFound';
 function App() {
 
   useEffect(() => {
-    registerServiceWorker();
+    // A browser still subscribed with an old push key would never receive alerts; renew it quietly.
+    registerServiceWorker().then((registration) => { if (registration) refreshPushSubscription(); });
   }, []);
     return (
     <AuthProvider>
