@@ -311,6 +311,8 @@ async function dispatchNotifications(p: {
           url: alertId ? `/alert/${alertId}?device=${device.id}` : undefined,
           // Lets a push service replace an undelivered duplicate of the same alert+tier (partial duplicate mitigation).
           topic: alertId ? `a${alertId.replace(/-/g, '').slice(0, 24)}t${tier}` : undefined,
+          // Opens the alert in the app: /alert sends each role to its own page for it (src/lib/alertLink.ts).
+          url: `/alert?device=${encodeURIComponent(device.id)}`,
         }),
         signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
       });
