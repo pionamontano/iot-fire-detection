@@ -137,6 +137,23 @@ test('HANGING push does not delay or break the alert either', async () => {
   assert.equal(t.calls.telegram.length, 1);
 });
 
+test('SLOW push (cold send-push-notification): the response keeps to the budget, push still completes in the background', async () => {
+  // Push is slower than the dispatch budget and the general provider timeout, but within its own push timeout.
+  const background = [];
+  globalThis.EdgeRuntime = { waitUntil: (p) => background.push(p) };
+  try {
+    const t = setup({ providers: { push: 'slow', pushDelayMs: 600 } });
+    const t0 = Date.now(); const { res } = await t.send(); const ms = Date.now() - t0;
+    assert.equal(res.status, 200); assert.ok(ms < 550, `took ${ms} ms`);
+    assert.equal(background.length, 1, 'the dispatch is handed to EdgeRuntime.waitUntil so it outlives the response');
+    await Promise.all(background);
+    const push = t.backend.rows('push');
+    assert.ok(push.length > 0 && push.every((r) => r.status === 'sent'), JSON.stringify(push));
+  } finally {
+    delete globalThis.EdgeRuntime;
+  }
+});
+
 test('a stale pending claim (sender died before recording) is reclaimed: AT-LEAST-ONCE means a duplicate is possible', async () => {
   const t = setup({ providers: { telegram: 'hang' } });
   // simulate a sender that crashed after claiming and never recorded an outcome

@@ -104,6 +104,10 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
 
 const DISPATCH_BUDGET_MS = Number(Deno.env.get('ALERT_DISPATCH_BUDGET_MS')) || 4000;
 const PROVIDER_TIMEOUT_MS = Number(Deno.env.get('ALERT_PROVIDER_TIMEOUT_MS')) || 3500;
+// Push goes through a second edge function (send-push-notification), which on a cold start must boot and load
+// web-push before it can call the browser push services. That regularly takes longer than PROVIDER_TIMEOUT_MS, and
+// Tier 1 warnings are rare enough that the function is almost always cold, so push gets its own, longer timeout.
+const PUSH_TIMEOUT_MS = Number(Deno.env.get('ALERT_PUSH_TIMEOUT_MS')) || 15000;
 const STRICT_DB = Deno.env.get('ALERT_STRICT_DB') === '1';
 
 interface SendResult {
@@ -275,7 +279,7 @@ async function dispatchNotifications(p: {
           // Lets a push service replace an undelivered duplicate of the same alert+tier (partial duplicate mitigation).
           topic: alertId ? `a${alertId.replace(/-/g, '').slice(0, 24)}t${tier}` : undefined,
         }),
-        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+        signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
       });
       if (res.ok) {
         reached = true;
@@ -475,13 +479,15 @@ serve(async (req: Request) => {
     if (!skipDispatch) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const budget = new Promise<void>((resolve) => { timer = setTimeout(resolve, DISPATCH_BUDGET_MS); });
-      await Promise.race([
-        dispatchNotifications({
-          admin: supabaseAdmin, alertId: incident?.alert_id ?? null, tier: effectiveTier,
-          device, locationString, tgText,
-        }).catch((e) => console.error('dispatch failed:', (e as Error)?.name)),
-        budget,
-      ]);
+      const dispatch = dispatchNotifications({
+        admin: supabaseAdmin, alertId: incident?.alert_id ?? null, tier: effectiveTier,
+        device, locationString, tgText,
+      }).catch((e) => console.error('dispatch failed:', (e as Error)?.name));
+      // The budget only bounds how long the RESPONSE waits. Without waitUntil the runtime may shut the worker down
+      // once the response is sent, killing whatever is still in flight (in practice push, the slowest channel),
+      // which left its ledger claim 'pending' and the push never sent while Telegram had already gone out.
+      (globalThis as any).EdgeRuntime?.waitUntil?.(dispatch);
+      await Promise.race([dispatch, budget]);
       clearTimeout(timer);
     }
 
