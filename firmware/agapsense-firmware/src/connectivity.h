@@ -88,6 +88,10 @@ struct ConnectivityCtx {
     bool        coFault;
     bool        tempFault;
     uint32_t    lastChirp_ms;         // Tier 1 warning chirp timer (0 = chirp at the next Tier 1 tick)
+    // Sensor reading times (SensorData::last_*_ms) at the last counted rise/fall step, so the debounce
+    // counts new readings rather than FSM ticks.
+    uint32_t    stepCoMs;
+    uint32_t    stepTempMs;
 };
 
 // ── Public API ─────────────────────────────────────────────

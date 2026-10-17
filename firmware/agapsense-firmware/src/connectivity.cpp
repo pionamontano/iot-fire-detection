@@ -12,6 +12,9 @@
 //       is kept so a probe that dies in a fire never clears the alert.
 //  [27] Tier 1 chirps: a 100 ms beep every 10 s alongside the yellow LED
 //       (was LED only). Tier 2 keeps its continuous buzzer.
+//  [28] ALERT_DEBOUNCE_COUNT / ALERT_RESOLUTION_COUNT now count new sensor
+//       readings, not ~2 s FSM ticks — one 5 s reading could be counted up
+//       to three times, so a single reading raised (or cleared) an alert.
 //
 // Changes from v2.4 (this file):
 //  [24] postTelemetry() now includes firmware_version (compiled-in
@@ -184,6 +187,20 @@ bool isTier1(float co_ppm, float temp_c, const ConnectivityCtx* ctx,
     bool coHigh   = coValid   && (co_ppm >= ctx->co_alert_ppm);
     bool tempHigh = tempValid && (temp_c >= ctx->temp_alert_c);
     return (coHigh || tempHigh) && !(coHigh && tempHigh);
+}
+
+// [28] Debounce counts readings, not ticks. The FSM runs every ~2 s but each
+//      sensor reads every 5 s, so counting ticks let one reading count up to
+//      three times: a single reading could raise an alert, and one low
+//      reading could clear it. A step now counts only once every sensor it
+//      depends on has a new reading since the last counted step.
+static bool newReading(ConnectivityCtx* ctx, const SensorData& sd, bool needCo, bool needTemp) {
+    if (!needCo && !needTemp) return false;   // nothing able to confirm the change
+    if (needCo   && sd.last_co_ms   == ctx->stepCoMs)   return false;
+    if (needTemp && sd.last_temp_ms == ctx->stepTempMs) return false;
+    ctx->stepCoMs   = sd.last_co_ms;
+    ctx->stepTempMs = sd.last_temp_ms;
+    return true;
 }
 
 // ── Battery ADC ────────────────────────────────────────────
@@ -661,6 +678,8 @@ void connectivityInit(ConnectivityCtx* ctx) {
     ctx->coFault      = false;
     ctx->tempFault    = false;
     ctx->lastChirp_ms = 0;
+    ctx->stepCoMs     = 0;
+    ctx->stepTempMs   = 0;
     strncpy(ctx->ownerNumber, OWNER_SMS_NUMBER_DEFAULT, sizeof(ctx->ownerNumber) - 1);
     strncpy(ctx->bfpNumber,   BFP_SMS_NUMBER_DEFAULT,   sizeof(ctx->bfpNumber)   - 1);
 
@@ -782,6 +801,12 @@ void connectivityUpdate(ConnectivityCtx* ctx,
         bool tier2Now = isTier2(sd.co_ppm, sd.temperature_c, ctx, sd.co_valid, sd.temp_valid);
         bool tier1Now = isTier1(sd.co_ppm, sd.temperature_c, ctx, sd.co_valid, sd.temp_valid);
         bool safeNow  = !tier1Now && !tier2Now;
+        // A rise is confirmed by new readings of the sensor(s) over threshold;
+        // a fall by new readings of every sensor still reading (a stale probe
+        // can't confirm anything, so it doesn't hold a fall back forever).
+        const bool coHigh   = sd.co_valid   && sd.co_ppm        >= ctx->co_alert_ppm;
+        const bool tempHigh = sd.temp_valid && sd.temperature_c >= ctx->temp_alert_c;
+        const bool coLive   = sd.co_valid && coFresh;
 
         // Every entry into Tier 1 (from CLEAR or down from Tier 2) chirps at once.
         if (ctx->alertTier != AlertTier::TIER1) ctx->lastChirp_ms = 0;
@@ -792,6 +817,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
             case AlertTier::CLEAR:
                 indicatorsOff();
                 if (tier2Now || tier1Now) {
+                    if (!newReading(ctx, sd, coHigh, tempHigh)) break;   // same reading as last count
                     ctx->alertRiseCount++;
                     CLOG("Alert rise count %d/%d (T2=%d T1=%d)",
                          ctx->alertRiseCount, ALERT_DEBOUNCE_COUNT,
@@ -829,6 +855,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
             case AlertTier::TIER1:
                 setTier1Indicators(ctx);
                 if (tier2Now) {
+                    if (!newReading(ctx, sd, coHigh, tempHigh)) break;
                     ctx->alertRiseCount++;
                     if (ctx->alertRiseCount >= ALERT_DEBOUNCE_COUNT) {
                         ctx->alertTier      = AlertTier::TIER2;
@@ -839,6 +866,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                         fireTier2Alert(ctx, sd, fix);
                     }
                 } else if (safeNow) {
+                    if (!newReading(ctx, sd, coLive, tempOk)) break;
                     ctx->alertFallCount++;
                     CLOG("Tier 1 fall count %d/%d", ctx->alertFallCount, ALERT_RESOLUTION_COUNT);
                     if (ctx->alertFallCount >= ALERT_RESOLUTION_COUNT) {
@@ -858,6 +886,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
             case AlertTier::TIER2:
                 setTier2Indicators();
                 if (safeNow) {
+                    if (!newReading(ctx, sd, coLive, tempOk)) break;
                     ctx->alertFallCount++;
                     CLOG("Tier 2 fall count %d/%d", ctx->alertFallCount, ALERT_RESOLUTION_COUNT);
                     if (ctx->alertFallCount >= ALERT_RESOLUTION_COUNT) {
@@ -869,6 +898,7 @@ void connectivityUpdate(ConnectivityCtx* ctx,
                         indicatorsOff();
                     }
                 } else if (!tier2Now && tier1Now) {
+                    if (!newReading(ctx, sd, coLive, tempOk)) break;
                     ctx->alertFallCount++;
                     if (ctx->alertFallCount >= ALERT_RESOLUTION_COUNT) {
                         CLOG("De-escalating TIER2 → TIER1");

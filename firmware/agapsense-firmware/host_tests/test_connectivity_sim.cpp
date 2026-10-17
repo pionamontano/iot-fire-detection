@@ -98,21 +98,31 @@ struct Dev {
     SensorData sd{}; GpsFix fix{};
     bool gsmPaused = false;
     bool coDead = false, tempDead = false;   // sensor stopped answering: its last-reading time stops advancing
+    // 0: a new reading every tick (the default model). 5000: readings arrive every 5 s as from the real
+    // sensor tasks, so several ~2 s ticks see the same reading — what the debounce has to count correctly.
+    uint32_t readEveryMs = 0, lastRead = 0;
+    float pendCo = 5, pendT = 25;
     void boot() {
         ctx = ConnectivityCtx{};
         sd.co_valid = sd.temp_valid = sd.sensor_ready = true; sd.co_ppm = 5; sd.temperature_c = 25;
-        sd.last_co_ms = sd.last_temp_ms = g_hal.now;
+        sd.last_co_ms = sd.last_temp_ms = lastRead = g_hal.now;
         fix.lat = 14.5995; fix.lng = 120.9842; fix.valid = true;
         connectivityInit(&ctx);
     }
     void noProbe() { sd.temp_valid = false; sd.temperature_c = 0; sd.last_temp_ms = 0; tempDead = true; }   // DS18B20 absent from boot
-    void readings(float co, float t) { sd.co_ppm = co; sd.temperature_c = t; }
+    void readings(float co, float t) { pendCo = co; pendT = t; if (!readEveryMs) { sd.co_ppm = co; sd.temperature_c = t; } }
     void safe()  { readings(5, 25); }
     void tier1() { readings(250, 25); }
     void tier2() { readings(250, 90); }
     void tick() {                       // one connectivity-task iteration + GSM task + 2 s delay (as main.cpp)
-        if (!coDead)   sd.last_co_ms   = g_hal.now;   // the sensor tasks keep refreshing their readings
-        if (!tempDead) sd.last_temp_ms = g_hal.now;
+        if (!readEveryMs) {
+            if (!coDead)   sd.last_co_ms   = g_hal.now;   // the sensor tasks keep refreshing their readings
+            if (!tempDead) sd.last_temp_ms = g_hal.now;
+        } else if (g_hal.now - lastRead >= readEveryMs) {
+            lastRead = g_hal.now;
+            if (!coDead)   { sd.co_ppm = pendCo;       sd.last_co_ms   = g_hal.now; }
+            if (!tempDead) { sd.temperature_c = pendT; sd.last_temp_ms = g_hal.now; }
+        }
         esp_task_wdt_reset();
         connectivityUpdate(&ctx, &sd, (SemaphoreHandle_t)1, &fix, (SemaphoreHandle_t)1);
         uint32_t t = g_hal.now; if (!gsmPaused) gsmProcessQueue(); g_hal.now = t;   // GSM task runs concurrently: don't charge its time
@@ -133,6 +143,35 @@ static std::string lastField(const char* what, const char* key) { std::string v;
 
 // Sensor faults (KI-17): a missing or failed sensor must not silence the other one, must not clear an alert,
 // and must show as a fault (-127 °C) instead of a frozen plausible value.
+// Debounce counts readings, not ticks: with real 5 s readings, one reading must not count several times.
+static void d01_one_high_reading_does_not_alert() {
+    printf("D01 a single high reading (seen by ~3 ticks) does not raise an alert\n");
+    world(); Dev d; d.readEveryMs = 5000; d.boot(); d.run(12);
+    d.tier1(); d.run(6);                         // exactly one high reading arrives in this window
+    d.safe();  d.run(30);
+    CHECK(srv.alertTiers.empty(), "no alert from one reading (got %zu POSTs)", srv.alertTiers.size());
+    CHECK(d.ctx.alertTier == AlertTier::CLEAR, "still CLEAR");
+}
+static void d02_three_readings_raise_after_about_15s() {
+    printf("D02 three separate high readings raise Tier 1, no earlier than ~10 s after CO rises\n");
+    world(); Dev d; d.readEveryMs = 5000; d.boot(); d.run(12);
+    uint32_t t0 = g_hal.now; d.tier1(); d.run(30);
+    CHECK(srv.alertTiers.size() == 1 && srv.alertTiers[0] == 1, "one tier-1 POST (got %zu)", srv.alertTiers.size());
+    auto ts = callTimes("trigger-alert");
+    CHECK(!ts.empty() && ts[0] - t0 >= 10000, "raised after 3 readings, not 3 ticks (%u ms)", ts.empty() ? 0u : ts[0] - t0);
+}
+static void d03_one_low_reading_does_not_clear() {
+    printf("D03 a single low reading during Tier 1 neither clears it nor causes a second alert\n");
+    world(); Dev d; d.readEveryMs = 5000; d.boot(); d.run(12);
+    d.tier1(); d.run(30);
+    CHECK(d.ctx.alertTier == AlertTier::TIER1, "Tier 1 raised");
+    d.safe();  d.run(6);                         // one low reading
+    d.tier1(); d.run(30);
+    CHECK(d.ctx.alertTier == AlertTier::TIER1, "still TIER1");
+    CHECK(srv.alertTiers.size() == 1, "no second alert POST (got %zu)", srv.alertTiers.size());
+    d.safe();  d.run(30);
+    CHECK(d.ctx.alertTier == AlertTier::CLEAR, "two low readings in a row clear it");
+}
 static int buzzerOnWrites() { int n = 0; for (auto& w : g_hal.pinWrites) if (w.first == BUZZER_PIN && w.second == HIGH) ++n; return n; }
 static void c01_tier1_chirps() {
     printf("C01 Tier 1 chirps: one beep at once, then one every 10 s (not every tick); silent again after CLEAR\n");
@@ -517,6 +556,7 @@ int main() {
     b01_cleared_bfp_contact_is_not_texted(); b02_replaced_bfp_contact_is_used_at_once(); b03_cleared_at_boot_and_server_down();
     f01_no_probe_from_boot(); f02_probe_fails_at_room_temperature(); f03_probe_dies_hot_during_tier2();
     c01_tier1_chirps();
+    d01_one_high_reading_does_not_alert(); d02_three_readings_raise_after_about_15s(); d03_one_low_reading_does_not_clear();
     printf("\n%d checks, %d failed\n", g_checks, g_fails);
     return g_fails ? 1 : 0;
 }
