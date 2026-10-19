@@ -182,8 +182,8 @@ Here you control **when** the device alerts and **where** alerts are sent.
 
 One reading over its level raises a **warning**; both together raise a **fire alert**.
 
-**Where Alerts Are Sent** (each one applies on its own). You receive **warnings (Tier 1)** and **fire alerts (Tier 2)** by push and Telegram on each channel turned on here; SMS is sent for fire alerts only.
-- **SMS**: the mobile number (`09XXXXXXXXX`) your device texts. It is sent by the device itself over the mobile network, so it works even without internet. Press **Save number**.
+**Where Alerts Are Sent** (each one applies on its own). You receive **warnings (Tier 1)** and **fire alerts (Tier 2)** by push and Telegram on each channel turned on here. Every fire alert (Tier 2) is also sent by SMS, with or without internet; warnings (Tier 1) are not.
+- **SMS**: the mobile number (`09XXXXXXXXX`) your device texts on every fire alert. It is sent by the device itself over the mobile network, so it still arrives when the internet is down. Press **Save number**, then type the number again and press **Confirm number** (typing it twice catches a wrong digit before it is saved). Clearing the box and saving asks you to confirm before the number is removed.
 - **Push notifications**: press **Turn on** and allow notifications to get alerts in that browser, even when AgapSense isn't open. Turn it on in each browser you use. *Unavailable* means the browser doesn't support it or notifications are blocked.
 - **Telegram**: press **Link Telegram** and follow the prompt. Fire alerts are then also sent to your Telegram through the AgapSense bot.
 

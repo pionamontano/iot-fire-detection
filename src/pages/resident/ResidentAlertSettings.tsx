@@ -10,13 +10,14 @@ import { subscribeUserToPush, unsubscribeUserFromPush, getPushState, describePus
 import type { PushState } from '../../lib/pushNotifications';
 import { startTelegramLink } from '../../lib/telegramLink';
 import { PageHeader } from '../../components/PageHeader';
-import { BTN_PRIMARY, BTN_SECONDARY, PILL_OK, PILL_WARN, PILL_OFF } from '../../components/ui';
+import { BTN_PRIMARY, BTN_SECONDARY, PILL_OK, PILL_WARN, PILL_OFF, FIELD, LABEL, Modal, ModalActions } from '../../components/ui';
 import { PHONE_PATTERN, PHONE_ERROR, normalizePhone } from '../../lib/phone';
 import { NoDeviceLinked } from '../../components/NoDeviceLinked';
 
 // Two independent parts: the alert levels (saved together with one Save) and
 // where alerts are sent (SMS number, push and Telegram, each applied on its own).
-// Residents get push and Telegram for warnings (Tier 1) and fire alerts (Tier 2); SMS is for fire alerts only.
+// Residents get push and Telegram for warnings (Tier 1) and fire alerts (Tier 2); the device texts every
+// fire alert (Tier 2), with or without internet. Changing the SMS number asks for it to be typed again.
 
 const CARD = 'bg-white border border-border rounded-lg p-5 sm:p-6';
 const CARD_TITLE = 'text-lg font-bold tracking-[-0.01em] text-text';
@@ -120,6 +121,10 @@ export const ResidentAlertSettings = () => {
   const [origContact, setOrigContact] = useState('');
   const [savingContact, setSavingContact] = useState(false);
   const [contactMsg, setContactMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Confirmation step before the SMS number changes: the number fire alerts are texted to
+  // shouldn't change on one tap, and retyping it catches a typo before it is saved.
+  const [confirmingContact, setConfirmingContact] = useState<string | null>(null);
+  const [confirmInput, setConfirmInput] = useState('');
 
   // Push and Telegram
   const [pushState, setPushState] = useState<PushState | 'checking'>('checking');
@@ -202,13 +207,29 @@ export const ResidentAlertSettings = () => {
     setSavingLevels(false);
   };
 
-  const handleSaveContact = async () => {
-    if (!profile) return;
+  // Validates the typed number, then opens the confirmation dialog; nothing is saved yet.
+  const handleSaveContact = () => {
     const normalized = contactNumber.trim() ? normalizePhone(contactNumber) : '';
     if (normalized && !PHONE_PATTERN.test(normalized)) {
       setContactMsg({ ok: false, text: PHONE_ERROR });
       return;
     }
+    setContactMsg(null);
+    setConfirmInput('');
+    setConfirmingContact(normalized);
+  };
+
+  const closeContactConfirm = () => {
+    if (savingContact) return;
+    setConfirmingContact(null);
+    setConfirmInput('');
+  };
+
+  const confirmMatches = confirmingContact === '' || normalizePhone(confirmInput) === confirmingContact;
+
+  const saveContact = async () => {
+    if (!profile || confirmingContact === null || !confirmMatches) return;
+    const normalized = confirmingContact;
     setSavingContact(true);
     setContactMsg(null);
     // The resident's own contact number lives on their profile, not on the
@@ -220,9 +241,11 @@ export const ResidentAlertSettings = () => {
     } else {
       setContactNumber(normalized);
       setOrigContact(normalized);
-      setContactMsg({ ok: true, text: normalized ? 'Saved.' : 'Removed. You will get no SMS alerts.' });
+      setContactMsg({ ok: true, text: normalized ? 'Saved. Fire alerts will be texted to this number.' : 'Removed. You will get no SMS alerts.' });
     }
     setSavingContact(false);
+    setConfirmingContact(null);
+    setConfirmInput('');
   };
 
   const handleTogglePush = async () => {
@@ -322,12 +345,12 @@ export const ResidentAlertSettings = () => {
           <section className={CARD}>
             <h2 className={CARD_TITLE}>Where Alerts Are Sent</h2>
             <p className="text-xs text-text-subtle mt-0.5">
-              You receive warnings (Tier 1) and fire alerts (Tier 2) by push and Telegram. SMS is sent for fire alerts only.
+              You receive warnings (Tier 1) and fire alerts (Tier 2) by push and Telegram. Every fire alert (Tier 2) is also sent by SMS, with or without internet. Warnings (Tier 1) are not sent by SMS.
             </p>
             <ul className="mt-6 flex flex-col divide-y divide-border-warm">
               <ChannelRow
                 icon={Phone} title="SMS"
-                detail="Sent by the device itself over the mobile network, so it works even without internet."
+                detail="Sent by the device itself over the mobile network on every fire alert, so it still reaches you when the internet is down."
                 status={savedContact ? 'On' : 'Not set'} tone={savedContact ? 'ok' : 'warn'}
               >
                 <label htmlFor="sms-number" className="sr-only">Mobile number for SMS alerts</label>
@@ -420,6 +443,54 @@ export const ResidentAlertSettings = () => {
 
       {/* Suggested levels by room. Portalled to <body> (like ui.tsx Modal) so it covers
           the app header and sidebar instead of sitting inside the scrolling page. */}
+      {confirmingContact !== null && (
+        <Modal title={confirmingContact ? 'Confirm SMS number' : 'Remove SMS number?'} onClose={closeContactConfirm}>
+          {confirmingContact ? (
+            <form onSubmit={(e) => { e.preventDefault(); saveContact(); }}>
+              <p className="text-sm text-text-body">
+                Fire alerts from your device will be texted to <span className="font-bold text-text">{confirmingContact}</span>
+                {origContact ? <> instead of <span className="font-bold text-text">{origContact}</span></> : null}.
+                Type the number again to confirm.
+              </p>
+              <label htmlFor="sms-number-confirm" className={`${LABEL} mt-4`}>Mobile number</label>
+              <input
+                id="sms-number-confirm"
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
+                autoFocus
+                placeholder="09XXXXXXXXX"
+                value={confirmInput}
+                onChange={(e) => setConfirmInput(e.target.value)}
+                onPaste={(e) => e.preventDefault()}
+                className={FIELD}
+              />
+              {confirmInput.trim() && !confirmMatches && (
+                <p role="alert" className="text-xs font-semibold text-primary mt-2">The numbers don't match.</p>
+              )}
+              <ModalActions>
+                <button type="button" onClick={closeContactConfirm} disabled={savingContact} className={BTN_SECONDARY}>Cancel</button>
+                <button type="submit" disabled={savingContact || !confirmMatches} className={BTN_PRIMARY}>
+                  {savingContact ? 'Saving...' : 'Confirm number'}
+                </button>
+              </ModalActions>
+            </form>
+          ) : (
+            <>
+              <p className="text-sm text-text-body">
+                You will no longer get SMS fire alerts. Push and Telegram alerts are not affected.
+              </p>
+              <ModalActions>
+                <button type="button" onClick={closeContactConfirm} disabled={savingContact} className={BTN_SECONDARY}>Cancel</button>
+                <button type="button" onClick={saveContact} disabled={savingContact} className={BTN_PRIMARY}>
+                  {savingContact ? 'Removing...' : 'Remove number'}
+                </button>
+              </ModalActions>
+            </>
+          )}
+        </Modal>
+      )}
+
       {isAdviceModalOpen && createPortal(
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center sm:p-4"
