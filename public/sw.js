@@ -30,7 +30,7 @@ self.addEventListener('notificationclick', function(event) {
   const path = event.notification.data && event.notification.data.url;
   const target = new URL(typeof path === 'string' && /^\/(?![/\\])/.test(path) ? path : '/', self.location.origin).href;
   const targetUrl = new URL(target);
-  const isAlertLink = targetUrl.pathname.indexOf('/alert/') === 0;
+  const isAlertLink = targetUrl.pathname === '/alert' || targetUrl.pathname.indexOf('/alert/') === 0;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
       for (let i = 0; i < clientList.length; i++) {

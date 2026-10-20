@@ -9,6 +9,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// supabase.channel(name) hands back an existing channel of the same name, and removeChannel() drops it only once
+// the server confirms the leave. A page that mounts again sooner (navigating back, signing out and in, StrictMode)
+// got the old, already-subscribed channel and stopped receiving live updates until a reload. Each call gets its
+// own topic instead.
+let channelSeq = 0;
+export const realtimeChannel = (name: string) => supabase.channel(`${name}-${++channelSeq}`);
+
 export type Role = 'admin' | 'bfp_responder' | 'resident';
 
 export type ProfileStatus = 'approved' | 'pending' | 'rejected';

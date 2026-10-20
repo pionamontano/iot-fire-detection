@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Search, Cpu, Settings, LogOut, ArrowRight, Map as MapIcon } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, realtimeChannel } from '../lib/supabase';
 import type { AlertEvent, Device } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { formatAge, displayAddress } from '../lib/location';
 import { getConnectivityStatus, DEVICE_STATUS } from '../lib/deviceStatus';
+import { alertPagePath } from '../lib/alertLink';
 import type { DeviceStatus } from '../lib/deviceStatus';
 
 // ─── Shared popover frame ───
@@ -58,6 +59,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const role = useAuth().profile?.role;
 
   // The badge counts every unresolved alert, not just those among the 10
   // most recent shown in the list (which undercounted during busy periods).
@@ -91,7 +93,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
   useEffect(() => {
     fetchAlerts();
 
-    const channel = supabase.channel('header_notifications')
+    const channel = realtimeChannel('header_notifications')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'alert_events' }, fetchAlerts)
       .subscribe();
 
@@ -159,7 +161,8 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ aler
                   return (
                     <li key={alert.id}>
                       <button
-                        onClick={() => { navigate(alertsPath); setIsOpen(false); }}
+                        // An open alert goes where this role acts on it (same page as a tapped push); a closed one to the log.
+                        onClick={() => { navigate(resolved ? alertsPath : alertPagePath(role, alert.id, alert.device_id)); setIsOpen(false); }}
                         className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-surface transition-colors ${resolved ? '' : 'bg-surface-warm/60'}`}
                       >
                         <span

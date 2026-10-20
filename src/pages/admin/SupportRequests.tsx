@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../components/PageHeader';
 import { FilterChips } from '../../components/FilterChips';
-import { supabase } from '../../lib/supabase';
+import { supabase, realtimeChannel } from '../../lib/supabase';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
 import { Loader2, CheckCircle, Inbox, Search, Eye, X } from 'lucide-react';
@@ -35,7 +35,7 @@ export const SupportRequests = () => {
   useEffect(() => {
     fetchRequests();
     // New requests show up without a reload (when the table is published to Realtime).
-    const channel = supabase.channel('support_requests_page')
+    const channel = realtimeChannel('support_requests_page')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'support_requests' }, () => fetchRequests(false))
       .subscribe();
     return () => { supabase.removeChannel(channel); };

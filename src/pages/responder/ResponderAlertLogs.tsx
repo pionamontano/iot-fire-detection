@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { supabase, realtimeChannel } from '../../lib/supabase';
 import type { AlertEvent, Device } from '../../lib/supabase';
 import { displayAddress } from '../../lib/location';
 import { alertStatus, formatEventTime } from '../../lib/alertText';
@@ -84,7 +84,7 @@ export const ResponderAlertLogs = () => {
 
   useEffect(() => {
     fetchData();
-    const sub = supabase.channel('resp_alert_logs')
+    const sub = realtimeChannel('resp_alert_logs')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'alert_events' }, fetchData)
       .subscribe();
     return () => { supabase.removeChannel(sub); };
@@ -306,6 +306,8 @@ const Row = ({ label, children }: { label: string; children: ReactNode }) => (
 
 const AlertDetail = ({ alert, onClose }: { alert: LogAlert; onClose: () => void }) => {
   const target = navigationTarget(alert, alert.devices);
+  const navigate = useNavigate();
+  const { open } = alertStatus(alert);
   return (
     <Modal title="Fire Alert Details" onClose={onClose}>
       <dl>
@@ -338,8 +340,14 @@ const AlertDetail = ({ alert, onClose }: { alert: LogAlert; onClose: () => void 
         {alert.outcome_notes && <Row label="Notes">{alert.outcome_notes}</Row>}
         <Row label="BFP SMS">{alert.sms_sent_bfp ? 'Sent by the device' : 'Not confirmed by the device'}</Row>
       </dl>
-      <div className="mt-6 flex justify-end">
+      <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
         <button type="button" onClick={onClose} className={`${BTN_SECONDARY} w-full sm:w-auto`}>Close</button>
+        {/* The log is the record; an open fire is acknowledged and closed on its dashboard card. */}
+        {open && (
+          <button type="button" onClick={() => navigate(`/responder?alert=${encodeURIComponent(alert.id)}`)} className={`${BTN_PRIMARY} w-full sm:w-auto`}>
+            Acknowledge / resolve on dashboard
+          </button>
+        )}
       </div>
     </Modal>
   );

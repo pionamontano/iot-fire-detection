@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { supabase, realtimeChannel } from '../../lib/supabase';
 import type { AlertEvent } from '../../lib/supabase';
 import { displayAddress } from '../../lib/location';
 import { useNowTick } from '../../hooks/useNowTick';
@@ -29,8 +29,6 @@ import {
   Navigation,
   MapPin,
   MapPinOff,
-  Volume2,
-  VolumeX,
   ShieldCheck,
   PhoneCall,
   UserX,
@@ -129,146 +127,8 @@ export const ResponderDashboard = () => {
     return () => clearInterval(id);
   }, [fireAlerts.length]);
 
-  // ─── Alarm sound (Web Audio siren) ───
-  // Browsers keep a page's audio suspended until the user has clicked or typed on it, so a dashboard opened or
-  // reloaded with a saved session would stay silent when a fire arrives. The AudioContext is therefore created on
-  // mount: its state tells us up front whether sound is blocked, and the next click or key press anywhere on the
-  // page unlocks it (a siren already started on a suspended context then becomes audible on its own).
-  const audioCtxRef = React.useRef<AudioContext | null>(null);
-  const oscillatorRef = React.useRef<OscillatorNode | null>(null);
-  const gainNodeRef = React.useRef<GainNode | null>(null);
-  const sirenIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
-  const isPlayingRef = React.useRef(false);
-  // 'running' when sound can play; 'suspended' (or Safari's 'interrupted') while the browser blocks it.
-  const [audioState, setAudioState] = useState<string>('running');
-
-  const startSiren = useCallback(() => {
-    if (isPlayingRef.current) return;
-    const ctx = audioCtxRef.current;
-    if (!ctx || ctx.state === 'closed') return;
-    isPlayingRef.current = true;
-    try {
-      if (ctx.state !== 'running') ctx.resume().catch(console.warn);
-
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      oscillator.type = 'square';
-      oscillator.frequency.setValueAtTime(800, ctx.currentTime);
-      gainNode.gain.setValueAtTime(0, ctx.currentTime);
-      oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      oscillator.start();
-      oscillatorRef.current = oscillator;
-      gainNodeRef.current = gainNode;
-
-      let high = false;
-      sirenIntervalRef.current = setInterval(() => {
-        oscillator.frequency.setTargetAtTime(high ? 800 : 1200, ctx.currentTime, 0.1);
-        gainNode.gain.setTargetAtTime(0.3, ctx.currentTime, 0.1);
-        high = !high;
-      }, 500);
-    } catch (err) {
-      console.warn('AudioContext failed to start:', err);
-    }
-  }, []);
-
-  const stopSiren = useCallback(() => {
-    if (!isPlayingRef.current) return;
-    isPlayingRef.current = false;
-    if (sirenIntervalRef.current) {
-      clearInterval(sirenIntervalRef.current);
-      sirenIntervalRef.current = null;
-    }
-    const oscillator = oscillatorRef.current;
-    const gainNode = gainNodeRef.current;
-    oscillatorRef.current = null;
-    gainNodeRef.current = null;
-    try {
-      if (gainNode && audioCtxRef.current) {
-        gainNode.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.1);
-      }
-      setTimeout(() => {
-        try {
-          oscillator?.stop();
-        } catch { /* already stopped */ }
-        oscillator?.disconnect();
-        gainNode?.disconnect();
-      }, 200);
-    } catch (err) {
-      console.warn('Error stopping audio:', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    let ctx: AudioContext;
-    try {
-      ctx = new AudioContextClass();
-    } catch (err) {
-      console.warn('AudioContext unavailable:', err);
-      return;
-    }
-    // iOS plays Web Audio in the "ambient" category, which the ring/silent switch mutes; "playback" keeps the
-    // siren audible on a phone set to silent (Safari 17+; ignored elsewhere).
-    const nav = navigator as Navigator & { audioSession?: { type: string } };
-    if (nav.audioSession) {
-      try { nav.audioSession.type = 'playback'; } catch { /* unsupported value */ }
-    }
-    audioCtxRef.current = ctx;
-    const sync = () => setAudioState(ctx.state);
-    ctx.addEventListener('statechange', sync);
-    sync();
-    return () => {
-      stopSiren();
-      ctx.removeEventListener('statechange', sync);
-      audioCtxRef.current = null;
-      ctx.close().catch(console.warn);
-    };
-  }, [stopSiren]);
-
-  const audioBlocked = audioState === 'suspended' || audioState === 'interrupted';
-  const unlockAudio = useCallback(() => {
-    const ctx = audioCtxRef.current;
-    if (!ctx || ctx.state === 'running' || ctx.state === 'closed') return;
-    ctx.resume().catch(console.warn);
-    // iOS only unlocks a context that starts a sound inside the gesture itself: play one silent sample.
-    try {
-      const src = ctx.createBufferSource();
-      src.buffer = ctx.createBuffer(1, 1, 22050);
-      src.connect(ctx.destination);
-      src.start(0);
-    } catch { /* resume() alone suffices elsewhere */ }
-  }, []);
-
-  // While sound is blocked, any click, tap or key press on the page counts as the user gesture that unlocks it.
-  // iOS Safari grants audio only on touchend/click, not on pointerdown (which fires at touch start).
-  useEffect(() => {
-    if (!audioBlocked) return;
-    const events = ['pointerdown', 'touchend', 'click', 'keydown'] as const;
-    events.forEach(e => window.addEventListener(e, unlockAudio, true));
-    return () => events.forEach(e => window.removeEventListener(e, unlockAudio, true));
-  }, [audioBlocked, unlockAudio]);
-
-  // iOS leaves the context 'interrupted' after the app was backgrounded or the phone locked: try to resume on return.
-  useEffect(() => {
-    const onVisible = () => {
-      const ctx = audioCtxRef.current;
-      if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running' && ctx.state !== 'closed') {
-        ctx.resume().catch(console.warn);
-      }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, []);
-
-  // The siren sounds while any fire is still unacknowledged. It cannot be muted here: acknowledging the fire is
-  // the only way to silence it, so a responder cannot switch it off by accident and then miss the next fire.
+  // The alarm sound lives in ResponderLayout (components/ResponderAlarm.tsx) so it keeps sounding on every page.
   const unacknowledgedCount = fireAlerts.filter(a => !a.incident_status || a.incident_status === 'active').length;
-  useEffect(() => {
-    if (unacknowledgedCount > 0) startSiren();
-    else stopSiren();
-  }, [unacknowledgedCount, startSiren, stopSiren]);
 
   const fetchData = useCallback(async () => {
     const todayStart = new Date();
@@ -304,10 +164,10 @@ export const ResponderDashboard = () => {
 
   useEffect(() => {
     fetchData();
-    const deviceSub = supabase.channel('resp_devices')
+    const deviceSub = realtimeChannel('resp_devices')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, fetchData)
       .subscribe();
-    const alertSub = supabase.channel('resp_alerts')
+    const alertSub = realtimeChannel('resp_alerts')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'alert_events' }, fetchData)
       .subscribe();
     return () => {
@@ -357,27 +217,6 @@ export const ResponderDashboard = () => {
       />
 
       {loadError && <LoadErrorBanner what="dashboard data" error={loadError} onRetry={fetchData} />}
-
-      {/* The browser blocks page audio until the user interacts with the page: say so before a fire is missed. */}
-      {audioBlocked && (
-        <div
-          role="alert"
-          className={`flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border ${unacknowledgedCount > 0
-            ? 'border-tier2-border/40 bg-tier2-bg text-tier2-text'
-            : 'border-tier1-border/40 bg-tier1-bg text-tier1-text'}`}
-        >
-          <VolumeX className="w-5 h-5 shrink-0" />
-          <div className="text-sm flex-1 min-w-0">
-            <p className="font-bold">
-              {unacknowledgedCount > 0 ? 'A fire alarm is sounding, but the browser has blocked the sound.' : 'The browser is blocking the alarm sound.'}
-            </p>
-            <p className="mt-0.5">Tap or click anywhere on this page to allow it. Until then a new fire will not be heard.</p>
-          </div>
-          <button type="button" onClick={unlockAudio} className={`${BTN_SECONDARY} shrink-0`}>
-            <Volume2 className="w-4 h-4" /> Enable alarm sound
-          </button>
-        </div>
-      )}
 
       {/* Only for devices that WERE reporting and have all gone silent: alerts cannot arrive. */}
       {allSilent && (

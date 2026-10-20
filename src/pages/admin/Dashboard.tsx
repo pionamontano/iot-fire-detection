@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase, realtimeChannel } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import { PageHeader } from '../../components/PageHeader';
@@ -49,15 +49,15 @@ export const Dashboard = () => {
   useEffect(() => {
     fetchData();
 
-    const deviceSub = supabase.channel('dash_devices')
+    const deviceSub = realtimeChannel('dash_devices')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, fetchData)
       .subscribe();
 
-    const alertSub = supabase.channel('dash_alerts')
+    const alertSub = realtimeChannel('dash_alerts')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'alert_events' }, fetchData)
       .subscribe();
 
-    const profileSub = supabase.channel('dash_profiles')
+    const profileSub = realtimeChannel('dash_profiles')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchData)
       .subscribe();
 

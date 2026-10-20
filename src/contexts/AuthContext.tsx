@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, realtimeChannel } from '../lib/supabase';
 import type { Profile } from '../lib/supabase';
 
 interface AuthContextType {
@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!userId) return;
     const recheck = () => refreshProfile(userId);
 
-    const channel = supabase.channel(`own_profile_${userId}`)
+    const channel = realtimeChannel(`own_profile_${userId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, recheck)
       .subscribe();
     const onVisible = () => { if (document.visibilityState === 'visible') recheck(); };

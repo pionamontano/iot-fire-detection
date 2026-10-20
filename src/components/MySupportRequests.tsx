@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Clock, CheckCircle2, Inbox, ChevronDown, ChevronUp } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, realtimeChannel } from '../lib/supabase';
 import type { SupportRequest } from '../lib/supabase';
 import { formatDateTime } from '../lib/supportRequests';
 
@@ -35,7 +35,7 @@ export const MySupportRequests = ({ userId, refreshKey, cardClassName, titleClas
     };
     load();
     // Picks up the admin's reply without a reload (when the table is published to Realtime).
-    const channel = supabase.channel(`my_support_requests_${userId}`)
+    const channel = realtimeChannel(`my_support_requests_${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'support_requests', filter: `user_id=eq.${userId}` }, load)
       .subscribe();
     return () => { cancelled = true; supabase.removeChannel(channel); };

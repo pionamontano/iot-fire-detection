@@ -15,3 +15,8 @@ test('an admin lands on the device-status row for the device', () => {
 test('a resident lands on their home page', () => {
   assert.equal(alertPagePath('resident', 'a1', 'd1'), '/home');
 });
+
+test('an /alert link without an alert id (sent by an earlier build) still opens the role\'s page', () => {
+  assert.equal(alertPagePath('bfp_responder', undefined, 'd1'), '/responder');
+  assert.equal(alertPagePath('admin', undefined, 'd1'), '/admin/status?device=d1');
+});

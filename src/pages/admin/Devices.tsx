@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { PageHeader } from '../../components/PageHeader';
-import { supabase } from '../../lib/supabase';
+import { supabase, realtimeChannel } from '../../lib/supabase';
 import { DEVICE_COLUMNS } from '../../lib/deviceColumns';
 import { LoadErrorBanner } from '../../components/LoadErrorBanner';
 import type { LoadErrorInfo } from '../../components/LoadErrorBanner';
@@ -189,7 +189,7 @@ export const Devices = () => {
     fetchLatestRelease();
 
     // Keep status, pins and owners current (a resident moving a pin, an alert, a new link).
-    const channel = supabase.channel('devices_page')
+    const channel = realtimeChannel('devices_page')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, fetchDevices)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'alert_events' }, fetchDevices)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchDevices)
