@@ -1,5 +1,11 @@
 // ============================================================
-// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM, OTA  (v2.6)
+// connectivity.cpp — Wi-Fi, HTTPS, Alert FSM, OTA  (v2.7)
+//
+// Changes from v2.6 (this file):
+//  [28] Tier 2 SMS is the backup for when the internet is gone (owner
+//       decision OQ-02): fireTier2Alert() sends the owner + BFP SMS only
+//       if its Tier 2 POST was not acknowledged (offline, DEGRADED, or the
+//       POST failed). An alert the server accepted sends no SMS.
 //
 // Changes from v2.5 (this file):
 //  [25] The FSM runs when either sensor has a reading (was: both).
@@ -940,19 +946,24 @@ static void fireTier1Warning(ConnectivityCtx* ctx, const SensorData& sd, const G
     attemptAlertPost(ctx, sd, fix);
 }
 
-// ── Tier 2: trigger-alert POST + owner SMS + BFP SMS ───────
+// ── Tier 2: trigger-alert POST, owner + BFP SMS only if the POST did not get through ──
 static void fireTier2Alert(ConnectivityCtx* ctx, const SensorData& sd, const GpsFix& fix) {
     // 1. POST to trigger-alert — updates ctx->lastAlertEventId,
     //    ownerNumber, bfpNumber from response
     ctx->alertRetry.reassert(2, millis());
     attemptAlertPost(ctx, sd, fix);
 
-    // 2. Queue SMS using freshest contacts — non-blocking, immediately and regardless of the POST result
-    //    (GSM fallback). Snapshot ctx->lastAlertEventId into the job now: it reflects this call's own
-    //    postAlert() result above (or stays empty if we're offline or the POST failed — then the result is
-    //    bound LATER, see serviceSmsReports()). Callers reset it to empty on every
-    //    CLEAR→TIERx transition (see connectivityUpdate()), so it can
-    //    never carry a stale, unrelated alert's id into this SMS.
+    // 2. SMS is the backup for when the internet is gone (owner decision OQ-02). If the server accepted the
+    //    Tier 2 POST above, push and Telegram go out from the server and no SMS is sent. Otherwise (Wi-Fi down,
+    //    DEGRADED, or the POST failed) the SMS are queued now, non-blocking, using the freshest contacts; the
+    //    POST keeps retrying on its own. Snapshot ctx->lastAlertEventId into the job now: it is empty (the result
+    //    is then bound LATER, see serviceSmsReports()) unless an earlier POST of this incident, e.g. its Tier 1,
+    //    got through. Callers reset it to empty on every CLEAR→TIERx transition (see
+    //    connectivityUpdate()), so it can never carry a stale, unrelated alert's id into this SMS.
+    if (ctx->alertRetry.ackedTier() >= 2) {
+        CLOG("Tier 2 delivered online — no SMS");
+        return;
+    }
     uint32_t now = millis();
     if (now - ctx->lastSmsSent_ms >= SMS_DEBOUNCE_MS || ctx->lastSmsSent_ms == 0) {
         ctx->lastSmsSent_ms = now;

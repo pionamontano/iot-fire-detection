@@ -182,8 +182,8 @@ Here you control **when** the device alerts and **where** alerts are sent.
 
 One reading over its level raises a **warning**; both together raise a **fire alert**.
 
-**Where Alerts Are Sent** (each one applies on its own). You receive **warnings (Tier 1)** and **fire alerts (Tier 2)** by push and Telegram on each channel turned on here. Every fire alert (Tier 2) is also sent by SMS, with or without internet; warnings (Tier 1) are not.
-- **SMS**: the mobile number (`09XXXXXXXXX`) your device texts on every fire alert. It is sent by the device itself over the mobile network, so it still arrives when the internet is down. Press **Save number**, then type the number again and press **Confirm number** (typing it twice catches a wrong digit before it is saved). Clearing the box and saving asks you to confirm before the number is removed.
+**Where Alerts Are Sent** (each one applies on its own). You receive **warnings (Tier 1)** and **fire alerts (Tier 2)** by push and Telegram on each channel turned on here. SMS is the backup: if your device has no Wi-Fi or internet during a fire alert (Tier 2), it texts you instead. Warnings (Tier 1) are never sent by SMS.
+- **SMS**: the mobile number (`09XXXXXXXXX`) your device texts when it can't send a fire alert online (Wi-Fi or internet down). The device sends it itself over the mobile network. When the device is online you get push and Telegram, not SMS. Press **Save number**, then type the number again and press **Confirm number** (typing it twice catches a wrong digit before it is saved). Clearing the box and saving asks you to confirm before the number is removed.
 - **Push notifications**: press **Turn on** and allow notifications to get alerts in that browser, even when AgapSense isn't open. Turn it on in each browser you use. *Unavailable* means the browser doesn't support it or notifications are blocked.
 - **Telegram**: press **Link Telegram** and follow the prompt. Fire alerts are then also sent to your Telegram through the AgapSense bot.
 
@@ -297,7 +297,7 @@ Messages include a navigation link of the form `maps.google.com/?q=<latitude>,<l
 
 **Why didn't I get another SMS?** To avoid spamming, the device will not resend SMS for about **5 minutes** while the alert continues. The alarm, LEDs, and app continue to update.
 
-**What if Wi-Fi is down during a fire?** The red LED, buzzer and SMS still work through the SIM. The device keeps trying to send the online alert and delivers it when Wi-Fi returns, without creating duplicates. However, **readings taken while offline are not stored**.
+**What if Wi-Fi is down during a fire?** The red LED and buzzer still work, and the device texts you and the BFP through its SIM instead. The device keeps trying to send the online alert and delivers it when Wi-Fi returns, without creating duplicates. However, **readings taken while offline are not stored**.
 
 **When does an alert end?** After 2 consecutive safe readings the device switches off the LEDs and buzzer. There is no button to silence the beeps: marking a warning resolved in the app closes it in the system, but the device keeps beeping until its readings are back to normal. The incident in the system is then closed automatically unless a responder has already taken it over.
 
@@ -328,7 +328,7 @@ Messages include a navigation link of the form `maps.google.com/?q=<latitude>,<l
 
 **Does it work in a power outage?** Yes, on its backup battery. The dashboard shows *On battery*.
 
-**Does it work without internet?** Local alarm (LEDs, buzzer) and Tier 2 SMS still work. Dashboard and push/Telegram alerts need internet.
+**Does it work without internet?** Local alarm (LEDs, buzzer) still works, and fire alerts (Tier 2) are sent by SMS instead. Dashboard and push/Telegram alerts need internet.
 
 **Can I silence the buzzer?** The buzzer stops by itself when readings return to safe levels. There is no local mute button. Ask your administrator if the alarm is a false alarm that does not stop.
 

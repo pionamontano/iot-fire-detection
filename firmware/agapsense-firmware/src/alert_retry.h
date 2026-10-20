@@ -13,7 +13,8 @@
 //     last reset that the server has not yet acknowledged with a 2xx.
 //   * Backoff after a transient failure (connect error/timeout/5xx/408/429): 5,10,20,40,60,60... s.
 //   * Gives up after a few permanent rejections (other 4xx) - retrying cannot fix those.
-//   * It does NOT queue or send SMS. SMS stays immediate and independent of the POST (GSM fallback).
+//   * It does NOT queue or send SMS. connectivity.cpp sends the Tier 2 SMS only when the POST made on entering
+//     Tier 2 was not acknowledged (ackedTier() < 2), and then at once; later retries never send SMS.
 //   * It does NOT guarantee exactly-once delivery. A retry after a lost response can reach the server
 //     again; the SERVER makes that safe (one open incident per device, claim-before-send ledger), and
 //     recipients may in rare cases receive a duplicate (at-least-once). See

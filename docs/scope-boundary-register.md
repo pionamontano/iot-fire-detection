@@ -16,7 +16,7 @@ Companion to [`system-specification.md`](system-specification.md) §5.3 (baselin
 | GPS capture (NEO-6M), cached fix, `gps_valid` | A | Verified (code) | `gps.cpp` | Included | — |
 | Reverse geocoding (Nominatim, tiered address) | A | Verified (code); service Unverified | `trigger-alert:20-79` | Included; provider change excluded | Provider swap needs approval |
 | Wi-Fi data path (HTTPS, WiFiManager provisioning with WPA2 portal and per-node identity in NVS) | A | Verified (code); portal flow untested on hardware (OQ-26) | `connectivity.cpp`; `identity.cpp` | Included | — |
-| Tier 2 SMS via SIM800L, parallel to Wi-Fi | A | Verified (code); hardware Cannot Verify | `gsm.cpp`, `connectivity.cpp:667-681` | Included as built | Confirm semantics (OQ-02) |
+| Tier 2 SMS via SIM800L, backup when the alert can't be delivered online | A | Verified (code, host simulation); hardware Cannot Verify | `gsm.cpp`, `connectivity.cpp` `fireTier2Alert()` | Included (owner decision OQ-02, firmware 2.4.0) | — |
 | GSM **data** fallback (alert POST over cellular) | D / E? | Not Implemented | no code | **Hold** — excluded until owner rules | OQ-02 |
 | Telegram station-chat notification (Tier 2 only) | B | Verified (code); delivery Unverified | `trigger-alert` | Included | Evidence of delivery (test) |
 | Web Push to admin/responder/resident | B | Verified (code); delivery Unverified; opt-in UI for all three roles | `send-push-notification`; `Settings.tsx`, `ResponderSettings.tsx`, `ResidentAlertSettings.tsx` | Included | — |

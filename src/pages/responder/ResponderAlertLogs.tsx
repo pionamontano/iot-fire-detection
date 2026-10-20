@@ -336,7 +336,7 @@ const AlertDetail = ({ alert, onClose }: { alert: LogAlert; onClose: () => void 
           {alert.resolution_source && <span className="block text-xs text-text-subtle mt-0.5">By {CLOSED_BY[alert.resolution_source] ?? alert.resolution_source}</span>}
         </Row>
         {alert.outcome_notes && <Row label="Notes">{alert.outcome_notes}</Row>}
-        <Row label="BFP SMS">{alert.sms_sent_bfp ? 'Sent by the device' : 'Not confirmed by the device'}</Row>
+        <Row label="BFP SMS">{alert.sms_sent_bfp ? 'Sent by the device' : 'None confirmed (the device texts only when it has no internet)'}</Row>
       </dl>
       <div className="mt-6 flex justify-end">
         <button type="button" onClick={onClose} className={`${BTN_SECONDARY} w-full sm:w-auto`}>Close</button>

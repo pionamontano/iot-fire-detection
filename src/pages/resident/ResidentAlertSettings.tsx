@@ -16,8 +16,9 @@ import { NoDeviceLinked } from '../../components/NoDeviceLinked';
 
 // Two independent parts: the alert levels (saved together with one Save) and
 // where alerts are sent (SMS number, push and Telegram, each applied on its own).
-// Residents get push and Telegram for warnings (Tier 1) and fire alerts (Tier 2); the device texts every
-// fire alert (Tier 2), with or without internet. Changing the SMS number asks for it to be typed again.
+// Residents get push and Telegram for warnings (Tier 1) and fire alerts (Tier 2). SMS is only the backup: the
+// device texts a fire alert (Tier 2) when it has no internet to send it online. Changing the SMS number asks
+// for it to be typed again.
 
 const CARD = 'bg-white border border-border rounded-lg p-5 sm:p-6';
 const CARD_TITLE = 'text-lg font-bold tracking-[-0.01em] text-text';
@@ -121,7 +122,7 @@ export const ResidentAlertSettings = () => {
   const [origContact, setOrigContact] = useState('');
   const [savingContact, setSavingContact] = useState(false);
   const [contactMsg, setContactMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  // Confirmation step before the SMS number changes: the number fire alerts are texted to
+  // Confirmation step before the SMS number changes: the backup number for fire alerts
   // shouldn't change on one tap, and retyping it catches a typo before it is saved.
   const [confirmingContact, setConfirmingContact] = useState<string | null>(null);
   const [confirmInput, setConfirmInput] = useState('');
@@ -241,7 +242,7 @@ export const ResidentAlertSettings = () => {
     } else {
       setContactNumber(normalized);
       setOrigContact(normalized);
-      setContactMsg({ ok: true, text: normalized ? 'Saved. Fire alerts will be texted to this number.' : 'Removed. You will get no SMS alerts.' });
+      setContactMsg({ ok: true, text: normalized ? 'Saved. If your device loses internet during a fire alert, it will text this number.' : 'Removed. You will get no SMS backup alerts.' });
     }
     setSavingContact(false);
     setConfirmingContact(null);
@@ -345,12 +346,12 @@ export const ResidentAlertSettings = () => {
           <section className={CARD}>
             <h2 className={CARD_TITLE}>Where Alerts Are Sent</h2>
             <p className="text-xs text-text-subtle mt-0.5">
-              You receive warnings (Tier 1) and fire alerts (Tier 2) by push and Telegram. Every fire alert (Tier 2) is also sent by SMS, with or without internet. Warnings (Tier 1) are not sent by SMS.
+              You receive warnings (Tier 1) and fire alerts (Tier 2) by push and Telegram. SMS is the backup: if your device has no Wi-Fi or internet during a fire alert (Tier 2), it texts you instead. Warnings (Tier 1) are not sent by SMS.
             </p>
             <ul className="mt-6 flex flex-col divide-y divide-border-warm">
               <ChannelRow
                 icon={Phone} title="SMS"
-                detail="Sent by the device itself over the mobile network on every fire alert, so it still reaches you when the internet is down."
+                detail="Backup for when Wi-Fi or the internet is down. If your device can't send a fire alert online, it texts this number itself over the mobile network."
                 status={savedContact ? 'On' : 'Not set'} tone={savedContact ? 'ok' : 'warn'}
               >
                 <label htmlFor="sms-number" className="sr-only">Mobile number for SMS alerts</label>
@@ -448,7 +449,7 @@ export const ResidentAlertSettings = () => {
           {confirmingContact ? (
             <form onSubmit={(e) => { e.preventDefault(); saveContact(); }}>
               <p className="text-sm text-text-body">
-                Fire alerts from your device will be texted to <span className="font-bold text-text">{confirmingContact}</span>
+                When your device has no internet, fire alerts will be texted to <span className="font-bold text-text">{confirmingContact}</span>
                 {origContact ? <> instead of <span className="font-bold text-text">{origContact}</span></> : null}.
                 Type the number again to confirm.
               </p>
@@ -478,7 +479,7 @@ export const ResidentAlertSettings = () => {
           ) : (
             <>
               <p className="text-sm text-text-body">
-                You will no longer get SMS fire alerts. Push and Telegram alerts are not affected.
+                You will get no SMS when your device has no internet during a fire alert. Push and Telegram alerts are not affected.
               </p>
               <ModalActions>
                 <button type="button" onClick={closeContactConfirm} disabled={savingContact} className={BTN_SECONDARY}>Cancel</button>

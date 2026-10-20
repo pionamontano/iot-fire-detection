@@ -164,8 +164,9 @@ Previously a database fault during the device lookup surfaced as `401` and inter
 rejection, so faults are now `500`. `confirm-sms-status` additionally ignores a late failure report for an SMS already recorded as sent.
 
 ### Firmware (Step 5.3, local/test only — compiled firmware and hardware NOT verified)
-- **First attempt unchanged**: the alert POST is still made synchronously at the CLEAR->TIERx / TIER1->TIER2 transition. SMS is still queued
-  immediately afterwards, independent of the POST result and of Wi-Fi (GSM fallback), with the unchanged 5-minute SMS debounce.
+- **First attempt unchanged**: the alert POST is still made synchronously at the CLEAR->TIERx / TIER1->TIER2 transition. Since firmware 2.4.0
+  the Tier 2 SMS is the backup for when the internet is gone (OQ-02): it is queued immediately afterwards only if that POST was not
+  acknowledged (offline, DEGRADED, or the POST failed), with the unchanged 5-minute SMS debounce. An acknowledged Tier 2 sends no SMS.
 - **Retry**: if that POST does not get a 2xx, `attemptAlertPost()` retries from the connectivity tick (at most one alert POST per tick, only while
   ONLINE; being offline neither consumes an attempt nor advances the backoff). Transient failures (no response, timeout, 5xx, 408, 429) back off
   5/10/20/40/60 s (the delay is measured from the end of the failed call). Other 4xx are retried 3 times then abandoned. The tier sent is always the

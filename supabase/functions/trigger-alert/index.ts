@@ -500,7 +500,9 @@ serve(async (req: Request) => {
         ? `GPS: ${latitude}, ${longitude}${gps_valid ? '' : ' (estimated — last known)'}\nNavigate: https://maps.google.com/?q=${latitude},${longitude}\n\n`
         : registeredPinString(device);
 
-      tgText = `FIRE ALERT — Tier 2\n\nDevice: ${device.device_code}\nLocation: ${locationString}\nTime: ${timeString}\n\nSensor readings:\n- CO: ${co_ppm} ppm (threshold: ${device.co_threshold} ppm)\n- Temp: ${temp_celsius}°C (threshold: ${device.temp_threshold}°C)\n\n${gpsString}SMS alerts have been dispatched.`;
+      // No line about SMS: the device texts only when it could not deliver this alert online (firmware 2.4.0+), which
+      // this function cannot tell from the request.
+      tgText = `FIRE ALERT — Tier 2\n\nDevice: ${device.device_code}\nLocation: ${locationString}\nTime: ${timeString}\n\nSensor readings:\n- CO: ${co_ppm} ppm (threshold: ${device.co_threshold} ppm)\n- Temp: ${temp_celsius}°C (threshold: ${device.temp_threshold}°C)\n\n${gpsString}`.trimEnd();
     }
 
     // 6. NOTIFY, bounded. If the incident could not be recorded, still make a best-effort station notification.

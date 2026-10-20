@@ -42,8 +42,9 @@ enum class DeviceState { ONLINE, DEGRADED, OFFLINE };
 //        → yellow LED + trigger-alert POST (tier=1, no SMS)
 //          backend sends the Telegram warning
 // TIER2: both sensors simultaneously exceed alert threshold
-//        → red LED + buzzer + trigger-alert POST (tier=2) + owner SMS + BFP SMS
-//          backend sends the Telegram alert
+//        → red LED + buzzer + trigger-alert POST (tier=2)
+//          backend sends the push and Telegram alert; owner SMS + BFP SMS
+//          only if that POST did not get through (no internet)
 enum class AlertTier { CLEAR, TIER1, TIER2 };
 
 // ── Connectivity Context ───────────────────────────────────

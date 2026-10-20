@@ -134,6 +134,9 @@ struct Dev {
 
 static void world() {
     g_hal.reset(); srv = Server(); g_hal.server = handle; gsmInit();
+    // gsm.cpp's queues are statics that a real reboot clears: empty them so no scenario sees the previous one's SMS
+    for (int i = 0; i < SMS_QUEUE_SIZE; i++) gsmProcessQueue();
+    { char r[8], id[40]; bool ok; uint32_t seq; while (gsmPopSmsResult(r, sizeof(r), id, sizeof(id), &ok, &seq)) {} }
     g_hal.calls.clear(); g_hal.smsSent.clear(); g_hal.smsBodies.clear(); g_hal.wdtAt.clear(); g_hal.wdtResets = 0;
 }
 static int countCalls(const char* what) { int n = 0; for (auto& c : g_hal.calls) if (c.url.find(what) != std::string::npos) ++n; return n; }
@@ -141,6 +144,11 @@ static std::vector<uint32_t> callTimes(const char* what) { std::vector<uint32_t>
 static uint32_t maxWdtGap() { uint32_t m = 0; for (size_t i = 1; i < g_hal.wdtAt.size(); i++) { uint32_t g = g_hal.wdtAt[i] - g_hal.wdtAt[i-1]; if (g > m) m = g; } return m; }
 static int reportsFor(const std::string& id, const std::string& role) { int n = 0; for (auto& r : srv.reports) if (r.id == id && r.role == role) ++n; return n; }
 static std::string lastField(const char* what, const char* key) { std::string v; for (auto& c : g_hal.calls) if (c.url.find(what) != std::string::npos) v = field(c.payload, key); return v; }
+// SMS is only sent when the Tier 2 alert can't be delivered online, so scenarios about the SMS path start the
+// fire with Wi-Fi down; it comes back after `seconds`, the alert POST then lands and the SMS results are bound.
+static void fireOffline(Dev& d, int seconds = 8) { g_hal.wifiUp = false; d.tier2(); d.run(seconds); g_hal.wifiUp = true; }
+// The device re-fetches get-device-config every 10 minutes; make that fetch happen on the next tick.
+static void refetchConfig(Dev& d) { d.ctx.lastConfigFetch_ms = g_hal.now - CONFIG_FETCH_INTERVAL_MS; d.tick(); }
 
 // Sensor faults (KI-17): a missing or failed sensor must not silence the other one, must not clear an alert,
 // and must show as a fault (-127 °C) instead of a frozen plausible value.
@@ -209,18 +217,18 @@ static void f03_probe_dies_hot_during_tier2() {
 // loads the number at boot (get-device-config) and again from every trigger-alert reply.
 static bool textedNumber(const std::string& n) { for (auto& s : g_hal.smsSent) if (s == n) return true; return false; }
 static void b01_cleared_bfp_contact_is_not_texted() {
-    printf("B01 admin clears the BFP contact after boot: the next fire texts only the owner, never the old number\n");
+    printf("B01 admin clears the BFP contact after boot: the next offline fire texts only the owner, never the old number\n");
     world(); Dev d; d.boot(); d.run(10);                 // booted with the old number loaded
-    srv.bfpContact = ""; d.tier2(); d.run(30);
+    srv.bfpContact = ""; refetchConfig(d); fireOffline(d); d.run(30);
     CHECK(srv.alertTiers.size() == 1, "alert still reported (got %zu)", srv.alertTiers.size());
     CHECK(!textedNumber("+639222222222"), "old BFP number not texted");
     CHECK(g_hal.smsSent.size() == 1 && g_hal.smsSent[0] == "+639111111111", "owner SMS only (got %zu)", g_hal.smsSent.size());
     CHECK(reportsFor("evt-1", "owner") == 1 && reportsFor("evt-1", "bfp") == 0, "no BFP delivery reported (%zu)", srv.reports.size());
 }
 static void b02_replaced_bfp_contact_is_used_at_once() {
-    printf("B02 admin replaces the BFP contact after boot: the next fire texts the new number, not the old one\n");
+    printf("B02 admin replaces the BFP contact after boot: the next offline fire texts the new number, not the old one\n");
     world(); Dev d; d.boot(); d.run(10);
-    srv.bfpContact = "09333333333"; d.tier2(); d.run(30);
+    srv.bfpContact = "09333333333"; refetchConfig(d); fireOffline(d); d.run(30);
     CHECK(textedNumber("09333333333"), "new BFP number texted");
     CHECK(!textedNumber("+639222222222"), "old BFP number not texted");
     CHECK(reportsFor("evt-1", "bfp") == 1, "BFP delivery reported once");
@@ -233,17 +241,27 @@ static void b03_cleared_at_boot_and_server_down() {
     CHECK(!textedNumber("+639222222222"), "no BFP SMS");
 }
 static void s01_normal() {
-    printf("S01 normal: one alert POST, two SMS, two confirmations, nothing repeated\n");
+    printf("S01 normal, online: one alert POST, no SMS (SMS is only the backup when the internet is gone), nothing repeated\n");
     world(); Dev d; d.boot(); d.tier2(); d.run(20);
     CHECK(srv.alertTiers.size() == 1 && srv.alertTiers[0] == 2, "one tier-2 POST (got %zu)", srv.alertTiers.size());
-    CHECK(g_hal.smsSent.size() == 2, "owner+bfp SMS (got %zu)", g_hal.smsSent.size());
-    CHECK(g_hal.smsSent.size() == 2 && g_hal.smsSent[0] == "+639111111111" && g_hal.smsSent[1] == "+639222222222");
-    CHECK(reportsFor("evt-1", "owner") == 1 && reportsFor("evt-1", "bfp") == 1 && srv.reports.size() == 2, "reports=%zu", srv.reports.size());
+    CHECK(g_hal.smsSent.empty(), "no SMS when the alert was delivered online (got %zu)", g_hal.smsSent.size());
+    CHECK(srv.smsCalls == 0, "nothing to confirm");
     d.run(300);
     CHECK(srv.alertTiers.size() == 1, "no repeated POST while the fire continues");
-    CHECK(g_hal.smsSent.size() == 2, "SMS debounce unchanged: no repeat");
-    d.safe(); d.run(10);
+    g_hal.wifiUp = false; d.run(60);
+    CHECK(g_hal.smsSent.empty(), "Wi-Fi lost after the alert was delivered: still no SMS (got %zu)", g_hal.smsSent.size());
+    g_hal.wifiUp = true; d.safe(); d.run(10);
     CHECK(srv.alertTiers.size() == 1 && d.ctx.alertTier == AlertTier::CLEAR, "clearing sends nothing");
+}
+static void s01b_offline_texts_owner_and_bfp() {
+    printf("S01b offline: owner and BFP SMS at once, each confirmed once the alert lands\n");
+    world(); Dev d; d.boot(); fireOffline(d);
+    CHECK(g_hal.smsSent.size() == 2 && g_hal.smsSent[0] == "+639111111111" && g_hal.smsSent[1] == "+639222222222", "owner+bfp SMS (got %zu)", g_hal.smsSent.size());
+    d.run(30);
+    CHECK(srv.alertTiers.size() == 1 && srv.alertTiers[0] == 2, "alert delivered after reconnecting (got %zu)", srv.alertTiers.size());
+    CHECK(reportsFor("evt-1", "owner") == 1 && reportsFor("evt-1", "bfp") == 1 && srv.reports.size() == 2, "reports=%zu", srv.reports.size());
+    d.run(300);
+    CHECK(g_hal.smsSent.size() == 2, "no repeat SMS while the fire continues");
 }
 static void s02_server_down_then_recovers() {
     printf("S02 server unreachable for the first ~60 s: SMS go out at once, POST retried with backoff, SMS result bound late\n");
@@ -266,6 +284,7 @@ static void s03_5xx_then_ok() {
     printf("S03 two 500s then success: retries then stops\n");
     world(); Dev d; d.boot(); srv.mode = ERR500; d.tier2(); d.run(14);
     int during = countCalls("trigger-alert"); CHECK(during >= 2 && during <= 3, "attempts while failing = %d", during);
+    CHECK(g_hal.smsSent.size() == 2, "Wi-Fi up but the POST failed: SMS sent at once (got %zu)", g_hal.smsSent.size());
     srv.mode = OK; d.run(40);
     CHECK(srv.alertTiers.size() == 1, "one accepted POST");
     int total = countCalls("trigger-alert"); d.run(120);
@@ -300,12 +319,12 @@ static void s06_escalation_after_ack() {
     d.tier2(); d.run(10);
     CHECK(srv.alertTiers.size() == 2 && srv.alertTiers[1] == 2, "escalation POSTed immediately");
     CHECK(buzzerMode() == agap::BuzzerMode::CONTINUOUS, "Tier 2 is a continuous tone");
-    CHECK(g_hal.smsSent.size() == 2 && srv.reports.size() == 2);
+    CHECK(g_hal.smsSent.empty() && srv.smsCalls == 0, "escalation delivered online: no SMS");
     d.tier1(); d.run(8); CHECK(d.ctx.alertTier == AlertTier::TIER1);
     CHECK(buzzerMode() == agap::BuzzerMode::CHIRP, "de-escalation back to Tier 1 chirps again");
     d.tier2(); d.run(10);
     CHECK(srv.alertTiers.size() == 3 && srv.alertTiers[2] == 2, "re-escalation re-POSTs (pre-5.3 behaviour) (%zu)", srv.alertTiers.size());
-    CHECK(g_hal.smsSent.size() == 2, "...but the 5-minute SMS debounce still suppresses a second SMS pair");
+    CHECK(g_hal.smsSent.empty(), "...and, delivered online again, still no SMS");
 }
 static void s07_clear_cancels() {
     printf("S07 CLEAR cancels a pending retry\n");
@@ -330,8 +349,8 @@ static void s08_new_incident_does_not_inherit() {
     d.safe(); d.run(6); srv.mode = OK; d.run(320);   // > the 5-minute SMS debounce, so incident 2 may text again
     d.tier2(); d.run(30);
     CHECK(srv.incidents == 1 && srv.alertTiers.size() == 1, "second incident created once");
-    CHECK(g_hal.smsSent.size() == 4, "4 SMS in total (2 per incident) (%zu)", g_hal.smsSent.size());
-    CHECK(srv.reports.size() == 2, "only incident 2's two results are reported, not four (%zu)", srv.reports.size());
+    CHECK(g_hal.smsSent.size() == 2, "incident 1 texted (server down), incident 2 delivered online so not (%zu)", g_hal.smsSent.size());
+    CHECK(srv.reports.empty(), "incident 1's results are never reported against incident 2 (%zu)", srv.reports.size());
 }
 static void s09_offline_then_online() {
     printf("S09 Wi-Fi down during the fire, comes back later\n");
@@ -344,12 +363,12 @@ static void s09_offline_then_online() {
 }
 static void s10_sms_report_transient() {
     printf("S10 confirm-sms-status fails transiently: retried, reported exactly once each\n");
-    world(); Dev d; d.boot(); srv.smsFailures = 3; d.tier2(); d.run(40);
+    world(); Dev d; d.boot(); srv.smsFailures = 3; fireOffline(d); d.run(40);
     CHECK(reportsFor("evt-1", "owner") == 1 && reportsFor("evt-1", "bfp") == 1, "reports=%zu", srv.reports.size());
 }
 static void s11_sms_report_permanent_outage() {
     printf("S11 confirm-sms-status down forever: bounded retries, then dropped\n");
-    world(); Dev d; d.boot(); srv.smsStatusCode = 503; d.tier2(); d.run(120);
+    world(); Dev d; d.boot(); srv.smsStatusCode = 503; fireOffline(d); d.run(120);
     d.run(300);
     int n = srv.smsCalls; CHECK(n == 2 * kMaxReports, "bounded (%d)", n);
     d.run(600); CHECK(srv.smsCalls == n, "stopped retrying");
@@ -357,9 +376,9 @@ static void s11_sms_report_permanent_outage() {
     for (size_t i = 1; i < c.size(); i++) CHECK(c[i] - c[i-1] >= 1500, "at most one failing report per tick (gap %u ms)", c[i] - c[i-1]);
 }
 static void s12_reboot_during_fire() {
-    printf("S12 device reboots mid-fire: alert re-sent (server dedupes), SMS pair repeats once (documented, D5.7)\n");
-    world(); Dev d; d.boot(); d.tier2(); d.run(20);
-    Dev d2; d2.boot(); d2.tier2(); d2.run(20);
+    printf("S12 device reboots mid-fire while offline: alert re-sent (server dedupes), SMS pair repeats once (documented, D5.7)\n");
+    world(); Dev d; d.boot(); fireOffline(d); d.run(20);
+    Dev d2; d2.boot(); fireOffline(d2); d2.run(20);
     CHECK(srv.incidents == 1, "still one open incident on the server");
     CHECK(g_hal.smsSent.size() == 4, "SMS repeated after reboot (at-least-once) (%zu)", g_hal.smsSent.size());
     CHECK(reportsFor("evt-1", "owner") == 2, "both runs' results reported against the same incident");
@@ -388,8 +407,9 @@ static void s15_cap_on_attempts_over_an_hour() {
 
 static void s16_bound_id_is_honoured() {
     printf("S16 a result that already carries its incident's id is reported against THAT id, even after a new incident began\n");
-    world(); Dev d; d.boot(); d.tier2(); d.tick(); d.tick(); d.tick();   // POST ok (evt-1) and SMS queued with id evt-1
-    g_hal.wifiUp = false;                                      // link lost before the results could be reported
+    world(); Dev d; d.boot(); d.tier1(); d.run(10);            // Tier 1 delivered: evt-1
+    srv.mode = ERR500; d.tier2(); d.tick(); d.tick(); d.tick(); // Tier 2 POST fails, so SMS queued with id evt-1
+    srv.mode = OK; g_hal.wifiUp = false;                       // link lost before the results could be reported
     d.run(4);
     CHECK(srv.reports.empty() && g_hal.smsSent.size() == 2);
     d.safe(); d.run(6); CHECK(d.ctx.alertTier == AlertTier::CLEAR);
@@ -457,7 +477,7 @@ static void r04_holder_capacity() {
 }
 static void r05_duplicate_report_is_harmless() {
     printf("R05 the same delivery report is presented twice (response lost after the server applied it)\n");
-    world(); Dev d; d.boot(); srv.smsLostResponses = 2; d.tier2(); d.run(60);
+    world(); Dev d; d.boot(); srv.smsLostResponses = 2; fireOffline(d); d.run(60);
     CHECK(reportsFor("evt-1", "owner") >= 1 && reportsFor("evt-1", "bfp") >= 1);
     CHECK(srv.reports.size() >= 3 && srv.reports.size() <= 4, "server received %zu reports (>2 = duplicates, by design)", srv.reports.size());
     for (auto& r : srv.reports) CHECK(r.ok && r.id == "evt-1", "every duplicate says the same thing about the same incident");
@@ -465,7 +485,7 @@ static void r05_duplicate_report_is_harmless() {
 }
 static void r06_report_retry_exhaustion() {
     printf("R06 status report fails repeatedly: 8 attempts per result with backoff, then dropped\n");
-    world(); Dev d; d.boot(); srv.smsStatusCode = 503; d.tier2(); d.run(600);
+    world(); Dev d; d.boot(); srv.smsStatusCode = 503; fireOffline(d); d.run(600);
     CHECK(srv.smsCalls == 2 * kMaxReports, "calls=%d", srv.smsCalls);
     auto c = callTimes("confirm-sms-status");
     CHECK(c.size() >= 8 && c.back() - c[0] >= 150000, "spread over minutes, not burst (span %u ms)", c.size() >= 8 ? c.back() - c[0] : 0);
@@ -473,7 +493,7 @@ static void r06_report_retry_exhaustion() {
 }
 static void r06b_report_survives_short_outage() {
     printf("R06b a 60 s outage of confirm-sms-status does not lose the report\n");
-    world(); Dev d; d.boot(); srv.smsStatusCode = 503; d.tier2(); d.run(60); srv.smsStatusCode = 0; d.run(200);
+    world(); Dev d; d.boot(); srv.smsStatusCode = 503; fireOffline(d); d.run(60); srv.smsStatusCode = 0; d.run(200);
     CHECK(reportsFor("evt-1", "owner") == 1 && reportsFor("evt-1", "bfp") == 1, "reports=%zu", srv.reports.size());
 }
 static void r07_clear_while_retry_pending() {   // = S07/S07b
@@ -500,14 +520,14 @@ static void r09_offline_longer_than_interval() {
     CHECK(srv.alertTiers.size() == 1 && srv.alertTiers[0] == 2, "delivered within a few ticks of reconnecting");
 }
 static void r10_reboot_during_incident() {   // = S12
-    printf("R10 reboot during an active incident: one duplicate SMS pair is possible and documented: see S12\n");
+    printf("R10 reboot during an active incident while offline: one duplicate SMS pair is possible and documented: see S12\n");
     s12_reboot_during_fire();
 }
 static void r11_200_without_usable_id() {
-    printf("R11 2xx without alert_event_id: treated as delivered (no retry), results can never be bound, nothing bogus is reported\n");
+    printf("R11 2xx without alert_event_id: treated as delivered (no retry, no SMS), nothing bogus is reported\n");
     world(); Dev d; d.boot(); srv.noIdInAlertReply = true; d.tier2(); d.run(60);
     CHECK(countCalls("trigger-alert") == 1, "not retried: the server answered success");
-    CHECK(g_hal.smsSent.size() == 2 && srv.smsCalls == 0, "SMS sent, no report without an id");
+    CHECK(g_hal.smsSent.empty() && srv.smsCalls == 0, "delivered online: no SMS, no report");
 }
 static void r12_wdt_with_slow_failures() {
     printf("R12 failing calls that block 20 s each (connect + request timeouts): feeds keep every gap < 30 s\n");
@@ -532,14 +552,15 @@ static void r12b_wdt_alert_after_config_and_telemetry_coincide() {
 }
 static void r12c_wdt_telemetry_and_report_coincide() {
     printf("R12c telemetry + SMS status report due in the same tick, each blocking 20 s\n");
-    world(); Dev d; d.boot(); d.tier2(); d.tick(); d.tick(); d.tick();           // alert acked, SMS queued with id
+    world(); Dev d; d.boot(); d.tier1(); d.run(10);                             // Tier 1 acked: evt-1
+    srv.mode = ERR500; d.tier2(); d.tick(); d.tick(); d.tick();                 // Tier 2 POST fails: SMS queued with evt-1
     srv.mode = DOWN; srv.latencyOnFail = 20000; d.ctx.lastTelemetry_ms = g_hal.now - TELEMETRY_INTERVAL_MS;
     g_hal.wdtAt.clear(); d.tick(); d.run(40);
     CHECK(maxWdtGap() < (uint32_t)WDT_TIMEOUT_S * 1000, "max gap %u ms", maxWdtGap());
 }
 
 int main() {
-    s01_normal(); s02_server_down_then_recovers(); s03_5xx_then_ok(); s04_permanent_400(); s05_escalation_while_failing();
+    s01_normal(); s01b_offline_texts_owner_and_bfp(); s02_server_down_then_recovers(); s03_5xx_then_ok(); s04_permanent_400(); s05_escalation_while_failing();
     s06_escalation_after_ack(); s07_clear_cancels(); s07b_tier1_clear_cancels(); s08_new_incident_does_not_inherit(); s09_offline_then_online();
     s10_sms_report_transient(); s11_sms_report_permanent_outage(); s12_reboot_during_fire(); s13_lost_response();
     s14_one_post_per_tick_and_wdt(); s15_cap_on_attempts_over_an_hour();

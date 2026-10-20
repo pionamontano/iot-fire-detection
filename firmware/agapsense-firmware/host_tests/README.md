@@ -10,10 +10,10 @@ Covers:
 - `src/alert_retry.h` (retry/backoff policy for the alert POST), `src/sms_result_hold.h` (late-binding of SMS results): pure unit tests, ASan+UBSan;
   `alert_retry.h` is also compiled as C++11 (pedantic, warnings as errors).
 - `test_connectivity_sim.cpp`: **a simulation of the real `src/connectivity.cpp` and `src/gsm.cpp`** compiled on the host against test doubles in
-  `stubs/` (fake clock, Wi-Fi, scripted HTTPS backend, scripted SIM800L, minimal ArduinoJson stand-in). 34 scenarios (S01-S18, the review cases R01-R12, and B01-B03 for an admin clearing or replacing the BFP contact): outage/recovery, 5xx, permanent 400,
+  `stubs/` (fake clock, Wi-Fi, scripted HTTPS backend, scripted SIM800L, minimal ArduinoJson stand-in). 35 scenarios (S01-S18 and S01b, the review cases R01-R12, and B01-B03 for an admin clearing or replacing the BFP contact): outage/recovery, 5xx, permanent 400,
   escalation, CLEAR cancel, new incident isolation, offline->online, SMS-report retry, reboot, lost response, hour-long outage, etc.
   Tasks run sequentially, not as FreeRTOS tasks.
-- `mutation_check.sh` (manual): breaks the wiring and the SMS holder in a copy of `src/` (29 mutants; connectivity/gsm via the simulation, holder via its unit tests). Expected survivors: `no reset at new incident` (redundant with the reset at CLEAR) and `WDT not fed before SMS report` (redundant with the telemetry feed in the model).
+- `mutation_check.sh` (manual): breaks the wiring and the SMS holder in a copy of `src/` (31 mutants; connectivity/gsm via the simulation, holder via its unit tests). Expected survivor: `no reset at new incident` (redundant with the reset at CLEAR).
 - Negative control: compiling the simulation against the pre-5.3 sources (`ORIG=1 ORIG_REF=<commit before 5.3> ./run.sh`) fails a number of checks (18 of 67 at the time of writing, the 67 being those it can compile).
 
 **Scope:** these prove the logic and wiring only; they do not prove the compiled firmware on the ESP32 (PlatformIO build not run), real Wi-Fi/TLS/ArduinoJson,
