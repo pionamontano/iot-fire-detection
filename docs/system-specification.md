@@ -96,7 +96,7 @@ Separate axes are always kept apart: **Implemented (in repo)** ≠ **Tested** �
 **High-level capabilities (what the code does).**
 1. Sense CO and temperature; classify Tier 1 (one sensor over its threshold) / Tier 2 (both) with debounce; indicate locally; post to the backend.
 2. Backend re-derives the tier from stored per-device thresholds, records one incident per device, notifies by Telegram (shared station chat) and Web Push, and returns SMS recipient numbers to the device.
-3. The device sends Tier 2 SMS directly through the SIM800L, independent of Wi-Fi, and reports per-SMS outcome back.
+3. When it cannot deliver a Tier 2 alert online, the device sends Tier 2 SMS directly through the SIM800L as the backup, and reports per-SMS outcome back.
 4. Role-based web UI for approval workflow, device management, monitoring, incident handling, thresholds and settings.
 
 **Components and responsibilities**
@@ -378,7 +378,7 @@ No quantitative NFR was found in any owner-level source. Items below are *observ
 | Authorisation | Database (RLS, grants, RPC checks); Edge Functions for privileged operations | |
 | Presentation | SPA; route guard is advisory | |
 
-**Wi-Fi / GSM semantics (clarification of "dual-path").** The data path (telemetry, alert POST, config, SMS-status) is **Wi-Fi/HTTPS only**. The GSM module is used **only to send Tier 2 SMS**. SMS are queued immediately at Tier 2 entry *regardless* of Wi-Fi state (`connectivity.cpp:667-681`) — they are a **parallel, independent** path, not a fallback that activates when Wi-Fi fails. Tier 1, telemetry, and config have no GSM path. When Wi-Fi is down, the SMS still go out but without server-resolved address/time and with the last-known (or placeholder) phone numbers (KI-19). This precise behaviour must be ratified or corrected by the owner (OQ-02).
+**Wi-Fi / GSM semantics (clarification of "dual-path").** The data path (telemetry, alert POST, config, SMS-status) is **Wi-Fi/HTTPS only**. The GSM module is used **only to send Tier 2 SMS**, as the **backup when the internet is gone** (owner decision OQ-02, firmware 2.4.0): at Tier 2 entry the alert POST is made first, and the SMS are queued at once only if it was not acknowledged (Wi-Fi down, DEGRADED, or the POST failed; `connectivity.cpp` `fireTier2Alert()`). An alert delivered online sends no SMS. Tier 1, telemetry, and config have no GSM path. Offline SMS go out without server-resolved address/time and with the last-known (or placeholder) phone numbers (KI-19). Whether GSM should also carry data is still open (OQ-02).
 
 **Architectural decisions to hold stable unless explicitly approved**
 
@@ -456,7 +456,7 @@ Not specified (FR-ALERT-006). `registration_requests`/`profiles` removed by auth
 | BR-07 Auto-resolution | Two consecutive `sensor_ready` readings strictly below thresholds close the device's incidents still in `active`; acknowledged/responding ones are left to a responder | `ingest-reading:202-260` (D6.1) |
 | BR-08 Location staleness | UI: live ≤ 15 min and `gps_valid`; else last-known; device GPS fix valid ≤ 5 s old | `lib/location.ts`, `gps.cpp` |
 | BR-09 Notification recipients | Telegram: shared station chat (Tier 2) plus each eligible recipient's linked chat. Push: approved+active admins & responders (T1,T2) + the device's resident (T2). SMS: owner = approved+active resident linked to the device (`profiles.contact_number`), BFP = `devices.bfp_contact`; Tier 2 only | `trigger-alert:204-213,359-377`; `get-device-config:57-65` |
-| BR-10 Communication fallback | Alert POST: retry/backoff [R]; SMS is parallel, not conditional (§5.7) | |
+| BR-10 Communication fallback | Alert POST: retry/backoff [R]; Tier 2 SMS only when the POST was not acknowledged (§5.7) | |
 | BR-11 Error handling | Backend DB faults → 500 retryable (`trigger-alert`); other functions return 400/401 for many fault types (KI-12) | |
 | BR-12 Administrative operations | Approve/reject/delete users; create pre-approved users; assign device; regenerate API key; unlock login; edit settings | Edge/RPC |
 | BR-13 Responder handling | Via `transition_incident` only; direct column UPDATE revoked in the repo (`20261022000000`) | |
@@ -569,7 +569,7 @@ No credentials or phone numbers are reproduced in this document.
 |---|---|---|
 | Invalid/missing CO or temp | DS18B20 invalid ⇒ last valid retained (FR-IOT-002); CO <=0 ADC ⇒ 0 ppm; backend rejects non-finite numbers (400) | Staleness/fault flag; reporting sensor fault to backend |
 | GPS unavailable / stale | Cached fix sent with `gps_valid=false`; (0,0) stored as NULL; UI labels last-known; SMS still sent with whatever coordinates exist (KI-18) | Suppress/annotate SMS link when no fix |
-| Wi-Fi disconnected | Device state OFFLINE; reconnect every 60 s; portal after 30 s; alert POST deferred and retried when ONLINE [R]; Tier 2 SMS still sent | Cellular-data fallback for the POST (OQ-02) |
+| Wi-Fi disconnected | Device state OFFLINE; reconnect every 60 s; portal after 30 s; alert POST deferred and retried when ONLINE [R]; Tier 2 SMS sent as the backup | Cellular-data fallback for the POST (OQ-02) |
 | GSM transmission fails | Result `false` reported; no re-send; SMS-modem init failure only logged | SMS retry |
 | Supabase / network unavailable | `trigger-alert` returns retryable 500s on DB faults (deployed only after 5.2); firmware retries [R]; UI shows `LoadErrorBanner` on failed admin reads | Offline buffering of telemetry (none: telemetry skipped when not ONLINE) |
 | Notification provider failure | Recorded as failed in ledger [R]; incident already persisted; retry on a later request only | Background retry worker |
@@ -694,7 +694,7 @@ Template: [`change-request-template.md`](change-request-template.md).
 | GPS coordinates | Latitude/longitude from the NEO-6M (live) or cached |
 | Registered location | Admin/resident-approved install address + coordinates on `devices` |
 | Reverse geocoding | Coordinates → address text via Nominatim |
-| Communication fallback | In this codebase: SMS sent in parallel to the Wi-Fi path on Tier 2; **not** a switch-over of the data path |
+| Communication fallback | In this codebase: Tier 2 SMS sent only when the alert can't be delivered over Wi-Fi; **not** a switch-over of the data path |
 | Notification delivery | Generated → provider-accepted → delivered → acknowledged (§5.10); only provider-accepted is recorded |
 | System availability | Not defined (NS-RA) |
 | `[R]` | Implemented in repo, not deployed |

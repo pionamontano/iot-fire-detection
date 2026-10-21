@@ -40,7 +40,7 @@ Detection uses an MQ-7 CO sensor and a DS18B20 temperature sensor. The firmware 
 
 ### 5. Communication and Provisioning
 - **Wi-Fi path:** HTTPS (pinned root CA) to Supabase Edge Functions for telemetry (every 30 s), alerts, config and SMS-status reports.
-- **GSM path:** SIM800L is used for **SMS only** (2G). There is no data-over-GSM fallback; whether one is wanted is an open owner question (spec OQ-02).
+- **GSM path:** SIM800L is used for **SMS only** (2G), as the backup when the internet is gone: the Tier 2 owner and BFP SMS are sent only if the device could not deliver the alert online (owner decision OQ-02, firmware 2.4.0). There is no data-over-GSM fallback; whether one is wanted is still an open owner question (OQ-02).
 - **Captive portal:** with no saved credentials, or no stored device identity, the ESP32 opens a WPA2-protected AP named `AgapSense-Setup` (WiFiManager, password `WIFI_AP_PASSWORD` in `config.h`); the user selects a network and enters its password, plus the Device ID and API key on a new unit. Everything is stored in NVS. The page is served by the ESP32, separate from the web app. The portal is relaunched after 30 s disconnected and the device restarts if it times out (180 s).
 - **Local indicators:** yellow LED + 3 short beeps every 45 s = Tier 1, red LED + continuous buzzer = Tier 2, blue LED = solid when online, blinking (500 ms) when Wi-Fi is up but the backend is unreachable (degraded), off when offline.
 - **Power:** mains with backup battery; the device reports `on_battery` (battery ADC < 4000 mV). Admin pages show an on-battery badge; the resident Dashboard shows Power (Mains / On battery) under Device Health.

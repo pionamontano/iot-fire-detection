@@ -7,14 +7,15 @@
 // PlatformIO environment (see platformio.ini's [env:...] sections):
 //   env:esp32dev            -> 2.1.0 (this file's fallback)      — original
 //                              1.4V heat/measure MQ-7 duty cycle
-//   env:esp32dev_mq7_5v     -> 2.3.0 (2.2.0 before the Tier 1 chirp) — AGS-001's
+//   env:esp32dev_mq7_5v     -> 2.4.0 (2.3.0 before Tier 2 SMS became
+//                              offline-only, 2.2.0 before the Tier 1 chirp) — AGS-001's
 //                              actual wiring: MQ-7 runs off a constant 5V
 //                              rail, not through MQ7_HEATER_PIN's
 //                              PWM/transistor, so the duty-cycle model
 //                              above always read ADC-saturated garbage on
 //                              this hardware. See sensors.cpp's
 //                              MQ7_CONTINUOUS_5V branch.
-//   env:esp32dev_mq7_5v_diag -> 2.3.0-diag                       — same
+//   env:esp32dev_mq7_5v_diag -> 2.4.0-diag                       — same
 //                              constant-5V fix, plus a bench-only HTTP
 //                              diag log server (ENABLE_DIAG_SERVER).
 //                              Not for production flashes — revert to

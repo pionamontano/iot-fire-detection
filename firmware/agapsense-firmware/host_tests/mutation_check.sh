@@ -5,7 +5,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 W="${TMPDIR:-/tmp}/agap_mut"; rm -rf "$W"; mkdir -p "$W"
 build() {
-  g++ -std=c++17 -w -O1 -I"$W/src" -Istubs test_connectivity_sim.cpp "$W/src/connectivity.cpp" "$W/src/gsm.cpp" -o "$W/sim" 2>"$W/err" || { echo "BUILD ERROR"; head "$W/err"; return 2; }
+  g++ -std=c++17 -w -O1 -I"$W/src" -Istubs test_connectivity_sim.cpp "$W/src/connectivity.cpp" "$W/src/gsm.cpp" "$W/src/buzzer.cpp" stubs/identity_host.cpp -o "$W/sim" 2>"$W/err" || { echo "BUILD ERROR"; head "$W/err"; return 2; }
   "$W/sim" >"$W/out" 2>&1 || return 1
   mkdir -p "$W/host_tests"; cp test_sms_hold.cpp "$W/host_tests/"   # its "../src/..." include then resolves to the mutated copy
   g++ -std=c++17 -w -O1 "$W/host_tests/test_sms_hold.cpp" -o "$W/hold" 2>"$W/err" || { echo "BUILD ERROR"; head "$W/err"; return 2; }
@@ -44,6 +44,8 @@ mutant "attempt ignores ONLINE"                connectivity.cpp "    if (ctx->de
 mutant "attempt ignores scheduler"             connectivity.cpp "    if (!ctx->alertRetry.shouldAttempt(now)) return;" ""
 mutant "outcome always success"                connectivity.cpp "ctx->alertRetry.onResult(outcome, millis());" "ctx->alertRetry.onResult(agap::PostOutcome::Success, millis());"
 mutant "outcome always transient"              connectivity.cpp "ctx->alertRetry.onResult(outcome, millis());" "ctx->alertRetry.onResult(agap::PostOutcome::Transient, millis());"
+mutant "SMS even when delivered online"        connectivity.cpp "if (ctx->alertRetry.ackedTier() >= 2) {" "if (false) {"
+mutant "no SMS when the POST failed"           connectivity.cpp "if (ctx->alertRetry.ackedTier() >= 2) {" "if (true) {"
 mutant "SMS requeue removed"                   connectivity.cpp "if (!ctx->smsHold.requeue(e, millis())) CLOG" "if (false) CLOG"
 mutant "no break after failed report"          connectivity.cpp "break;  // do not hammer" "// do not hammer"
 mutant "report with ctx id, ignoring entry"    connectivity.cpp "const char* id = e.eventId[0] ? e.eventId : ctx->lastAlertEventId;" "const char* id = ctx->lastAlertEventId;"

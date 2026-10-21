@@ -8,6 +8,7 @@
 > | OQ-03 / CT-1 | The repo's `get_auth_role()` now requires `approved` + `is_active` (`20261031000000`, `20261030000000`). The live definition is still not recorded, so the read-only Phase 0 inspection is still needed. |
 > | OQ-04 / CT-2 | Resolved in the repo: `20261103000000` adds `station_name` and `email`. |
 > | OQ-06 | **Decided by the owner:** Tier 1 notifies the device's resident and admins (push + linked Telegram); the station chat and responders get Tier 2 only. The resident can close a Tier 1 warning themselves (`resident_resolve_warning()`). |
+> | OQ-02 | **Partly decided by the owner (2026-10-20):** SMS is only the backup for when Wi-Fi or the internet is gone. Since firmware 2.4.0 the Tier 2 SMS goes out only if the alert POST was not acknowledged; an alert delivered online sends no SMS. Still open: whether the GSM module should also carry data (alert POST over GPRS). |
 > | OQ-07 / D6.1 / F1 | Implemented as recommended in §H: two consecutive safe readings, only `active` incidents. |
 > | OQ-08 / CT-4 | Partly: new devices take the DB default (60 °C); firmware fallback is still 70 °C. |
 > | CT-3 | Resolved: every page uses `lib/deviceStatus.ts` (2 / 15 min). |

@@ -245,9 +245,9 @@ test('response keeps every field the firmware parses; extra fields are additive;
   assert.deepEqual([json.created, json.tier, json.persistence], [true, 2, 'raise_alert']);
 });
 
-test('Telegram text is unchanged; push text names what crossed its limit', async () => {
+test('Telegram text (Tier 2 no longer claims SMS was sent); push text names what crossed its limit', async () => {
   const t = setup(); await t.send(TIER2);
-  assert.match(t.calls.telegram[0].text, /^FIRE ALERT — Tier 2\n\nDevice: T-001\nLocation: Registered Loc\nTime: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d\n\nSensor readings:\n- CO: 500 ppm \(threshold: 200 ppm\)\n- Temp: 90°C \(threshold: 60°C\)\n\nGPS: Unavailable\n\nSMS alerts have been dispatched\.$/);
+  assert.match(t.calls.telegram[0].text, /^FIRE ALERT — Tier 2\n\nDevice: T-001\nLocation: Registered Loc\nTime: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d\n\nSensor readings:\n- CO: 500 ppm \(threshold: 200 ppm\)\n- Temp: 90°C \(threshold: 60°C\)\n\nGPS: Unavailable$/);
   const t1 = setup({ tables: { profiles: withAdminChat } }); await t1.send(TIER1);
   assert.match(t1.calls.telegram[0].text, /^WARNING — Tier 1\n\nDevice: T-001\n.*\n\nElevated reading detected:\n- CO: 500 ppm \(threshold: 200 ppm\)\n- Temp: 20°C \(threshold: 60°C\)\n\nMonitor the area\. No SMS dispatched at this level\.$/s);
   assert.equal(t.calls.push[0].title, 'FIRE ALERT – High CO and temperature');
@@ -314,7 +314,7 @@ const pinned = (extra) => ({ devices: [{ ...device, latitude: 14.8447, longitude
 
 test('no GPS + admin-confirmed registered pin: pin and navigate link are sent, labelled confirmed', async () => {
   const t = setup({ tables: pinned({ location_verified: true }) }); await t.send(TIER2);
-  assert.match(t.calls.telegram[0].text, /\n\nGPS: Unavailable\nRegistered pin: 14\.8447, 120\.8112 \(confirmed by admin\)\nNavigate: https:\/\/maps\.google\.com\/\?q=14\.8447,120\.8112\n\nSMS alerts/);
+  assert.match(t.calls.telegram[0].text, /\n\nGPS: Unavailable\nRegistered pin: 14\.8447, 120\.8112 \(confirmed by admin\)\nNavigate: https:\/\/maps\.google\.com\/\?q=14\.8447,120\.8112$/);
 });
 
 test('no GPS + resident pin not yet confirmed: still sent, labelled UNVERIFIED', async () => {
