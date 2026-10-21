@@ -165,7 +165,9 @@ ppm    = 100 * (Rs / R0) ^ -1.513                    (capped at 2000 ppm)
 A saturated sensor (V_AO ≥ Vc) reports 2000 ppm, never 0. The resistor values
 are `MQ7_DIVIDER_R_TOP_OHMS` / `MQ7_DIVIDER_R_BOTTOM_OHMS` in `config.h`;
 `MQ7_RL_OHMS` is the load resistor **on the MQ-7 module** (usually 10 kΩ,
-marked "103"; some modules use 1 kΩ, "102" — check yours).
+marked "103"; some modules use 1 kΩ, "102"). If you can't tell, keep 10 kΩ:
+once R0 is calibrated with the same firmware, RL cancels out of Rs/R0 and the
+ppm reading doesn't depend on it.
 
 `MQ7_R0_OHMS` (Rs at 100 ppm) must be calibrated per physical sensor: after a
 24–48 h burn-in in clean air, read `Rs=` from the `[SENSOR] MQ-7 pin=… AO=… Rs=…`

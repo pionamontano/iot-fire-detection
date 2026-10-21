@@ -240,8 +240,10 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 
 // ── MQ-7 Calibration ──────────────────────────────────────
 // MQ7_RL_OHMS is the load resistor ON THE MQ-7 MODULE (between AO and GND),
-// not the divider. Most modules use 10 kΩ ("103"); some use 1 kΩ ("102") —
-// check yours and set it here.
+// not the divider. Most modules use 10 kΩ ("103"); some use 1 kΩ ("102").
+// If you don't know it, leave 10000: once R0 is calibrated below with this
+// same firmware, RL cancels out of Rs/R0, so the ppm reading does not depend
+// on it. It only changes the absolute Rs/R0 numbers in the log.
 //
 // R0 is Rs at 100 ppm CO (the curve reads Rs/R0 = 1 as 100 ppm), NOT Rs in
 // clean air. Clean air is Rs/R0 ≈ 27.5 (datasheet Fig 3). To calibrate:
