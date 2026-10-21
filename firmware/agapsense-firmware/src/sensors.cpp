@@ -2,7 +2,7 @@
 // sensors.cpp — MQ-7 & DS18B20 Implementation  (v2.5)
 //
 // Changes in v2.5:
-//   ~ MQ-7 AO now reaches GPIO 34 through a 10k/10k divider. The ADC is read
+//   ~ MQ-7 AO now reaches GPIO 33 through a 10k/10k divider. The ADC is read
 //     with analogReadMilliVolts() (eFuse-calibrated), scaled back up by the
 //     divider ratio, and the divider is included in the sensor's load
 //     (RL ∥ 20k) — see mq7_curve.h. The old code mapped full-scale ADC to

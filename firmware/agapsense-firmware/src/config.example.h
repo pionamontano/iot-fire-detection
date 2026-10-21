@@ -146,7 +146,7 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 // ── Pin Assignments ────────────────────────────────────────
 
 // MQ-7 CO Sensor (ADC1 pins only — ADC2 conflicts with Wi-Fi)
-#define MQ7_ANALOG_PIN      34    // ADC1_CH6 — input only, via 10k/10k divider from AO
+#define MQ7_ANALOG_PIN      33    // ADC1_CH5, via 10k/10k divider from AO (AGS-001 wiring; was 34)
 #define MQ7_HEATER_PIN      25    // drives heater via BJT/MOSFET
 #define MQ7_LOW_DUTY        72    // 28% of 255 ≈ 1.4 V on sensor Vc
 #define MQ7_PWM_CHANNEL     0
@@ -228,8 +228,8 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 #define PRIO_BUZZER         2
 
 // ── MQ-7 Analog Front End ─────────────────────────────────
-// The module's AO (0-5 V) reaches GPIO 34 through a 10k/10k divider
-// (AO ── R_TOP ── GPIO34 ── R_BOTTOM ── GND), so the pin sees at most 2.5 V,
+// The module's AO (0-5 V) reaches GPIO 33 through a 10k/10k divider
+// (AO ── R_TOP ── GPIO33 ── R_BOTTOM ── GND), so the pin sees at most 2.5 V,
 // inside the ESP32's 11 dB ADC range. sensors.cpp scales the pin voltage back
 // up by (R_TOP + R_BOTTOM) / R_BOTTOM and treats the divider as part of the
 // sensor's load (RL ∥ 20k). See mq7_curve.h. Change these only if the

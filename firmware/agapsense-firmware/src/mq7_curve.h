@@ -4,7 +4,7 @@
 //
 // Hardware model (AGS-001):
 //
-//   Vc (5 V) ── Rs (sensor) ──┬── AO ── R_TOP (10k) ──┬── GPIO 34 (ADC)
+//   Vc (5 V) ── Rs (sensor) ──┬── AO ── R_TOP (10k) ──┬── GPIO 33 (ADC)
 //                             │                        │
 //                         RL (module)            R_BOTTOM (10k)
 //                             │                        │
