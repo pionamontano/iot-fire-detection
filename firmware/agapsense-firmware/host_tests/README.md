@@ -9,6 +9,7 @@ Pure-logic tests that run on a normal computer with `g++` (no ESP32, no Platform
 Covers:
 - `src/alert_retry.h` (retry/backoff policy for the alert POST), `src/sms_result_hold.h` (late-binding of SMS results): pure unit tests, ASan+UBSan;
   `alert_retry.h` is also compiled as C++11 (pedantic, warnings as errors).
+- `src/mq7_curve.h` (MQ-7 ADC voltage -> ppm through the 10k/10k divider on AO, R0 calibration): pure unit tests, ASan+UBSan.
 - `test_connectivity_sim.cpp`: **a simulation of the real `src/connectivity.cpp` and `src/gsm.cpp`** compiled on the host against test doubles in
   `stubs/` (fake clock, Wi-Fi, scripted HTTPS backend, scripted SIM800L, minimal ArduinoJson stand-in). 35 scenarios (S01-S18 and S01b, the review cases R01-R12, and B01-B03 for an admin clearing or replacing the BFP contact): outage/recovery, 5xx, permanent 400,
   escalation, CLEAR cancel, new incident isolation, offline->online, SMS-report retry, reboot, lost response, hour-long outage, etc.
