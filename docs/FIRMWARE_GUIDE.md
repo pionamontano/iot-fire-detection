@@ -22,7 +22,7 @@ flash it.
 
 | Signal | Pin | Notes |
 |---|---|---|
-| MQ7 analog out | GPIO 34 | ADC1_CH6, input-only. AO reaches the pin through a **10 kΩ / 10 kΩ divider** (AO → 10k → GPIO 34 → 10k → GND), so 0–5 V at AO is 0–2.5 V at the pin |
+| MQ7 analog out | GPIO 33 | ADC1_CH5 (AGS-001 wiring; was GPIO 34). AO reaches the pin through a **10 kΩ / 10 kΩ divider** (AO → 10k → GPIO 33 → 10k → GND), so 0–5 V at AO is 0–2.5 V at the pin |
 | MQ7 heater PWM | GPIO 25 | Drives heater via BJT/MOSFET |
 | DS18B20 data | GPIO 4 | Needs a 4.7 kΩ pull-up |
 | GPS RX / TX | GPIO 16 / 17 | `Serial2`, 9600 baud |
@@ -526,7 +526,7 @@ After that, all later updates can go over the air.
 | Symptom | Likely Cause |
 |---|---|
 | Blue LED never goes solid | Wi-Fi credentials wrong/expired, or Supabase host unreachable (check `SUPABASE_URL` and firewall) |
-| CO readings pinned at 0 or implausible | MQ-7 not calibrated (`MQ7_R0_OHMS`) in clean air, `MQ7_RL_OHMS` not matching the module's load resistor, divider resistors not 10k/10k (or `MQ7_DIVIDER_R_*_OHMS` not updated), or ADC wiring on GPIO 34 |
+| CO readings pinned at 0 or implausible | MQ-7 not calibrated (`MQ7_R0_OHMS`) in clean air, `MQ7_RL_OHMS` not matching the module's load resistor, divider resistors not 10k/10k (or `MQ7_DIVIDER_R_*_OHMS` not updated), or ADC wiring on GPIO 33 |
 | Temperature always last-known / never updates | DS18B20 missing 4.7 kΩ pull-up, or wrong `DS18B20_PIN` |
 | GPS `valid` always false | No sky view / cold-start fix can take minutes outdoors; check `GPS_RX_PIN`/`GPS_TX_PIN` wiring |
 | SMS never sent, `gsmIsRegistered()` false | SIM800L needs a dedicated ~2 A-capable 4.0 V supply with a large (1000 µF+) cap — brownouts during transmit are the most common failure |

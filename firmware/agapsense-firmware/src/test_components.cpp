@@ -95,7 +95,7 @@ Preferences       prefs;
 // This board's MQ-7 is wired to a constant 5V rail (confirmed on hardware),
 // not through MQ7_HEATER_PIN's PWM/transistor as config.h's comment assumes —
 // so there's no real heat/measure voltage cycle to track; read continuously
-// instead, modeling the sensor's actual constant-5V bias. AO reaches GPIO 34
+// instead, modeling the sensor's actual constant-5V bias. AO reaches GPIO 33
 // through the 10k/10k divider — same conversion as the production firmware
 // (mq7_curve.h).
 #define MQ7_WARMUP_MS 60000UL   // datasheet warm-up before readings are trusted (display-only gate)
@@ -314,7 +314,7 @@ void loop() {
 }
 
 // ===================== MQ-7 ============================================
-// Constant 5V supply on this board; AO (0-5 V) reaches GPIO 34 through a
+// Constant 5V supply on this board; AO (0-5 V) reaches GPIO 33 through a
 // 10k/10k divider so the pin stays within the ADC's range. The divider is
 // also part of the sensor's load (RL ∥ 20k) — see mq7_curve.h.
 #ifndef MQ7_SUPPLY_V
