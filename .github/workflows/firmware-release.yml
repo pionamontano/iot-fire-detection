@@ -92,7 +92,8 @@ jobs:
           import os, re
           s = open('config.example.h', encoding='utf-8').read()
           def setdef(s, name, value):
-              pat = re.compile(r'^(#define\s+%s\s+)".*?"' % name, re.M)
+              # [ \t]* allows an indented define (FIRMWARE_VERSION sits inside #ifndef).
+              pat = re.compile(r'^([ \t]*#define[ \t]+%s[ \t]+)".*?"' % name, re.M)
               assert pat.search(s), name
               return pat.sub(lambda m: m.group(1) + '"' + value + '"', s, count=1)
           s = setdef(s, 'SUPABASE_URL', os.environ['SUPABASE_URL'])
