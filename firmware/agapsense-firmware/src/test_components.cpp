@@ -35,6 +35,7 @@
 #include <Preferences.h>
 #include "config.h"
 #include "config_test_secrets.h"
+#include "mq7_curve.h"
 
 // ── Remote log (USB is broken on this board — no serial access, so
 // TLOG also appends to a small ring buffer served over HTTP at /log) ──
@@ -94,7 +95,9 @@ Preferences       prefs;
 // This board's MQ-7 is wired to a constant 5V rail (confirmed on hardware),
 // not through MQ7_HEATER_PIN's PWM/transistor as config.h's comment assumes —
 // so there's no real heat/measure voltage cycle to track; read continuously
-// instead, modeling the sensor's actual constant-5V bias (see mq7RawToPpm()).
+// instead, modeling the sensor's actual constant-5V bias. AO reaches GPIO 34
+// through the 10k/10k divider — same conversion as the production firmware
+// (mq7_curve.h).
 #define MQ7_WARMUP_MS 60000UL   // datasheet warm-up before readings are trusted (display-only gate)
 static uint32_t  mq7StartMs    = 0;
 static bool      mq7Ready      = false;
@@ -103,8 +106,8 @@ static float     Ro             = MQ7_R0_OHMS;   // overwritten by NVS if calibr
 
 float rawCOppm  = 0;
 float lastCOppm = 0;
-int   mq7RawLast  = 0;
-float mq7VoutLast = 0;
+int   mq7PinMvLast = 0;   // at the ADC pin (after the divider)
+float mq7VoutLast  = 0;   // sensor AO (before the divider)
 bool  firstReading = true;
 bool  haveValidReading = false;
 
@@ -212,7 +215,7 @@ void setup() {
   if (SMS_ENABLED) initSIM800();
 
   prefs.begin("agaptest", false);
-  float savedRo = prefs.getFloat("ro", 0.0f);
+  float savedRo = prefs.getFloat("ro2", 0.0f);   // "ro" (pre-divider builds) held clean-air Rs, not R0
   if (savedRo > 100.0f && savedRo < 1000000.0f) {
     Ro = savedRo;
     TLOG("Loaded calibrated R0 = %.1f ohm (press 'c' to recalibrate)", Ro);
@@ -311,39 +314,44 @@ void loop() {
 }
 
 // ===================== MQ-7 ============================================
-// Wired to a constant 5V supply on this board (no PWM duty-cycle), so Vc is
-// the real 5V rail, not the 1.4V "measuring phase" the production duty-cycled
-// design assumes. NOTE: the sensor's AO output can legitimately approach 5V
-// in clean air (high Rs) — the ESP32 ADC only reads safely up to ~3.3V, so
-// readings still clip (raw=4095) whenever the real AO voltage exceeds that,
-// and the pin may be seeing more than its rated input voltage. This software
-// fix makes the math correct for whatever the ADC *can* see — it does not
-// fix the clipping/over-voltage itself; that needs a voltage divider on the
-// AO line (e.g. ~2:1) before GPIO34, or wiring the heater through
-// MQ7_HEATER_PIN's transistor as config.h's comment originally assumes.
-static float mq7RawToPpm(int rawAdc) {
-  if (rawAdc <= 0) return 0.0f;
-  const float Vc   = 5.0f;   // actual constant supply on this board
-  const float Vout = (float)rawAdc * Vc / (float)ADC_MAX_RAW;
-  if (Vout <= 0.0f) return 0.0f;
-  float Rs    = MQ7_RL_OHMS * (Vc - Vout) / Vout;
-  float ratio = Rs / Ro;
-  if (ratio <= 0.0f) return 0.0f;
-  float ppm = 100.0f * powf(ratio, -1.513f);
-  return constrain(ppm, 0.0f, 10000.0f);
+// Constant 5V supply on this board; AO (0-5 V) reaches GPIO 34 through a
+// 10k/10k divider so the pin stays within the ADC's range. The divider is
+// also part of the sensor's load (RL ∥ 20k) — see mq7_curve.h.
+#ifndef MQ7_SUPPLY_V
+  #define MQ7_SUPPLY_V              5.0f
+#endif
+#ifndef MQ7_DIVIDER_R_TOP_OHMS
+  #define MQ7_DIVIDER_R_TOP_OHMS    10000.0f
+#endif
+#ifndef MQ7_DIVIDER_R_BOTTOM_OHMS
+  #define MQ7_DIVIDER_R_BOTTOM_OHMS 10000.0f
+#endif
+
+static agap::Mq7Circuit mq7Circuit() {
+  return { MQ7_SUPPLY_V, MQ7_RL_OHMS, MQ7_DIVIDER_R_TOP_OHMS,
+           MQ7_DIVIDER_R_BOTTOM_OHMS, Ro, 2000.0f };
+}
+
+// gapMs == 0: 100 us between samples (fast average); otherwise delay(gapMs).
+static int mq7ReadPinMv(int n, int gapMs) {
+  long sum = 0;
+  for (int i = 0; i < n; i++) {
+    sum += analogReadMilliVolts(MQ7_ANALOG_PIN);
+    if (gapMs) delay(gapMs); else delayMicroseconds(100);
+  }
+  return (int)(sum / n);
 }
 
 void mq7Update() {
   if (millis() - mq7LastRead_ms < MQ7_READ_INTERVAL_MS) return;
   mq7LastRead_ms = millis();
 
-  const int N = 32;
-  long sum = 0;
-  for (int i = 0; i < N; i++) { sum += analogRead(MQ7_ANALOG_PIN); delayMicroseconds(100); }
-  mq7RawLast  = (int)(sum / N);
-  mq7VoutLast = mq7RawLast * (float)ADC_VREF_MV / 1000.0f / ADC_MAX_RAW;   // what the ADC pin itself sees (0-3.3V)
+  const agap::Mq7Circuit c = mq7Circuit();
+  mq7PinMvLast = mq7ReadPinMv(32, 0);
+  const float pinV = mq7PinMvLast / 1000.0f;
+  mq7VoutLast = agap::mq7AoVolts(pinV, c);
 
-  float ppm = mq7RawToPpm(mq7RawLast);
+  float ppm = agap::mq7PpmFromAdcVolts(pinV, c);
   rawCOppm = ppm;
   if (firstReading) {
     lastCOppm = ppm;
@@ -360,26 +368,24 @@ void mq7Update() {
   }
 
   const char* names[] = {"normal", "elevated", "high", "SERIOUS", "CRITICAL"};
-  TLOG("MQ-7: %.1f ppm (raw %.1f) | %s | Vout %.2fV | raw=%d%s",
-       lastCOppm, rawCOppm, names[coLevel], mq7VoutLast, mq7RawLast,
-       mq7Ready ? "" : " (warming up)");
+  TLOG("MQ-7: %.1f ppm (raw %.1f) | %s | pin %d mV | AO %.2fV | Rs %.0f ohm%s",
+       lastCOppm, rawCOppm, names[coLevel], mq7PinMvLast, mq7VoutLast,
+       agap::mq7RsOhms(pinV, c), mq7Ready ? "" : " (warming up)");
 }
 
+// R0 is Rs at 100 ppm, so a clean-air Rs is divided by the datasheet's
+// clean-air ratio (~27.5) — the same rule config.h's calibration note uses.
 void calibrateMQ7() {
   Serial.println("Calibrating MQ-7 R0 in clean air... keep it away from any CO source.");
-  long sum = 0;
-  const int N = 50;
-  for (int i = 0; i < N; i++) { sum += analogRead(MQ7_ANALOG_PIN); delay(100); }
-  int rawAvg = (int)(sum / N);
-  const float Vc = 5.0f;   // actual constant supply on this board
-  float Vout = rawAvg * Vc / (float)ADC_MAX_RAW;
-  if (Vout <= 0.0f) {
-    Serial.println("Calibration failed — Vout <= 0, check wiring.");
+  const int pinMv = mq7ReadPinMv(50, 100);
+  const float rs = agap::mq7RsOhms(pinMv / 1000.0f, mq7Circuit());
+  if (rs <= 0.0f) {
+    Serial.printf("Calibration failed — pin reads %d mV (0 V or saturated), check wiring.\n", pinMv);
     return;
   }
-  Ro = MQ7_RL_OHMS * (Vc - Vout) / Vout;
-  prefs.putFloat("ro", Ro);
-  Serial.printf("Calibration done. R0 = %.1f ohm (saved to flash)\n", Ro);
+  Ro = agap::mq7R0FromCleanAirRs(rs);
+  prefs.putFloat("ro2", Ro);
+  Serial.printf("Calibration done. Clean-air Rs = %.1f ohm, R0 = %.1f ohm (saved to flash)\n", rs, Ro);
 }
 
 // ===================== Other sensors ===================================
@@ -734,8 +740,8 @@ void handleSerialCommands() {
 
   switch (c) {
     case 'i':
-      Serial.printf("R0 %.1f ohm | Vout %.3f V | %.1f ppm | level %d\n",
-                    Ro, mq7VoutLast, rawCOppm, coLevel);
+      Serial.printf("R0 %.1f ohm | pin %d mV | AO %.3f V | %.1f ppm | level %d\n",
+                    Ro, mq7PinMvLast, mq7VoutLast, rawCOppm, coLevel);
       Serial.printf("Thresholds: %.0f / %.0f / %.0f / %.0f ppm\n",
                     LVL_ELEVATED, LVL_HIGH, LVL_SERIOUS, LVL_CRITICAL);
       Serial.printf("Last alert: %s | Temp sensor: %s | GSM: %s | Battery: %d mV\n",

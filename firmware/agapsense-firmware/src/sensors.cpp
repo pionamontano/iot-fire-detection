@@ -1,10 +1,19 @@
 // ============================================================
-// sensors.cpp — MQ-7 & DS18B20 Implementation  (v2.0)
+// sensors.cpp — MQ-7 & DS18B20 Implementation  (v2.5)
+//
+// Changes in v2.5:
+//   ~ MQ-7 AO now reaches GPIO 34 through a 10k/10k divider. The ADC is read
+//     with analogReadMilliVolts() (eFuse-calibrated), scaled back up by the
+//     divider ratio, and the divider is included in the sensor's load
+//     (RL ∥ 20k) — see mq7_curve.h. The old code mapped full-scale ADC to
+//     5 V, which is wrong for any wiring: the pin can only read ~3.1 V.
+//   + Log line now includes the pin voltage, AO voltage and Rs, so R0 can be
+//     calibrated straight from the debug/diag log.
 //
 // Changes from v2.0:
-//   ~ mq7RawToPpm(): a saturated ADC (Rs ≈ 0) returns the top of the
-//     range instead of 0 ppm, which read as clean air; readings are
-//     capped at the MQ-7's rated 2000 ppm (MQ7_PPM_MAX, was 10000)
+//   ~ a saturated sensor (Rs ≈ 0) returns the top of the range instead of
+//     0 ppm, which read as clean air; readings are capped at the MQ-7's
+//     rated 2000 ppm (MQ7_PPM_MAX, was 10000)
 //
 // Changes from v1.0:
 //   + sensor_ready flag: set true after first full heat+measure cycle
@@ -15,6 +24,7 @@
 #include "sensors.h"
 #include <math.h>
 #include "diag_log.h"
+#include "mq7_curve.h"
 
 #if DEBUG_MODE
   #define SLOG(fmt, ...) Serial.printf("[SENSOR] " fmt "\n", ##__VA_ARGS__)
@@ -27,6 +37,52 @@
 // ── DS18B20 objects ────────────────────────────────────────
 static OneWire           oneWire(DS18B20_PIN);
 static DallasTemperature ds18b20(&oneWire);
+
+// ── MQ-7 analog front end ──────────────────────────────────
+// Vc is the sensor circuit's supply: the fixed 5 V rail on the constant-5V
+// build, the 1.4 V PWM level during MEASURING on the duty-cycle build.
+#ifdef MQ7_CONTINUOUS_5V
+  #define MQ7_VC_VOLTS  MQ7_SUPPLY_V
+#else
+  #define MQ7_VC_VOLTS  1.4f
+#endif
+
+static const agap::Mq7Circuit kMq7Circuit = {
+    MQ7_VC_VOLTS,
+    MQ7_RL_OHMS,
+    MQ7_DIVIDER_R_TOP_OHMS,
+    MQ7_DIVIDER_R_BOTTOM_OHMS,
+    MQ7_R0_OHMS,
+    MQ7_PPM_MAX,
+};
+
+float mq7AdcMvToPpm(int adcMv) {
+    return agap::mq7PpmFromAdcVolts((float)adcMv / 1000.0f, kMq7Circuit);
+}
+
+// 32-sample average (reduces ESP32 ADC noise), in calibrated millivolts at
+// the ADC pin — i.e. after the divider.
+static int mq7ReadAdcMv() {
+    const int N = 32;
+    long sum = 0;
+    for (int i = 0; i < N; i++) {
+        sum += analogReadMilliVolts(MQ7_ANALOG_PIN);
+        delayMicroseconds(100);
+    }
+    return (int)(sum / N);
+}
+
+// One averaged read → ppm, logged with everything needed to calibrate R0.
+static float mq7Sample() {
+    const int   adcMv = mq7ReadAdcMv();
+    const float adcV  = (float)adcMv / 1000.0f;
+    const float ppm   = mq7AdcMvToPpm(adcMv);
+    (void)adcV;   // only used by SLOG, which a production build compiles out
+    SLOG("MQ-7 pin=%d mV  AO=%.2f V  Rs=%.0f ohm  CO=%.1f ppm",
+         adcMv, agap::mq7AoVolts(adcV, kMq7Circuit),
+         agap::mq7RsOhms(adcV, kMq7Circuit), ppm);
+    return ppm;
+}
 
 #ifdef MQ7_CONTINUOUS_5V
 // ============================================================
@@ -47,25 +103,9 @@ void mq7Init() {
     ledcAttachPin(MQ7_HEATER_PIN, MQ7_PWM_CHANNEL);
     ledcWrite(MQ7_PWM_CHANNEL, 255);
     mq7StartMs = millis();
-    SLOG("MQ-7 init — constant 5V, warm-up %lu ms", MQ7_WARMUP_MS);
-}
-
-// Rs = RL * (Vc - Vout) / Vout, Vc = 5V (this board's actual constant supply)
-// ppm = 100 * (Rs/R0)^(-1.513)  [curve-fitted from MQ-7 datasheet Fig 3]
-float mq7RawToPpm(int rawAdc) {
-    if (rawAdc <= 0) return 0.0f;
-    const float Vc   = 5.0f;
-    const float Vout = (float)rawAdc * Vc / (float)ADC_MAX_RAW;
-    if (Vout <= 0.0f) return 0.0f;
-    float Rs    = MQ7_RL_OHMS * (Vc - Vout) / Vout;
-    float ratio = Rs / MQ7_R0_OHMS;
-    // Full-scale ADC (Vout == Vc) means Rs ≈ 0: the sensor is saturated by a
-    // very high concentration. Report the top of the range so it raises an
-    // alert, never 0 ppm (which reads as clean air).
-    if (ratio <= 0.0f) return MQ7_PPM_MAX;
-    float ppm = 100.0f * powf(ratio, -1.513f);
-    ppm = constrain(ppm, 0.0f, MQ7_PPM_MAX);
-    return ppm;
+    SLOG("MQ-7 init — constant %.1f V, divider %.0f/%.0f ohm, RL %.0f ohm, R0 %.0f ohm, warm-up %lu ms",
+         MQ7_SUPPLY_V, MQ7_DIVIDER_R_TOP_OHMS, MQ7_DIVIDER_R_BOTTOM_OHMS,
+         MQ7_RL_OHMS, MQ7_R0_OHMS, MQ7_WARMUP_MS);
 }
 
 void mq7Update(SensorData* data, SemaphoreHandle_t mutex) {
@@ -73,15 +113,7 @@ void mq7Update(SensorData* data, SemaphoreHandle_t mutex) {
     if (now - mq7LastRead_ms < MQ7_READ_INTERVAL_MS) return;
     mq7LastRead_ms = now;
 
-    const int N = 32;
-    long sum = 0;
-    for (int i = 0; i < N; i++) {
-        sum += analogRead(MQ7_ANALOG_PIN);
-        delayMicroseconds(100);
-    }
-    int   rawAvg = (int)(sum / N);
-    float ppm    = mq7RawToPpm(rawAvg);
-    SLOG("MQ-7 ADC raw=%d  CO=%.1f ppm", rawAvg, ppm);
+    float ppm = mq7Sample();
 
     if (!mq7WarmupDone && now - mq7StartMs >= MQ7_WARMUP_MS) {
         mq7WarmupDone = true;
@@ -123,24 +155,6 @@ void mq7Init() {
     SLOG("MQ-7 init — HEATING phase (%lu ms)", MQ7_HEAT_DURATION_MS);
 }
 
-// ── ADC → PPM conversion ───────────────────────────────────
-// Measurement phase Vc = 1.4 V.
-// Rs = RL * (Vc - Vout) / Vout
-// ppm = 100 * (Rs/R0)^(-1.513)  [curve-fitted from MQ-7 datasheet Fig 3]
-float mq7RawToPpm(int rawAdc) {
-    if (rawAdc <= 0) return 0.0f;
-    const float Vc   = 1.4f;
-    const float Vout = (float)rawAdc * Vc / (float)ADC_MAX_RAW;
-    if (Vout <= 0.0f) return 0.0f;
-    float Rs    = MQ7_RL_OHMS * (Vc - Vout) / Vout;
-    float ratio = Rs / MQ7_R0_OHMS;
-    // Saturated (Vout == Vc, Rs ≈ 0): top of the range, never 0 ppm.
-    if (ratio <= 0.0f) return MQ7_PPM_MAX;
-    float ppm = 100.0f * powf(ratio, -1.513f);
-    ppm = constrain(ppm, 0.0f, MQ7_PPM_MAX);
-    return ppm;
-}
-
 // ── MQ-7 Phase Update ──────────────────────────────────────
 void mq7Update(SensorData* data, SemaphoreHandle_t mutex) {
     uint32_t now     = millis();
@@ -167,16 +181,7 @@ void mq7Update(SensorData* data, SemaphoreHandle_t mutex) {
             if (now - mq7LastRead_ms >= MQ7_READ_INTERVAL_MS) {
                 mq7LastRead_ms = now;
 
-                // 32-sample average to reduce ESP32 ADC noise
-                const int N = 32;
-                long sum = 0;
-                for (int i = 0; i < N; i++) {
-                    sum += analogRead(MQ7_ANALOG_PIN);
-                    delayMicroseconds(100);
-                }
-                int   rawAvg = (int)(sum / N);
-                float ppm    = mq7RawToPpm(rawAvg);
-                SLOG("MQ-7 ADC raw=%d  CO=%.1f ppm", rawAvg, ppm);
+                float ppm = mq7Sample();
 
                 if (xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                     data->co_ppm     = ppm;

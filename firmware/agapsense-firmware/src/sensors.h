@@ -2,6 +2,10 @@
 // ============================================================
 // sensors.h — MQ-7 CO Sensor & DS18B20 Temperature Sensor
 //
+// Changes in v2.5:
+//   ~ MQ-7 AO is read through a 10k/10k divider (MQ7_DIVIDER_R_*_OHMS);
+//     ADC is read as calibrated millivolts and converted by mq7_curve.h
+//
 // Changes from v1.0:
 //   + sensor_ready flag (suppresses alerts during warm-up)
 //   + MQ7 ADC now read every MQ7_READ_INTERVAL_MS (5 s)
@@ -47,6 +51,17 @@ struct SensorData {
 // as a fault on the dashboard rather than as a plausible room temperature.
 #define TEMP_FAULT_C        (-127.0f)
 
+// ── MQ-7 analog front end (defaults for a config.h that predates them) ──
+#ifndef MQ7_SUPPLY_V
+  #define MQ7_SUPPLY_V              5.0f
+#endif
+#ifndef MQ7_DIVIDER_R_TOP_OHMS
+  #define MQ7_DIVIDER_R_TOP_OHMS    10000.0f
+#endif
+#ifndef MQ7_DIVIDER_R_BOTTOM_OHMS
+  #define MQ7_DIVIDER_R_BOTTOM_OHMS 10000.0f
+#endif
+
 // ── MQ-7 Phase ─────────────────────────────────────────────
 enum class MQ7Phase { HEATING, MEASURING };
 
@@ -65,8 +80,11 @@ void mq7Update(SensorData* data, SemaphoreHandle_t mutex);
 /** Returns current MQ-7 phase. */
 MQ7Phase mq7GetPhase();
 
-/** Convert 12-bit ADC raw to estimated CO ppm (Rs/R0 curve fit). */
-float mq7RawToPpm(int rawAdc);
+/**
+ * Convert the voltage at the ADC pin (millivolts, after the 10k/10k divider)
+ * to estimated CO ppm (Rs/R0 curve fit, see mq7_curve.h).
+ */
+float mq7AdcMvToPpm(int adcMv);
 
 /** Initialise OneWire + DallasTemperature. Call once before task loop. */
 void ds18b20Init();

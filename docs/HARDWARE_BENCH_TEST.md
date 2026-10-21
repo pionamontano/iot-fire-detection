@@ -88,7 +88,7 @@ These three are the tests the identity change needs before any fleet push.
 | 4.1 | DS18B20 | Reads room temperature (+/- 1 C) every 5 s; unplug it: last value is kept, an error is logged, no false alert | [ ] | |
 | 4.2 | MQ-7 reads | **Constant-5V build:** a CO reading every 5 s from boot; `mq7_phase` always `measuring`. **Duty-cycle build:** heater full power 60 s (no ADC), then 90 s measuring; `mq7_phase` alternates `heating`/`measuring`. Check the build matches the wiring (FIRMWARE_GUIDE §4.1) | [ ] | |
 | 4.3 | Warm-up | `sensor_ready` is false for 60 s (constant-5V) or ~150 s (duty-cycle) after boot and **no alert can fire** (indicators off, "warm-up" log) | [ ] | |
-| 4.4 | MQ-7 calibration | In clean air after warm-up (several cycles on the duty-cycle build) measure Rs; set `MQ7_R0_OHMS = Rs`; re-flash; clean-air reading is a plausible low ppm. R0 used: ______ | [ ] | |
+| 4.4 | MQ-7 calibration | Divider check first: with a multimeter, GPIO 34 reads half the AO voltage (10k/10k) and never above 2.5 V. In clean air after warm-up (several cycles on the duty-cycle build) read `Rs=` from the `[SENSOR] MQ-7` log line; set `MQ7_R0_OHMS = Rs / 27.5`; re-flash; clean-air reading is ≈ 0.5–1 ppm. RL on module: ______ R0 used: ______ | [ ] | |
 | 4.5 | GPS | Outdoors / at a window: valid fix within a few minutes; telemetry `gps_valid` true; coordinates match the real location. Indoors: `gps_valid` false, last-known coordinates kept | [ ] | |
 | 4.6 | Battery | Run from the battery path: `battery_mv` in the serial log is plausible (the backend does not store it) and `on_battery` flips below `ON_BATTERY_THRESHOLD_MV`; the dashboards show "On battery" | [ ] | |
 

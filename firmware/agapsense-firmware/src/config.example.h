@@ -7,7 +7,8 @@
 // PlatformIO environment (see platformio.ini's [env:...] sections):
 //   env:esp32dev            -> 2.1.0 (this file's fallback)      — original
 //                              1.4V heat/measure MQ-7 duty cycle
-//   env:esp32dev_mq7_5v     -> 2.4.0 (2.3.0 before Tier 2 SMS became
+//   env:esp32dev_mq7_5v     -> 2.5.0 (MQ-7 AO read through the 10k/10k
+//                              divider; 2.4.0 before that, 2.3.0 before Tier 2 SMS became
 //                              offline-only, 2.2.0 before the Tier 1 chirp) — AGS-001's
 //                              actual wiring: MQ-7 runs off a constant 5V
 //                              rail, not through MQ7_HEATER_PIN's
@@ -15,7 +16,7 @@
 //                              above always read ADC-saturated garbage on
 //                              this hardware. See sensors.cpp's
 //                              MQ7_CONTINUOUS_5V branch.
-//   env:esp32dev_mq7_5v_diag -> 2.4.0-diag                       — same
+//   env:esp32dev_mq7_5v_diag -> 2.5.0-diag                       — same
 //                              constant-5V fix, plus a bench-only HTTP
 //                              diag log server (ENABLE_DIAG_SERVER).
 //                              Not for production flashes — revert to
@@ -145,7 +146,7 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 // ── Pin Assignments ────────────────────────────────────────
 
 // MQ-7 CO Sensor (ADC1 pins only — ADC2 conflicts with Wi-Fi)
-#define MQ7_ANALOG_PIN      34    // ADC1_CH6 — input only
+#define MQ7_ANALOG_PIN      34    // ADC1_CH6 — input only, via 10k/10k divider from AO
 #define MQ7_HEATER_PIN      25    // drives heater via BJT/MOSFET
 #define MQ7_LOW_DUTY        72    // 28% of 255 ≈ 1.4 V on sensor Vc
 #define MQ7_PWM_CHANNEL     0
@@ -226,13 +227,30 @@ vepuoxtGzi4CZ68zJpiq1UvSqTbFJjtbD4seiMHl
 #define PRIO_GSM            2
 #define PRIO_BUZZER         2
 
+// ── MQ-7 Analog Front End ─────────────────────────────────
+// The module's AO (0-5 V) reaches GPIO 34 through a 10k/10k divider
+// (AO ── R_TOP ── GPIO34 ── R_BOTTOM ── GND), so the pin sees at most 2.5 V,
+// inside the ESP32's 11 dB ADC range. sensors.cpp scales the pin voltage back
+// up by (R_TOP + R_BOTTOM) / R_BOTTOM and treats the divider as part of the
+// sensor's load (RL ∥ 20k). See mq7_curve.h. Change these only if the
+// resistors on the board change.
+#define MQ7_SUPPLY_V              5.0f      // Vc on the constant-5V build
+#define MQ7_DIVIDER_R_TOP_OHMS    10000.0f
+#define MQ7_DIVIDER_R_BOTTOM_OHMS 10000.0f
+
 // ── MQ-7 Calibration ──────────────────────────────────────
-// R0 is Rs at 100 ppm CO (the curve in mq7RawToPpm() reads Rs/R0 = 1 as
-// 100 ppm), NOT Rs in clean air. Clean air is Rs/R0 ≈ 27.5 (datasheet Fig 3),
-// so after a 24-48 h burn-in, average the clean-air raw ADC and compute:
-//   Vout = raw * 5.0 / 4095        (same scaling as mq7RawToPpm())
-//   Rs   = MQ7_RL_OHMS * (5.0 - Vout) / Vout
-//   R0   = Rs / 27.5
+// MQ7_RL_OHMS is the load resistor ON THE MQ-7 MODULE (between AO and GND),
+// not the divider. Most modules use 10 kΩ ("103"); some use 1 kΩ ("102").
+// If you don't know it, leave 10000: once R0 is calibrated below with this
+// same firmware, RL cancels out of Rs/R0, so the ppm reading does not depend
+// on it. It only changes the absolute Rs/R0 numbers in the log.
+//
+// R0 is Rs at 100 ppm CO (the curve reads Rs/R0 = 1 as 100 ppm), NOT Rs in
+// clean air. Clean air is Rs/R0 ≈ 27.5 (datasheet Fig 3). To calibrate:
+// after a 24-48 h burn-in in clean air, read the "Rs=" value from the
+// [SENSOR] log line (debug or diag build) — it already accounts for the
+// divider — and set
+//   MQ7_R0_OHMS = Rs / 27.5
 // Clean air should then read ~0.5-1 ppm. Re-flash to apply.
 // 10000 is an uncalibrated placeholder; each sensor needs its own value.
 #define MQ7_R0_OHMS         10000.0f

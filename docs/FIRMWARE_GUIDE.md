@@ -22,7 +22,7 @@ flash it.
 
 | Signal | Pin | Notes |
 |---|---|---|
-| MQ7 analog out | GPIO 34 | ADC1_CH6, input-only |
+| MQ7 analog out | GPIO 34 | ADC1_CH6, input-only. AO reaches the pin through a **10 kΩ / 10 kΩ divider** (AO → 10k → GPIO 34 → 10k → GND), so 0–5 V at AO is 0–2.5 V at the pin |
 | MQ7 heater PWM | GPIO 25 | Drives heater via BJT/MOSFET |
 | DS18B20 data | GPIO 4 | Needs a 4.7 kΩ pull-up |
 | GPS RX / TX | GPIO 16 / 17 | `Serial2`, 9600 baud |
@@ -127,7 +127,7 @@ There are two builds of the MQ-7 code, chosen by the PlatformIO environment (see
 
 | Build | Env | Heater | Reads | `sensor_ready` after |
 |---|---|---|---|---|
-| **Constant 5V** (`MQ7_CONTINUOUS_5V`) | `esp32dev_mq7_5v` (v2.4.0) | Sensor on a fixed 5 V rail; `MQ7_HEATER_PIN` is not wired to it | Every 5 s, always "measuring", converted with Vc = 5 V | 60 s warm-up |
+| **Constant 5V** (`MQ7_CONTINUOUS_5V`) | `esp32dev_mq7_5v` (v2.5.0) | Sensor on a fixed 5 V rail; `MQ7_HEATER_PIN` is not wired to it | Every 5 s, always "measuring", converted with Vc = 5 V through the 10k/10k divider | 60 s warm-up |
 | **Duty cycle** (default) | `esp32dev` | PWM through a transistor, 60 s at 5 V / 90 s at 1.4 V | Only during the 90 s measuring phase | First full cycle, ~150 s |
 
 According to `platformio.ini`, every deployed node so far is wired for the **constant-5V** build;
@@ -148,18 +148,32 @@ reading, so `mq7Update()` runs a two-phase state machine:
    `MQ7_READ_INTERVAL_MS` (5 s) as a 32-sample average to reduce ESP32 ADC
    noise, then converted to ppm.
 
-Conversion (`mq7RawToPpm`) uses the standard Rs/R0 curve-fit from the MQ-7
-datasheet:
+#### Conversion (both builds)
+
+The ADC is read with `analogReadMilliVolts()` (eFuse-calibrated, 32-sample
+average), then converted by `mq7AdcMvToPpm()` using `src/mq7_curve.h`, which
+models the 10k/10k divider on AO:
 
 ```
-Vout = rawAdc * Vc / 4095        (Vc = 1.4 V during MEASURING)
-Rs   = RL * (Vc - Vout) / Vout
-ppm  = 100 * (Rs / R0) ^ -1.513
+V_AO   = V_pin * (R_TOP + R_BOTTOM) / R_BOTTOM      (= 2 * V_pin for 10k/10k)
+RL_eff = RL * (R_TOP + R_BOTTOM) / (RL + R_TOP + R_BOTTOM)   (divider loads AO)
+Rs     = RL_eff * (Vc - V_AO) / V_AO                 (Vc = 5 V constant build,
+                                                       1.4 V duty-cycle MEASURING)
+ppm    = 100 * (Rs / R0) ^ -1.513                    (capped at 2000 ppm)
 ```
 
-`MQ7_R0_OHMS` must be calibrated per physical sensor: power the module in
-clean air, let it complete a few heat/measure cycles, measure the resulting
-Rs, and set `R0 = Rs`. Re-flash to apply.
+A saturated sensor (V_AO ≥ Vc) reports 2000 ppm, never 0. The resistor values
+are `MQ7_DIVIDER_R_TOP_OHMS` / `MQ7_DIVIDER_R_BOTTOM_OHMS` in `config.h`;
+`MQ7_RL_OHMS` is the load resistor **on the MQ-7 module** (usually 10 kΩ,
+marked "103"; some modules use 1 kΩ, "102"). If you can't tell, keep 10 kΩ:
+once R0 is calibrated with the same firmware, RL cancels out of Rs/R0 and the
+ppm reading doesn't depend on it.
+
+`MQ7_R0_OHMS` (Rs at 100 ppm) must be calibrated per physical sensor: after a
+24–48 h burn-in in clean air, read `Rs=` from the `[SENSOR] MQ-7 pin=… AO=… Rs=…`
+log line (debug or `_diag` build; it already accounts for the divider) and set
+`MQ7_R0_OHMS = Rs / 27.5`. Clean air then reads ≈ 0.5–1 ppm. Re-flash to apply.
+The `test_components` sketch's `c` command does the same and stores R0 in NVS.
 
 `sensor_ready` (in `SensorData`) only flips `true` after the **first
 complete** heat+measure cycle (~150 s after boot; 60 s in the constant-5V build). The alert FSM in
@@ -305,8 +319,8 @@ environments:
 | Env | What it builds | `FIRMWARE_VERSION` from |
 |---|---|---|
 | `esp32dev` | Production firmware, duty-cycle MQ-7 | `config.h` |
-| `esp32dev_mq7_5v` | Production firmware, constant-5V MQ-7 (current hardware) | `platformio.ini` (`2.4.0`) |
-| `esp32dev_mq7_5v_diag` | As above plus an unauthenticated `/log` web viewer and ArduinoOTA. Bench debugging only | `platformio.ini` (`2.4.0-diag`) |
+| `esp32dev_mq7_5v` | Production firmware, constant-5V MQ-7 with 10k/10k divider on AO (current hardware) | `platformio.ini` (`2.5.0`) |
+| `esp32dev_mq7_5v_diag` | As above plus an unauthenticated `/log` web viewer and ArduinoOTA. Bench debugging only | `platformio.ini` (`2.5.0-diag`) |
 | `*_ota` variants | Same build, flashed over Wi-Fi with `espota` (`--upload-port <device-ip>`) | as their base env |
 | `test_components` (+ `_ota`) | Separate bench-test sketch; needs `src/config_test_secrets.h` | — |
 
@@ -512,7 +526,7 @@ After that, all later updates can go over the air.
 | Symptom | Likely Cause |
 |---|---|
 | Blue LED never goes solid | Wi-Fi credentials wrong/expired, or Supabase host unreachable (check `SUPABASE_URL` and firewall) |
-| CO readings pinned at 0 or implausible | MQ-7 not calibrated (`MQ7_R0_OHMS`) in clean air, or ADC wiring on GPIO 34 |
+| CO readings pinned at 0 or implausible | MQ-7 not calibrated (`MQ7_R0_OHMS`) in clean air, `MQ7_RL_OHMS` not matching the module's load resistor, divider resistors not 10k/10k (or `MQ7_DIVIDER_R_*_OHMS` not updated), or ADC wiring on GPIO 34 |
 | Temperature always last-known / never updates | DS18B20 missing 4.7 kΩ pull-up, or wrong `DS18B20_PIN` |
 | GPS `valid` always false | No sky view / cold-start fix can take minutes outdoors; check `GPS_RX_PIN`/`GPS_TX_PIN` wiring |
 | SMS never sent, `gsmIsRegistered()` false | SIM800L needs a dedicated ~2 A-capable 4.0 V supply with a large (1000 µF+) cap — brownouts during transmit are the most common failure |
