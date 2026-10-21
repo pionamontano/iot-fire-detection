@@ -115,7 +115,7 @@ Per-area: AUTH 10 · ADMIN 7 · RESP 5 · RES 8 · IOT 12 · ALERT 6 · LOC 5 ·
 |---|---|---|---|---|---|---|---|---|
 | FR-LOC-001 | Store coords + `gps_valid`; (0,0) = no fix | C | `ingest-reading`, `trigger-alert` | Integration | NULL stored for (0,0) | Verified | L | `ingest-reading/index.ts:158-175` |
 | FR-LOC-002 | live / last-known / registered / unavailable classification (15 min) | Rem (owner "provisional") | `lib/location.ts`, `LocationBadge` | Unit | Correct kind per input | Verified | R | `tests/location.test.ts` reported; 15 min provisional (OQ-18) |
-| FR-LOC-003 | Reverse geocoding (tiered address; cache; timeout) | HW-1.2.3 / SW-2.3.2 (unconfirmed) | `trigger-alert`, `ingest-reading` | Integration with Nominatim | Street, barangay, municipality | Verified (external Unverified) | L (earlier form) | `trigger-alert/index.ts:20-79` |
+| FR-LOC-003 | Reverse geocoding (tiered address; cache; timeout) | HW-1.2.3 / SW-2.3.2 (unconfirmed) | `trigger-alert`, `ingest-reading` | Integration with Nominatim | Street, barangay, municipality | Verified (external Unverified) | L (earlier form) | `_shared/geocode.ts` |
 | FR-LOC-004 | Address-drift detection >100 m | C | `ingest-reading` | Integration | One pending prompt | Verified | L | `ingest-reading/index.ts:198-261` |
 | FR-LOC-005 | Registered location data | C | `Devices.tsx`, `devices` | UI/DB | | Verified | L | |
 

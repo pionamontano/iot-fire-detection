@@ -79,7 +79,11 @@ export class FakeDb {
 // authAdmin: optional fake of supabase.auth.admin (listUsers, updateUserById, ...).
 export function loadHandler(name, { db, env = {}, user = null, fetchImpl, webpush, authAdmin } = {}) {
   let src = fs.readFileSync(path.join(ROOT, name, 'index.ts'), 'utf8');
-  src = src.replace(/^import .*$/gm, '');
+  // Relative imports (e.g. ../_shared/geocode.ts) are inlined ahead of the function's own code, with their
+  // `export` keywords dropped, so they share its scope and its injected fakes (fetch, Deno, ...).
+  const shared = [...src.matchAll(/^import .* from ["'](\.\.?\/[^"']+)["'];?$/gm)]
+    .map(([, rel]) => fs.readFileSync(path.join(ROOT, name, rel), 'utf8').replace(/^import .*$/gm, '').replace(/^export /gm, ''));
+  src = shared.join('\n') + '\n' + src.replace(/^import .*$/gm, '');
   // A type-only export (e.g. `export interface`) makes the transpiler emit an
   // `export {};` module marker, which new Function() can't parse — drop it.
   const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText

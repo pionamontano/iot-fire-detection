@@ -3,101 +3,12 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { EMPTY_PARTS, reverseGeocode, type PhAddressParts } from "../_shared/geocode.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-key',
 };
-
-// Philippine address hierarchy, smallest unit to largest. Subdivision and barangay
-// both commonly land under Nominatim's suburb/village/neighbourhood/quarter tags with
-// no reliable way to tell them apart, so neighbourhood/residential is read as the
-// subdivision and suburb/village/quarter as the barangay - an admin/resident can
-// correct either in the pre-filled form before saving.
-export interface PhAddressParts {
-  houseNo: string | null;
-  street: string | null;
-  subdivision: string | null;
-  barangay: string | null;
-  cityMunicipality: string | null;
-  province: string | null;
-}
-
-interface GeocodeCacheEntry {
-  address: string;
-  parts: PhAddressParts;
-  timestamp: number;
-}
-
-const GEOCODE_CACHE = new Map<string, GeocodeCacheEntry>();
-const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24-hour cache
-
-function extractAddressParts(address: Record<string, string> | undefined): PhAddressParts {
-  return {
-    houseNo: address?.house_number || null,
-    street: address?.road || null,
-    subdivision: address?.neighbourhood || address?.residential || null,
-    barangay: address?.suburb || address?.village || address?.quarter || null,
-    cityMunicipality: address?.city || address?.municipality || address?.town || address?.county || null,
-    province: address?.state || address?.region || null,
-  };
-}
-
-function buildTieredAddress(address: Record<string, string> | undefined): string | null {
-  if (!address) return null;
-
-  const street = [address.house_number, address.road].filter(Boolean).join(' ') || null;
-  const barangay = address.suburb || address.village || address.neighbourhood || address.quarter || null;
-  const municipality = address.city || address.municipality || address.town || address.county || null;
-
-  const parts = [street, barangay, municipality].filter(Boolean);
-  return parts.length > 0 ? parts.join(', ') : null;
-}
-
-const EMPTY_PARTS: PhAddressParts = {
-  houseNo: null, street: null, subdivision: null, barangay: null, cityMunicipality: null, province: null,
-};
-
-async function reverseGeocode(lat: number, lon: number): Promise<{ address: string | null; parts: PhAddressParts }> {
-  if (!lat || !lon) return { address: null, parts: EMPTY_PARTS };
-
-  const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
-  const cached = GEOCODE_CACHE.get(key);
-  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-    return { address: cached.address, parts: cached.parts };
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          // Explicitly document the mandatory User-Agent header per Nominatim Usage Policy
-          'User-Agent': 'AgapSense-Capstone/1.0 (contact@agapsense.local)'
-        },
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timeoutId);
-
-    if (!res.ok) return { address: null, parts: EMPTY_PARTS };
-    const data = await res.json();
-    const address = buildTieredAddress(data?.address) || data?.display_name || null;
-    const parts = extractAddressParts(data?.address);
-
-    if (address) {
-      GEOCODE_CACHE.set(key, { address, parts, timestamp: Date.now() });
-    }
-
-    return { address, parts };
-  } catch (e) {
-    console.error('Geocoding error/timeout:', e);
-    return { address: null, parts: EMPTY_PARTS };
-  }
-}
 
 // Haversine distance in meters
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {

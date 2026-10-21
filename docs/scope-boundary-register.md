@@ -14,7 +14,7 @@ Companion to [`system-specification.md`](system-specification.md) §5.3 (baselin
 | MQ-7 reading: duty-cycle build (60 s/90 s) and constant-5V build (v2.2.0, per `platformio.ini` the deployed wiring); ppm model | A | Verified (code) | `sensors.cpp` (both branches); `platformio.ini` | Included; no recalibration or sensor swap without review. Release workflow builds `esp32dev_mq7_5v` by default (KI-32 fixed) | Accuracy tolerance NS-RA |
 | DS18B20 temperature reading | A | Verified (code); stale-value gap | `sensors.cpp:137-156`; KI-17 | Included; freshness logic = **Hold** | OQ-09 |
 | GPS capture (NEO-6M), cached fix, `gps_valid` | A | Verified (code) | `gps.cpp` | Included | — |
-| Reverse geocoding (Nominatim, tiered address) | A | Verified (code); service Unverified | `trigger-alert:20-79` | Included; provider change excluded | Provider swap needs approval |
+| Reverse geocoding (Nominatim, tiered address) | A | Verified (code); service Unverified | `_shared/geocode.ts` | Included; provider change excluded | Provider swap needs approval |
 | Wi-Fi data path (HTTPS, WiFiManager provisioning with WPA2 portal and per-node identity in NVS) | A | Verified (code); portal flow untested on hardware (OQ-26) | `connectivity.cpp`; `identity.cpp` | Included | — |
 | Tier 2 SMS via SIM800L, parallel to Wi-Fi | A | Verified (code); hardware Cannot Verify | `gsm.cpp`, `connectivity.cpp:667-681` | Included as built | Confirm semantics (OQ-02) |
 | GSM **data** fallback (alert POST over cellular) | D / E? | Not Implemented | no code | **Hold** — excluded until owner rules | OQ-02 |

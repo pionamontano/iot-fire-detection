@@ -3,80 +3,12 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { reverseGeocode } from "../_shared/geocode.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-key',
 };
-
-interface GeocodeCacheEntry {
-  address: string;
-  timestamp: number;
-}
-
-const GEOCODE_CACHE = new Map<string, GeocodeCacheEntry>();
-const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24-hour cache
-
-// Builds a street → barangay/suburb → municipality/city string from
-// Nominatim's structured `address` fields (spec HW-1.2.3 / SW-2.3.2),
-// instead of relying on the single, inconsistently-granular display_name
-// (which might be street-level, might be just a country name, with no
-// way to tell which tier you got). Nominatim has no dedicated "barangay"
-// tag — for Philippine addresses it typically lands under suburb/village/
-// neighbourhood, so all three are checked.
-function buildTieredAddress(address: Record<string, string> | undefined): string | null {
-  if (!address) return null;
-
-  const street = [address.house_number, address.road].filter(Boolean).join(' ') || null;
-  const barangay = address.suburb || address.village || address.neighbourhood || address.quarter || null;
-  const municipality = address.city || address.municipality || address.town || address.county || null;
-
-  const parts = [street, barangay, municipality].filter(Boolean);
-  return parts.length > 0 ? parts.join(', ') : null;
-}
-
-async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
-  if (!lat || !lon) return null;
-
-  const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
-  const cached = GEOCODE_CACHE.get(key);
-  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-    return cached.address;
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          // [FIX #7] Compliant User-Agent per Nominatim Usage Policy
-          'User-Agent': 'AgapSense-Capstone/1.0 (contact@agapsense.local)'
-        },
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timeoutId);
-
-    if (!res.ok) return null;
-    const data = await res.json();
-    // Tiered street/barangay/municipality string when the structured
-    // fields support it; fall back to Nominatim's own display_name
-    // (still better than nothing) before giving up entirely.
-    const address = buildTieredAddress(data?.address) || data?.display_name || null;
-
-    if (address) {
-      GEOCODE_CACHE.set(key, { address, timestamp: Date.now() });
-    }
-
-    return address;
-  } catch (e) {
-    console.error('Geocoding error/timeout:', e);
-    return null;
-  }
-}
 
 // =============================================================
 // Delivery (Step 5.2).
@@ -433,7 +365,7 @@ serve(async (req: Request) => {
       .eq('id', device.id);
 
     const geocodePromise = hasCachedCoords
-      ? reverseGeocode(latitude, longitude)
+      ? reverseGeocode(latitude, longitude).then((r) => r.address)
       : Promise.resolve(null);
 
     const ownerContactPromise = (tier === 2)
